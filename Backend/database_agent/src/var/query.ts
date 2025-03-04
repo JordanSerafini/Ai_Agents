@@ -8,7 +8,7 @@
 export const PROJECT_QUERIES = {
   // Récupérer tous les projets
   GET_ALL: `
-    SELECT p.*, c.name as client_name 
+    SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
     FROM projects p
     JOIN clients c ON p.client_id = c.id
     ORDER BY p.start_date DESC;
@@ -16,7 +16,7 @@ export const PROJECT_QUERIES = {
 
   // Récupérer un projet par son ID
   GET_BY_ID: `
-    SELECT p.*, c.name as client_name 
+    SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
     FROM projects p
     JOIN clients c ON p.client_id = c.id
     WHERE p.id = $1;
@@ -32,7 +32,7 @@ export const PROJECT_QUERIES = {
 
   // Récupérer les projets en cours
   GET_ACTIVE: `
-    SELECT p.*, c.name as client_name 
+    SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
     FROM projects p
     JOIN clients c ON p.client_id = c.id
     WHERE p.status = 'active'
@@ -41,7 +41,7 @@ export const PROJECT_QUERIES = {
 
   // Récupérer les projets terminés
   GET_COMPLETED: `
-    SELECT p.*, c.name as client_name 
+    SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
     FROM projects p
     JOIN clients c ON p.client_id = c.id
     WHERE p.status = 'completed'
@@ -50,7 +50,7 @@ export const PROJECT_QUERIES = {
 
   // Récupérer les projets par période
   GET_BY_PERIOD: `
-    SELECT p.*, c.name as client_name 
+    SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
     FROM projects p
     JOIN clients c ON p.client_id = c.id
     WHERE (p.start_date BETWEEN $1 AND $2) OR (p.end_date BETWEEN $1 AND $2)
@@ -59,7 +59,7 @@ export const PROJECT_QUERIES = {
 
   // Rechercher des projets par nom
   SEARCH_BY_NAME: `
-    SELECT p.*, c.name as client_name 
+    SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
     FROM projects p
     JOIN clients c ON p.client_id = c.id
     WHERE p.name ILIKE $1
@@ -150,7 +150,7 @@ export const CLIENT_QUERIES = {
   // Récupérer tous les clients
   GET_ALL: `
     SELECT * FROM clients
-    ORDER BY name;
+    ORDER BY lastname, firstname;
   `,
 
   // Récupérer un client par son ID
@@ -162,15 +162,15 @@ export const CLIENT_QUERIES = {
   // Rechercher des clients par nom
   SEARCH_BY_NAME: `
     SELECT * FROM clients
-    WHERE name ILIKE $1
-    ORDER BY name;
+    WHERE firstname ILIKE $1 OR lastname ILIKE $1
+    ORDER BY lastname, firstname;
   `,
 
   // Récupérer les projets d'un client avec statistiques
   GET_CLIENT_PROJECTS_STATS: `
     SELECT 
       c.id as client_id,
-      c.name as client_name,
+      CONCAT(c.firstname, ' ', c.lastname) as client_name,
       COUNT(p.id) as total_projects,
       SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END) as active_projects,
       SUM(CASE WHEN p.status = 'completed' THEN 1 ELSE 0 END) as completed_projects,
@@ -178,7 +178,7 @@ export const CLIENT_QUERIES = {
     FROM clients c
     LEFT JOIN projects p ON c.id = p.client_id
     WHERE c.id = $1
-    GROUP BY c.id, c.name;
+    GROUP BY c.id, c.firstname, c.lastname;
   `,
 };
 
@@ -188,48 +188,48 @@ export const CLIENT_QUERIES = {
 export const USER_QUERIES = {
   // Récupérer tous les utilisateurs
   GET_ALL: `
-    SELECT id, first_name, last_name, email, role, created_at
-    FROM users
-    ORDER BY last_name, first_name;
+    SELECT id, firstname, lastname, email, role, created_at
+    FROM staff
+    ORDER BY lastname, firstname;
   `,
 
   // Récupérer un utilisateur par son ID
   GET_BY_ID: `
-    SELECT id, first_name, last_name, email, role, created_at
-    FROM users
+    SELECT id, firstname, lastname, email, role, created_at
+    FROM staff
     WHERE id = $1;
   `,
 
   // Récupérer les utilisateurs par rôle
   GET_BY_ROLE: `
-    SELECT id, first_name, last_name, email, role, created_at
-    FROM users
+    SELECT id, firstname, lastname, email, role, created_at
+    FROM staff
     WHERE role = $1
-    ORDER BY last_name, first_name;
+    ORDER BY lastname, firstname;
   `,
 
   // Rechercher des utilisateurs par nom
   SEARCH_BY_NAME: `
-    SELECT id, first_name, last_name, email, role, created_at
-    FROM users
-    WHERE first_name ILIKE $1 OR last_name ILIKE $1
-    ORDER BY last_name, first_name;
+    SELECT id, firstname, lastname, email, role, created_at
+    FROM staff
+    WHERE firstname ILIKE $1 OR lastname ILIKE $1
+    ORDER BY lastname, firstname;
   `,
 
   // Récupérer la charge de travail d'un utilisateur
   GET_WORKLOAD: `
     SELECT 
-      u.id,
-      u.first_name,
-      u.last_name,
-      COUNT(ta.task_id) as assigned_tasks,
-      COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks,
-      COUNT(CASE WHEN t.status != 'completed' AND t.due_date < CURRENT_DATE THEN 1 END) as overdue_tasks
-    FROM users u
-    LEFT JOIN task_assignments ta ON u.id = ta.user_id
-    LEFT JOIN tasks t ON ta.task_id = t.id
-    WHERE u.id = $1
-    GROUP BY u.id, u.first_name, u.last_name;
+      s.id,
+      s.firstname,
+      s.lastname,
+      COUNT(ps.id) as assigned_projects,
+      COUNT(CASE WHEN p.status = 'termine' THEN 1 END) as completed_projects,
+      COUNT(CASE WHEN p.status = 'en_cours' AND p.end_date < CURRENT_DATE THEN 1 END) as overdue_projects
+    FROM staff s
+    LEFT JOIN project_staff ps ON s.id = ps.staff_id
+    LEFT JOIN projects p ON ps.project_id = p.id
+    WHERE s.id = $1
+    GROUP BY s.id, s.firstname, s.lastname;
   `,
 };
 
