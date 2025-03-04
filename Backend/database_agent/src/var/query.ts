@@ -82,6 +82,25 @@ export const PROJECT_QUERIES = {
     WHERE p.id = $1
     GROUP BY p.id, p.name;
   `,
+
+  // Récupérer les projets qui commencent demain
+  GET_TOMORROW: `
+    SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
+    FROM projects p
+    JOIN clients c ON p.client_id = c.id
+    WHERE p.start_date = CURRENT_DATE + INTERVAL '1 day'
+    ORDER BY p.name;
+  `,
+
+  // Récupérer les projets actifs pour aujourd'hui
+  GET_TODAY: `
+    SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
+    FROM projects p
+    JOIN clients c ON p.client_id = c.id
+    WHERE p.start_date <= CURRENT_DATE AND (p.end_date >= CURRENT_DATE OR p.end_date IS NULL)
+    AND p.status = 'en_cours'
+    ORDER BY p.name;
+  `,
 };
 
 /**
