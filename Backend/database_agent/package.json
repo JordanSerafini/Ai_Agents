@@ -26,6 +26,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "axios": "^1.8.1",
+    "date-fns": "^4.1.0",
     "pg": "^8.13.3",
     "pool_package": "^1.0.5",
     "reflect-metadata": "^0.2.2",
