@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Post,
-  Body,
-  Logger,
-  UsePipes,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Post, Body, Logger, UsePipes } from '@nestjs/common';
 import { AnalyseService } from '../services/analyse.service';
 import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 import { AnalyseResponseDto } from '../dto/analyse-response.dto';

@@ -2,12 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AnalyseController } from './controllers/analyse.controller';
 import { AnalyseService } from './services/analyse.service';
-import { OllamaService } from './services/ollama.service';
+import { AnalyseValidationPipe } from './pipes/analyse-validation.pipe';
 
 @Module({
   imports: [ConfigModule],
   controllers: [AnalyseController],
-  providers: [AnalyseService, OllamaService],
-  exports: [AnalyseService],
+  providers: [AnalyseService, AnalyseValidationPipe],
 })
 export class AnalyseModule {}

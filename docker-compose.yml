@@ -23,7 +23,9 @@ services:
   #     - ai_network
 
   ollama:
-    image: ollama/ollama:latest
+    build:
+      context: ./Backend/ollama_agent
+      dockerfile: Dockerfile.ollama
     container_name: ollama
     ports:
       - "11434:11434"
@@ -31,13 +33,29 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - ai_network
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama_agent:
+    build:
+      context: ./Backend/ollama_agent
+      dockerfile: Dockerfile
+    container_name: ollama_agent
+    environment:
+      - PORT=3002
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=mistral
+    ports:
+      - "3002:3002"
+    restart: always
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - ai_network
 
   analyse_agent:
     build:
@@ -45,24 +63,19 @@ services:
       dockerfile: Dockerfile
     container_name: analyse_agent
     environment:
-      - PORT=${ANALYSE_AGENT_PORT}
-      - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=mistral
-      - MONGODB_URI=${MONGODB_URI}
-      - NODE_ENV=${NODE_ENV}
-      - LOG_LEVEL=${LOG_LEVEL}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRATION=${JWT_EXPIRATION}
-      - CACHE_TTL=${CACHE_TTL}
-      - CACHE_MAX_ITEMS=${CACHE_MAX_ITEMS}
-      - ENABLE_METRICS=${ENABLE_METRICS}
-      - METRICS_PORT=${METRICS_PORT}
+      - PORT=3001
+      - OLLAMA_SERVICE_URL=http://ollama_agent:3002
+      - MONGODB_URI=mongodb://mongodb:27017/analyse_agent
+      - NODE_ENV=development
+      - LOG_LEVEL=info
+      - JWT_SECRET=secret
+      - JWT_EXPIRATION=1d
     ports:
-      - "${ANALYSE_AGENT_PORT}:${ANALYSE_AGENT_PORT}"
+      - "3001:3001"
     restart: always
     depends_on:
       - mongodb
-      - ollama
+      - ollama_agent
     networks:
       - ai_network
 
@@ -88,7 +101,7 @@ services:
     image: mongo:latest
     container_name: mongodb
     ports:
-      - "${MONGODB_PORT}:${MONGODB_PORT}"
+      - "27017:27017"
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -99,7 +112,7 @@ services:
     container_name: redis
     restart: always
     ports:
-      - "${REDIS_PORT}:${REDIS_PORT}"
+      - "6379:6379"
     networks:
       - ai_network
 
