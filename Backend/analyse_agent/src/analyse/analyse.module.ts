@@ -1,16 +1,12 @@
 import { Module } from '@nestjs/common';
-import { AnalyseService } from './analyse.service';
-import { AnalyseController } from './analyse.controller';
 import { ConfigModule } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
+import { AnalyseController } from './controllers/analyse.controller';
+import { AnalyseService } from './services/analyse.service';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot(),
-    MongooseModule.forRoot(process.env.MONGODB_URI),
-  ],
+  imports: [ConfigModule],
   controllers: [AnalyseController],
   providers: [AnalyseService],
   exports: [AnalyseService],
 })
-export class AnalyseModule {} 
+export class AnalyseModule {}

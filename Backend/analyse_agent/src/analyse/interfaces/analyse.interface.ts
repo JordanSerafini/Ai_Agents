@@ -21,9 +21,10 @@ export interface IntentionConfig {
     description: string;
     parameters?: Record<string, any>;
   }[];
+  confiance: number;
 }
 
-export type PrioriteType = 'HIGH' | 'MEDIUM' | 'LOW';
+export type PrioriteType = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 // Configuration de l'entreprise
 export interface EntrepriseConfig {
@@ -137,18 +138,10 @@ export interface PermissionConfig {
 }
 
 export interface ContexteUtilisateur {
-  utilisateur: string;
+  id: string;
+  nom: string;
   role: string;
-  timestamp: Date;
   permissions: string[];
-  context?: Record<string, any>;
-  // Ajout des préférences utilisateur
-  preferences?: {
-    language?: string;
-    timezone?: string;
-    theme?: string;
-    notifications?: boolean;
-  };
 }
 
 export interface DetailsAnalyse {

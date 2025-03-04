@@ -5,11 +5,16 @@ services:
   #     dockerfile: Dockerfile
   #   container_name: api_gateway
   #   environment:
-  #     - PORT=4000
+  #     - PORT=${API_GATEWAY_PORT}
   #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - NODE_ENV=${NODE_ENV}
+  #     - LOG_LEVEL=${LOG_LEVEL}
+  #     - JWT_SECRET=${JWT_SECRET}
+  #     - JWT_EXPIRATION=${JWT_EXPIRATION}
+  #     - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW}
+  #     - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS}
   #   ports:
-  #     - "4000:4000"
-  #     - "4003:4003"
+  #     - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
   #   restart: always
   #   depends_on:
   #     - database_agent
@@ -23,11 +28,19 @@ services:
       dockerfile: Dockerfile
     container_name: analyse_agent
     environment:
-      - PORT=4002
+      - PORT=${ANALYSE_AGENT_PORT}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MONGODB_URI=mongodb://mongodb:27017/analyse_agent
+      - MONGODB_URI=${MONGODB_URI}
+      - NODE_ENV=${NODE_ENV}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+      - CACHE_TTL=${CACHE_TTL}
+      - CACHE_MAX_ITEMS=${CACHE_MAX_ITEMS}
+      - ENABLE_METRICS=${ENABLE_METRICS}
+      - METRICS_PORT=${METRICS_PORT}
     ports:
-      - "4002:4002"
+      - "${ANALYSE_AGENT_PORT}:${ANALYSE_AGENT_PORT}"
     restart: always
     depends_on:
       - mongodb
@@ -40,10 +53,14 @@ services:
   #     dockerfile: Dockerfile
   #   container_name: analyse_router
   #   environment:
-  #     - PORT=4001
+  #     - PORT=${ANALYSE_ROUTER_PORT}
   #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - NODE_ENV=${NODE_ENV}
+  #     - LOG_LEVEL=${LOG_LEVEL}
+  #     - JWT_SECRET=${JWT_SECRET}
+  #     - JWT_EXPIRATION=${JWT_EXPIRATION}
   #   expose:
-  #     - "4001"
+  #     - "${ANALYSE_ROUTER_PORT}"
   #   restart: always
   #   networks:
   #     - ai_network
@@ -52,7 +69,7 @@ services:
     image: mongo:latest
     container_name: mongodb
     ports:
-      - "27017:27017"
+      - "${MONGODB_PORT}:${MONGODB_PORT}"
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -63,7 +80,7 @@ services:
     container_name: redis
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:${REDIS_PORT}"
     networks:
       - ai_network
 
@@ -71,11 +88,11 @@ services:
     image: postgres:13
     container_name: ai_db
     environment:
-      POSTGRES_DB: ai
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${DB_PORT}:${DB_PORT}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../Database/init_db.sql:/docker-entrypoint-initdb.d/1_init_db.sql
