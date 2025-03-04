@@ -24,100 +24,100 @@ services:
   #   networks:
   #     - ai_network
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    command: serve
-    networks:
-      - ai_network
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "ps aux | grep -v grep | grep -q ollama || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+  #   command: serve
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '4'
+  #         memory: 8G
+  #   networks:
+  #     - ai_network
 
-  ollama_init:
-    image: curlimages/curl:latest
-    container_name: ollama_init
-    depends_on:
-      - ollama
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "sleep 10 && 
-      echo 'Vérification de la disponibilité du service Ollama...' &&
-      until curl -s http://ollama:11434/api/tags > /dev/null; do
-        echo 'En attente du service Ollama...'
-        sleep 5
-      done &&
-      echo 'Service Ollama disponible. Vérification du modèle mistral...' &&
-      if ! curl -s http://ollama:11434/api/tags | grep -q mistral; then
-        echo 'Téléchargement du modèle mistral...' &&
-        curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"mistral\"}' &&
-        echo 'Attente de la fin du téléchargement...' &&
-        until curl -s http://ollama:11434/api/tags | grep -q mistral; do
-          echo 'Modèle toujours en cours de téléchargement...'
-          sleep 10
-        done &&
-        echo 'Modèle mistral téléchargé avec succès!'
-      else
-        echo 'Le modèle mistral est déjà disponible.'
-      fi &&
-      echo 'Initialisation terminée!'"
-    networks:
-      - ai_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://ollama:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+  # ollama_init:
+  #   image: curlimages/curl:latest
+  #   container_name: ollama_init
+  #   depends_on:
+  #     ollama:
+  #       condition: service_started
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command: >
+  #     "echo 'Vérification de la disponibilité du service Ollama...' &&
+  #     until curl -s http://ollama:11434/api/tags > /dev/null; do
+  #       echo 'En attente du service Ollama...'
+  #       sleep 5
+  #     done &&
+  #     echo 'Service Ollama disponible. Vérification du modèle mistral...' &&
+  #     if ! curl -s http://ollama:11434/api/tags | grep -q mistral; then
+  #       echo 'Téléchargement du modèle mistral...' &&
+  #       curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"mistral\"}' -H 'Content-Type: application/json' &&
+  #       echo 'Attente de la fin du téléchargement...' &&
+  #       until curl -s http://ollama:11434/api/tags | grep -q mistral; do
+  #         echo 'Modèle toujours en cours de téléchargement...'
+  #         sleep 10
+  #       done &&
+  #       echo 'Modèle mistral téléchargé avec succès!'
+  #     else
+  #       echo 'Le modèle mistral est déjà disponible.'
+  #     fi &&
+  #     echo 'Préchargement du modèle en mémoire...' &&
+  #     curl -X POST http://ollama:11434/api/generate -d '{\"model\": \"mistral\", \"prompt\": \"Initialisation du modèle\", \"stream\": false}' -H 'Content-Type: application/json' &&
+  #     echo 'Modèle préchargé avec succès!' &&
+  #     echo 'Initialisation terminée!'"
+  #   networks:
+  #     - ai_network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://ollama:11434/api/tags"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
 
-  ollama_agent:
-    build:
-      context: ./Backend/ollama_agent
-      dockerfile: Dockerfile
-    container_name: ollama_agent
-    environment:
-      - NODE_ENV=development
-      - OLLAMA_SERVICE_URL=http://ollama:11434
-      - OLLAMA_MODEL=mistral
-    ports:
-      - "3002:3002"
-    restart: always
-    depends_on:
-      ollama_init:
-        condition: service_completed_successfully
-    networks:
-      - ai_network
+  # ollama_agent:
+  #   build:
+  #     context: ./Backend/ollama_agent
+  #     dockerfile: Dockerfile
+  #   container_name: ollama_agent
+  #   environment:
+  #     - NODE_ENV=development
+  #     - OLLAMA_SERVICE_URL=http://ollama:11434
+  #     - OLLAMA_MODEL=mistral
+  #   ports:
+  #     - "3002:3002"
+  #   restart: always
+  #   depends_on:
+  #     ollama_init:
+  #       condition: service_completed_successfully
+  #   networks:
+  #     - ai_network
 
   analyse_agent:
     build:
       context: ./Backend/analyse_agent
       dockerfile: Dockerfile
     container_name: analyse_agent
+    restart: always
     ports:
       - "3001:3001"
     environment:
-      - NODE_ENV=development
-      - OLLAMA_SERVICE_URL=http://ollama_agent:3002
-      - MONGODB_URI=mongodb://mongodb:27017/ai_db
-      - POSTGRES_HOST=ai_db
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=ai_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    depends_on:
-      ollama_agent:
-        condition: service_started
-      mongodb:
-        condition: service_started
-      ai_db:
-        condition: service_started
+      - NODE_ENV=production
+      - PORT=3001
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     networks:
       - ai_network
+    depends_on:
+      - mongodb
+
 
   # analyse_router:
   #   build:
@@ -140,6 +140,7 @@ services:
   mongodb:
     image: mongo:latest
     container_name: mongodb
+    restart: always
     ports:
       - "27017:27017"
     volumes:
@@ -172,7 +173,7 @@ services:
       - ai_network
 
 volumes:
-  ollama_data:
+  # ollama_data:
   mongodb_data:
   postgres_data:
 

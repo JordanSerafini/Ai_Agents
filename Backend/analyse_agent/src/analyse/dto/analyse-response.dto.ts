@@ -62,4 +62,7 @@ export class AnalyseResponseDto {
   @ValidateDate()
   @TransformType(() => Date)
   timestamp!: Date;
+
+  @ValidateString()
+  questionCorrigee!: string;
 }
