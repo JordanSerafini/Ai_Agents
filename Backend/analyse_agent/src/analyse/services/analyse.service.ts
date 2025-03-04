@@ -7,6 +7,8 @@ import { AnalyseResponseDto } from '../dto/analyse-response.dto';
 import { PrioriteType } from '../interfaces/analyse.interface';
 import { analysePrompt } from '../../var/analyse.prompt';
 import { RagService } from './rag.service';
+import { RouterService } from './router.service';
+import { DatabaseMetadataService } from './database-metadata.service';
 
 interface OpenAICompletionResponse {
   choices: {
@@ -73,14 +75,18 @@ export class AnalyseService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
     private readonly ragService: RagService,
+    private readonly routerService: RouterService,
+    private readonly dbMetadataService: DatabaseMetadataService,
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
-    if (!this.openaiApiKey) {
-      this.logger.error('OPENAI_API_KEY non défini dans la configuration');
-    }
+    this.logger.log(
+      `Service d'analyse initialisé avec OpenAI${
+        this.openaiApiKey ? '' : ' (clé API manquante)'
+      }`,
+    );
 
-    // Nettoyer les historiques de conversation expirés toutes les 15 minutes
-    setInterval(() => this.cleanupExpiredHistories(), 900000);
+    // Nettoyer les historiques expirés toutes les 10 minutes
+    setInterval(() => this.cleanupExpiredHistories(), 600000);
   }
 
   private getCacheKey(question: string): string {
@@ -208,6 +214,29 @@ export class AnalyseService {
         // Analyser la question pour obtenir l'intention et la classification
         const analyseResult = await this.analyserQuestion(request.question);
 
+        // Si l'agent cible n'est pas GENERAL, router la requête vers l'agent approprié
+        if (analyseResult.agentCible !== AgentType.GENERAL) {
+          this.logger.log(
+            `Routage de la requête vers l'agent: ${analyseResult.agentCible}`,
+          );
+          const routedResponse = await this.routerService.routeRequest(
+            request,
+            analyseResult.agentCible,
+            analyseResult as unknown as Record<string, unknown>,
+          );
+
+          // Ajouter la réponse routée à l'historique
+          this.addToConversationHistory(
+            userId,
+            'assistant',
+            routedResponse.reponse,
+          );
+
+          // Ne pas mettre en cache les réponses des autres agents
+          return routedResponse;
+        }
+
+        // Continuer avec le traitement normal pour l'agent GENERAL
         // Ajuster les paramètres en fonction de l'agent cible
         let temperature = 0.7;
         let maxTokens = 300;
@@ -367,6 +396,10 @@ La question concerne un processus ou une étape de projet. Réponds en français
       // Utiliser le prompt défini dans le fichier externe
       const prompt = analysePrompt(question);
 
+      // Ajouter les informations sur la structure de la base de données
+      const dbDescription = this.dbMetadataService.getDatabaseDescription();
+      const enhancedPrompt = `${prompt}\n\nInformations sur la structure de la base de données:\n${dbDescription}`;
+
       const response = await axios.post<OpenAICompletionResponse>(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -379,7 +412,7 @@ La question concerne un processus ou une étape de projet. Réponds en français
             },
             {
               role: 'user',
-              content: prompt,
+              content: enhancedPrompt,
             },
           ],
           temperature: 0.1,
@@ -390,7 +423,7 @@ La question concerne un processus ou une étape de projet. Réponds en français
             Authorization: `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: 15000,
+          timeout: 10000,
         },
       );
 

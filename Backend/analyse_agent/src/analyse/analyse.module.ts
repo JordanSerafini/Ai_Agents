@@ -4,6 +4,8 @@ import { ConfigModule } from '@nestjs/config';
 import { AnalyseController } from './controllers/analyse.controller';
 import { AnalyseService } from './services/analyse.service';
 import { RagService } from './services/rag.service';
+import { RouterService } from './services/router.service';
+import { DatabaseMetadataService } from './services/database-metadata.service';
 import { AnalyseValidationPipe } from './pipes/analyse-validation.pipe';
 
 @Module({
@@ -14,6 +16,12 @@ import { AnalyseValidationPipe } from './pipes/analyse-validation.pipe';
     }),
   ],
   controllers: [AnalyseController],
-  providers: [AnalyseService, RagService, AnalyseValidationPipe],
+  providers: [
+    AnalyseService,
+    RagService,
+    RouterService,
+    DatabaseMetadataService,
+    AnalyseValidationPipe,
+  ],
 })
 export class AnalyseModule {}
