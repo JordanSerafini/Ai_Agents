@@ -38,7 +38,7 @@ up-d:
 
 down:
 	@echo "$(GREEN)Arrêt des conteneurs...$(NC)"
-	$(DOCKER_COMPOSE) down
+	$(DOCKER_COMPOSE) down	
 
 restart:
 	@echo "$(GREEN)Redémarrage des conteneurs...$(NC)"
