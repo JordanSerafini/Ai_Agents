@@ -1,7 +1,7 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString } from 'class-validator';
 
 export class GenerateRequestDto {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   @IsString()
-  @IsNotEmpty()
-  prompt!: string;
-} 
+  prompt: string;
+}

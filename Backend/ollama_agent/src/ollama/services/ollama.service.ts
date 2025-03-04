@@ -1,11 +1,32 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import { firstValueFrom, Observable } from 'rxjs';
+import { GenerateRequestDto } from '../dto/generate-request.dto';
+import { AxiosResponse } from 'axios';
+
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface OllamaResponse {
   response: string;
-  done: boolean;
 }
+
+interface OllamaRequest {
+  model: string;
+  prompt: string;
+}
+
+type Config = {
+  OLLAMA_SERVICE_URL: string;
+  OLLAMA_MODEL: string;
+};
 
 @Injectable()
 export class OllamaService {
@@ -13,48 +34,74 @@ export class OllamaService {
   private readonly ollamaUrl: string;
   private readonly model: string;
 
-  constructor(private configService: ConfigService) {
-    const url = this.configService.get<string>('OLLAMA_URL');
-    const model = this.configService.get<string>('OLLAMA_MODEL');
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService<Config>,
+  ) {
+    this.ollamaUrl = this.configService.get<string>('OLLAMA_SERVICE_URL') ?? '';
+    this.model = this.configService.get<string>('OLLAMA_MODEL') ?? 'mistral';
 
-    if (!url || !model) {
-      throw new Error('OLLAMA_URL et OLLAMA_MODEL doivent être définis');
+    if (!this.ollamaUrl) {
+      throw new InternalServerErrorException(
+        "OLLAMA_SERVICE_URL est requis dans les variables d'environnement",
+      );
     }
-
-    this.ollamaUrl = url;
-    this.model = model;
   }
 
-  async generateResponse(prompt: string): Promise<string> {
+  private createRequest(prompt: string): OllamaRequest {
+    return {
+      model: this.model,
+      prompt,
+    };
+  }
+
+  async generate(request: GenerateRequestDto): Promise<{ response: string }> {
     try {
-      const response = await axios.post<OllamaResponse>(
-        `${this.ollamaUrl}/api/generate`,
-        {
-          model: this.model,
-          prompt,
-          stream: false,
-        },
+      const requestData = this.createRequest(request.prompt);
+      this.logger.log(
+        `Envoi de la requête à Ollama: ${JSON.stringify(requestData)}`,
       );
 
-      return response.data.response;
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        const message = error.response?.data || error.message;
-        this.logger.error(`Erreur Ollama: ${message}`);
-        throw new Error(
-          `Erreur lors de la génération de la réponse: ${message}`,
+      const observable: Observable<AxiosResponse<OllamaResponse>> =
+        this.httpService.post(
+          `${this.ollamaUrl}/api/generate`,
+          requestData,
+          { timeout: 5000 }, // Timeout pour éviter que la requête bloque
         );
-      } else if (error instanceof Error) {
-        this.logger.error(`Erreur inattendue: ${error.message}`);
-        throw new Error(
-          `Erreur inattendue lors de la génération de la réponse: ${error.message}`,
+
+      const response = await firstValueFrom(observable);
+
+      if (!response.data || !response.data.response) {
+        throw new InternalServerErrorException(
+          "Réponse invalide reçue de l'API Ollama.",
+        );
+      }
+
+      return { response: response.data.response };
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        this.logger.error(
+          `Erreur lors de la génération: ${error.message}`,
+          error.stack,
+        );
+
+        if ('response' in error) {
+          this.logger.error(
+            `Réponse Ollama: ${JSON.stringify((error as any).response?.data)}`,
+          );
+        }
+
+        throw new InternalServerErrorException(
+          `Erreur lors de la génération: ${error.message}`,
         );
       } else {
         this.logger.error(
           'Erreur inconnue lors de la génération de la réponse',
         );
-        throw new Error('Erreur inconnue lors de la génération de la réponse');
+        throw new InternalServerErrorException(
+          'Erreur inconnue lors de la génération de la réponse',
+        );
       }
     }
   }
-} 
+}

@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # api_gateway:
   #   build:
@@ -23,21 +25,17 @@ services:
   #     - ai_network
 
   ollama:
-    build:
-      context: ./Backend/ollama_agent
-      dockerfile: Dockerfile.ollama
-    container_name: ollama
+    image: ollama/ollama:latest
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    networks:
-      - ai_network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   ollama_agent:
     build:
@@ -45,39 +43,34 @@ services:
       dockerfile: Dockerfile
     container_name: ollama_agent
     environment:
-      - PORT=3002
-      - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=mistral
+      - NODE_ENV=development
+      - OLLAMA_SERVICE_URL=http://ollama:11434
     ports:
       - "3002:3002"
     restart: always
     depends_on:
-      ollama:
-        condition: service_healthy
-    networks:
-      - ai_network
+      - ollama
 
   analyse_agent:
     build:
       context: ./Backend/analyse_agent
       dockerfile: Dockerfile
     container_name: analyse_agent
-    environment:
-      - PORT=3001
-      - OLLAMA_SERVICE_URL=http://ollama_agent:3002
-      - MONGODB_URI=mongodb://mongodb:27017/analyse_agent
-      - NODE_ENV=development
-      - LOG_LEVEL=info
-      - JWT_SECRET=secret
-      - JWT_EXPIRATION=1d
     ports:
       - "3001:3001"
-    restart: always
+    environment:
+      - NODE_ENV=development
+      - OLLAMA_SERVICE_URL=http://ollama_agent:3002
+      - MONGODB_URI=mongodb://mongodb:27017/ai_db
+      - POSTGRES_HOST=ai_db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=ai_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     depends_on:
-      - mongodb
       - ollama_agent
-    networks:
-      - ai_network
+      - mongodb
+      - ai_db
 
   # analyse_router:
   #   build:
@@ -116,26 +109,25 @@ services:
     networks:
       - ai_network
 
-  postgres:
-    image: postgres:13
+  ai_db:
+    image: postgres:15-alpine
     container_name: ai_db
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "${DB_PORT}:${DB_PORT}"
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=ai_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../Database/init_db.sql:/docker-entrypoint-initdb.d/1_init_db.sql
-      - ../Database/seed.sql:/docker-entrypoint-initdb.d/2_seed.sql
+      - ./Database/init_db.sql:/docker-entrypoint-initdb.d/1_init_db.sql
     networks:
       - ai_network
 
 volumes:
   ollama_data:
-  postgres_data:
   mongodb_data:
+  postgres_data:
 
 networks:
   ai_network:

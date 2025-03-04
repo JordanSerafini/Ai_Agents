@@ -1,21 +1,48 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { firstValueFrom, Observable } from 'rxjs';
 import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 import { AnalyseResponseDto } from '../dto/analyse-response.dto';
 import { PrioriteType } from '../interfaces/analyse.interface';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
+
+interface OllamaResponse {
+  response: string;
+}
 
 @Injectable()
 export class AnalyseService {
-  private readonly logger = new Logger(AnalyseService.name);
-  private readonly ollamaServiceUrl: string;
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
+  ) {}
 
-  constructor(private configService: ConfigService) {
-    const url = this.configService.get<string>('OLLAMA_SERVICE_URL');
-    if (!url) {
-      throw new Error('OLLAMA_SERVICE_URL doit être défini');
+  async analyser(request: AnalyseRequestDto): Promise<{ reponse: string }> {
+    const ollamaUrl =
+      this.configService.get<string>('OLLAMA_SERVICE_URL') ?? '';
+
+    try {
+      const prompt = `Analyse la question suivante et fournis une réponse appropriée : ${request.question}`;
+
+      const httpService = this.httpService as unknown as {
+        post: <T>(url: string, data: unknown) => Observable<AxiosResponse<T>>;
+      };
+
+      const response = await firstValueFrom<AxiosResponse<OllamaResponse>>(
+        httpService.post<OllamaResponse>(`${ollamaUrl}/generate`, {
+          prompt,
+          model: 'mistral',
+        }),
+      );
+
+      return {
+        reponse: response.data.response,
+      };
+    } catch (error) {
+      console.error("Erreur lors de l'analyse:", error);
+      throw new Error("Erreur lors de l'analyse");
     }
-    this.ollamaServiceUrl = url;
   }
 
   async analyseDemande(
@@ -29,7 +56,7 @@ export class AnalyseService {
   private async appelerOllamaService(prompt: string): Promise<string> {
     try {
       const response = await axios.post<{ response: string }>(
-        `${this.ollamaServiceUrl}/ollama/generate`,
+        `${this.configService.get<string>('OLLAMA_SERVICE_URL')}/ollama/generate`,
         { prompt },
       );
       return response.data.response;
@@ -39,9 +66,6 @@ export class AnalyseService {
           typeof error.response?.data === 'string'
             ? error.response.data
             : error.message;
-        this.logger.error(
-          `Erreur lors de l'appel au service Ollama: ${message}`,
-        );
         throw new Error(`Erreur lors de l'analyse: ${message}`);
       }
       throw error;
@@ -50,7 +74,7 @@ export class AnalyseService {
 
   private construirePrompt(request: AnalyseRequestDto): string {
     return `Analyze the following question and provide a structured response:
-    Question: ${request.texte || ''}
+    Question: ${request.question || ''}
     
     Respond in JSON format with the following fields:
     - mainIntent: { name: string, confidence: number, description: string }
@@ -121,7 +145,7 @@ export class AnalyseService {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Error parsing response: ${errorMessage}`);
+      throw new Error(`Erreur lors de l'analyse: ${errorMessage}`);
     }
   }
 }
