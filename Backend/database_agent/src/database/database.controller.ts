@@ -76,6 +76,10 @@ export class DatabaseController {
     );
 
     try {
+      // Importer les variables de prompt et les requêtes SQL
+      const PROMPTS = await import('../var/prompt');
+      const QUERIES = await import('../var/query');
+
       // Récupérer les métadonnées de la base de données
       const dbMetadata = {
         tables: this.dbMetadataService.getAllTables(),
@@ -84,34 +88,95 @@ export class DatabaseController {
 
       // Analyser la question pour déterminer quelle table ou données sont nécessaires
       const { question, analysedData } = body;
-
-      // Exemple simple: si la question contient le nom d'une table, récupérer ses données
-      let response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
-
-      // Chercher si la question mentionne une table spécifique
-      const mentionedTables = dbMetadata.tables.filter((table) =>
-        question.toLowerCase().includes(table.name.toLowerCase()),
-      );
-
-      if (mentionedTables.length > 0) {
-        response += `J'ai identifié que vous vous intéressez à la/aux table(s): ${mentionedTables.map((t) => t.name).join(', ')}.\n\n`;
-
-        // Pour chaque table mentionnée, récupérer quelques données
-        for (const table of mentionedTables) {
-          try {
-            const data = await this.databaseService.getTableData(table.name, 5);
-            response += `Voici un aperçu des données de la table ${table.name}:\n`;
-            response += `${JSON.stringify(data, null, 2)}\n\n`;
-          } catch (error: any) {
-            response += `Je n'ai pas pu récupérer les données de la table ${table.name}: ${error.message}\n\n`;
+      
+      // Analyser l'intention de la requête
+      const intent = this.analyzeQueryIntent(question);
+      let response = '';
+      
+      // Si l'intention est reconnue, utiliser les requêtes prédéfinies
+      if (intent !== 'UNKNOWN') {
+        try {
+          const result = await this.executeQueryByIntent(intent, question);
+          
+          // Formater la réponse en fonction du type de données
+          if (Array.isArray(result) && result.length > 0) {
+            response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
+            response += `Voici les résultats que j'ai trouvés:\n`;
+            response += `${JSON.stringify(result, null, 2)}\n\n`;
+            
+            // Ajouter des informations supplémentaires en fonction de l'intention
+            switch (intent) {
+              case 'PROJECT_PROGRESS':
+                response += `Le taux d'avancement est de ${result[0].progress_percentage}%.\n`;
+                break;
+              case 'OVERDUE_TASKS':
+                response += `Il y a ${result.length} tâche(s) en retard.\n`;
+                break;
+              case 'TASKS_THIS_MONTH':
+                response += `Il y a ${result.length} tâche(s) prévue(s) ce mois-ci.\n`;
+                break;
+            }
+          } else if (result && typeof result === 'object') {
+            response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
+            response += `Voici les résultats que j'ai trouvés:\n`;
+            response += `${JSON.stringify(result, null, 2)}\n\n`;
+          } else {
+            response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
+            response += `Je n'ai pas trouvé de résultats correspondant à votre requête.\n`;
+            response += `Voici quelques exemples de requêtes que vous pouvez essayer:\n`;
+            response += PROMPTS.PROMPT_EXAMPLES.FIND_PROJECT + '\n';
+            response += PROMPTS.PROMPT_EXAMPLES.TASKS_THIS_MONTH + '\n';
+            response += PROMPTS.PROMPT_EXAMPLES.OVERDUE_TASKS + '\n';
+            response += PROMPTS.PROMPT_EXAMPLES.USER_ASSIGNMENTS + '\n';
+            response += PROMPTS.PROMPT_EXAMPLES.PROJECT_PROGRESS + '\n';
           }
+        } catch (error) {
+          response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
+          response += `Je n'ai pas pu exécuter la requête: ${error.message}\n\n`;
+          response += `Voici quelques exemples de requêtes que vous pouvez essayer:\n`;
+          response += PROMPTS.PROMPT_EXAMPLES.FIND_PROJECT + '\n';
+          response += PROMPTS.PROMPT_EXAMPLES.TASKS_THIS_MONTH + '\n';
+          response += PROMPTS.PROMPT_EXAMPLES.OVERDUE_TASKS + '\n';
+          response += PROMPTS.PROMPT_EXAMPLES.USER_ASSIGNMENTS + '\n';
+          response += PROMPTS.PROMPT_EXAMPLES.PROJECT_PROGRESS + '\n';
         }
       } else {
-        response += `Je n'ai pas identifié de table spécifique dans votre question. Voici la liste des tables disponibles:\n`;
-        response += dbMetadata.tables
-          .map((t) => `- ${t.name}: ${t.description || 'Pas de description'}`)
-          .join('\n');
-        response += `\n\nPour obtenir des informations sur une table spécifique, veuillez mentionner son nom dans votre question.`;
+        // Comportement existant pour les requêtes non reconnues
+        response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
+        
+        // Chercher si la question mentionne une table spécifique
+        const mentionedTables = dbMetadata.tables.filter((table) =>
+          question.toLowerCase().includes(table.name.toLowerCase()),
+        );
+
+        if (mentionedTables.length > 0) {
+          response += `J'ai identifié que vous vous intéressez à la/aux table(s): ${mentionedTables.map((t) => t.name).join(', ')}.\n\n`;
+
+          // Pour chaque table mentionnée, récupérer quelques données
+          for (const table of mentionedTables) {
+            try {
+              const data = await this.databaseService.getTableData(table.name, 5);
+              response += `Voici un aperçu des données de la table ${table.name}:\n`;
+              response += `${JSON.stringify(data, null, 2)}\n\n`;
+            } catch (error: any) {
+              response += `Je n'ai pas pu récupérer les données de la table ${table.name}: ${error.message}\n\n`;
+            }
+          }
+        } else {
+          response += `Je n'ai pas identifié de table spécifique dans votre question. Voici la liste des tables disponibles:\n`;
+          response += dbMetadata.tables
+            .map((t) => `- ${t.name}: ${t.description || 'Pas de description'}`)
+            .join('\n');
+          response += `\n\nPour obtenir des informations sur une table spécifique, veuillez mentionner son nom dans votre question.`;
+          
+          // Ajouter des exemples de requêtes
+          response += `\n\nVoici quelques exemples de requêtes que vous pouvez essayer:\n`;
+          response += PROMPTS.PROMPT_EXAMPLES.FIND_PROJECT + '\n';
+          response += PROMPTS.PROMPT_EXAMPLES.TASKS_THIS_MONTH + '\n';
+          response += PROMPTS.PROMPT_EXAMPLES.OVERDUE_TASKS + '\n';
+          response += PROMPTS.PROMPT_EXAMPLES.USER_ASSIGNMENTS + '\n';
+          response += PROMPTS.PROMPT_EXAMPLES.PROJECT_PROGRESS + '\n';
+        }
       }
 
       return { reponse: response };
