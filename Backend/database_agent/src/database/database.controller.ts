@@ -365,32 +365,49 @@ export class DatabaseController {
   private analyzeQueryIntent(query: string): string {
     const lowerQuery = query.toLowerCase();
 
-    // Recherche de projets/chantiers
+    // Projets
     if (
-      lowerQuery.includes('chantier') ||
       lowerQuery.includes('projet') ||
-      lowerQuery.includes('projects')
+      lowerQuery.includes('chantier') ||
+      lowerQuery.includes('travaux')
     ) {
+      // Projets de demain
+      if (
+        lowerQuery.includes('demain') ||
+        lowerQuery.includes('lendemain')
+      ) {
+        return 'PROJECTS_TOMORROW';
+      }
+      
+      // Projets d'aujourd'hui
+      if (
+        lowerQuery.includes('aujourd') ||
+        lowerQuery.includes('ce jour') ||
+        lowerQuery.includes('en cours')
+      ) {
+        return 'PROJECTS_TODAY';
+      }
+
+      // Projets par client
       if (lowerQuery.includes('client')) {
         return 'PROJECTS_BY_CLIENT';
-      } else if (
-        lowerQuery.includes('en cours') ||
-        lowerQuery.includes('actif')
-      ) {
-        return 'ACTIVE_PROJECTS';
-      } else if (
-        lowerQuery.includes('terminé') ||
-        lowerQuery.includes('complété')
-      ) {
-        return 'COMPLETED_PROJECTS';
-      } else if (
+      }
+
+      // Avancement d'un projet
+      if (
         lowerQuery.includes('avancement') ||
-        lowerQuery.includes('progression')
+        lowerQuery.includes('progression') ||
+        lowerQuery.includes('état') ||
+        lowerQuery.includes('etat') ||
+        lowerQuery.includes('statut') ||
+        lowerQuery.includes('progrès') ||
+        lowerQuery.includes('progres')
       ) {
         return 'PROJECT_PROGRESS';
-      } else {
-        return 'LIST_PROJECTS';
       }
+
+      // Liste de tous les projets
+      return 'ALL_PROJECTS';
     }
 
     // Recherche de tâches
@@ -459,10 +476,7 @@ export class DatabaseController {
   }
 
   /**
-   * Exécute une requête SQL en fonction de l'intention identifiée
-   * @param intent Intention identifiée
-   * @param userQuery Requête utilisateur originale
-   * @returns Résultat de la requête SQL
+   * Exécute une requête SQL en fonction de l'intention détectée
    */
   private async executeQueryByIntent(
     intent: string,
@@ -476,8 +490,16 @@ export class DatabaseController {
     let sqlParams: any[] = [];
 
     switch (intent) {
-      case 'LIST_PROJECTS':
+      case 'ALL_PROJECTS':
         sqlQuery = QUERIES.PROJECT_QUERIES.GET_ALL;
+        break;
+
+      case 'PROJECTS_TOMORROW':
+        sqlQuery = QUERIES.PROJECT_QUERIES.GET_TOMORROW;
+        break;
+
+      case 'PROJECTS_TODAY':
+        sqlQuery = QUERIES.PROJECT_QUERIES.GET_TODAY;
         break;
 
       case 'PROJECTS_BY_CLIENT':
