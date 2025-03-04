@@ -1,21 +1,27 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
+import { Pool } from 'pg';
 
 export interface TableColumn {
   name: string;
   type: string;
   nullable: boolean;
-  isPrimary: boolean;
-  isForeign: boolean;
-  foreignTable?: string;
-  foreignColumn?: string;
+  isPrimaryKey: boolean;
+  isForeignKey: boolean;
   description?: string;
+}
+
+export interface TableRelationship {
+  sourceTable: string;
+  targetTable: string;
+  sourceColumn?: string;
+  targetColumn?: string;
+  relationType: 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many';
 }
 
 export interface TableMetadata {
   name: string;
-  description?: string;
   columns: TableColumn[];
+  description?: string;
 }
 
 export interface EnumMetadata {
@@ -24,240 +30,336 @@ export interface EnumMetadata {
   description?: string;
 }
 
+export interface DatabaseMetadata {
+  tables: TableMetadata[];
+  enums: EnumMetadata[];
+  descriptions: { [key: string]: string };
+}
+
 @Injectable()
 export class DatabaseMetadataService implements OnModuleInit {
   private readonly logger = new Logger(DatabaseMetadataService.name);
-  private tables: TableMetadata[] = [];
-  private enums: EnumMetadata[] = [];
-  private databaseDescription: string = '';
+  private metadata: DatabaseMetadata = {
+    tables: [],
+    enums: [],
+    descriptions: {},
+  };
 
-  constructor(private dataSource: DataSource) {}
+  constructor(@Inject('PG_CONNECTION') private pool: Pool) {}
 
-  onModuleInit() {
-    this.logger.log('Initializing DatabaseMetadataService');
-    this.loadMetadata();
+  async onModuleInit() {
+    await this.loadMetadata();
   }
 
-  private async loadMetadata() {
+  async loadMetadata() {
     try {
+      this.logger.log('Chargement des métadonnées de la base de données...');
       await this.loadTables();
       await this.loadEnums();
-      await this.loadDatabaseDescription();
-      this.logger.log(
-        `Metadata loaded: ${this.tables.length} tables, ${this.enums.length} enums`,
+      await this.loadDatabaseDescriptions();
+      this.logger.log('Métadonnées de la base de données chargées avec succès');
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors du chargement des métadonnées: ${error.message}`,
       );
-    } catch (error) {
-      this.logger.error(`Failed to load database metadata: ${error.message}`);
+      throw error;
     }
   }
 
-  private async loadTables() {
+  async loadTables() {
     try {
-      // Récupérer les tables
+      // Requête pour obtenir toutes les tables
       const tablesQuery = `
-        SELECT 
-          t.table_name, 
-          obj_description(pgc.oid, 'pg_class') as table_description
-        FROM 
-          information_schema.tables t
-        JOIN 
-          pg_catalog.pg_class pgc ON t.table_name = pgc.relname
-        WHERE 
-          t.table_schema = 'public' 
-          AND t.table_type = 'BASE TABLE'
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name;
       `;
+      const tablesResult = await this.pool.query(tablesQuery);
 
-      const tables = await this.dataSource.query(tablesQuery);
-
-      for (const table of tables) {
+      for (const table of tablesResult.rows) {
         const tableName = table.table_name;
+        const columns = await this.getTableColumns(tableName);
 
-        // Récupérer les colonnes
-        const columnsQuery = `
-          SELECT 
-            c.column_name, 
-            c.data_type, 
-            c.is_nullable = 'YES' as is_nullable,
-            (
-              SELECT 
-                count(*) > 0 
-              FROM 
-                information_schema.table_constraints tc
-                JOIN information_schema.constraint_column_usage ccu 
-                  ON tc.constraint_name = ccu.constraint_name
-              WHERE 
-                tc.constraint_type = 'PRIMARY KEY' 
-                AND tc.table_name = c.table_name 
-                AND ccu.column_name = c.column_name
-            ) as is_primary,
-            pgd.description as column_description
-          FROM 
-            information_schema.columns c
-          LEFT JOIN 
-            pg_catalog.pg_statio_all_tables st ON c.table_name = st.relname
-          LEFT JOIN 
-            pg_catalog.pg_description pgd ON pgd.objoid = st.relid 
-            AND pgd.objsubid = c.ordinal_position
-          WHERE 
-            c.table_name = $1
-            AND c.table_schema = 'public'
-        `;
-
-        const columns = await this.dataSource.query(columnsQuery, [tableName]);
-
-        // Récupérer les clés étrangères
-        const foreignKeysQuery = `
-          SELECT
-            kcu.column_name,
-            ccu.table_name AS foreign_table_name,
-            ccu.column_name AS foreign_column_name
-          FROM
-            information_schema.table_constraints AS tc
-            JOIN information_schema.key_column_usage AS kcu
-              ON tc.constraint_name = kcu.constraint_name
-              AND tc.table_schema = kcu.table_schema
-            JOIN information_schema.constraint_column_usage AS ccu
-              ON ccu.constraint_name = tc.constraint_name
-              AND ccu.table_schema = tc.table_schema
-          WHERE
-            tc.constraint_type = 'FOREIGN KEY'
-            AND tc.table_name = $1
-            AND tc.table_schema = 'public'
-        `;
-
-        const foreignKeys = await this.dataSource.query(foreignKeysQuery, [
-          tableName,
-        ]);
-
-        // Créer un mapping des clés étrangères
-        const foreignKeyMap = {};
-        for (const fk of foreignKeys) {
-          foreignKeyMap[fk.column_name] = {
-            foreignTable: fk.foreign_table_name,
-            foreignColumn: fk.foreign_column_name,
-          };
-        }
-
-        // Construire les métadonnées de la table
-        const tableColumns: TableColumn[] = columns.map((column) => {
-          const isForeign = !!foreignKeyMap[column.column_name];
-
-          return {
-            name: column.column_name,
-            type: column.data_type,
-            nullable: column.is_nullable,
-            isPrimary: column.is_primary,
-            isForeign,
-            foreignTable: isForeign
-              ? foreignKeyMap[column.column_name].foreignTable
-              : undefined,
-            foreignColumn: isForeign
-              ? foreignKeyMap[column.column_name].foreignColumn
-              : undefined,
-            description: column.column_description,
-          };
-        });
-
-        this.tables.push({
+        this.metadata.tables.push({
           name: tableName,
-          description: table.table_description,
-          columns: tableColumns,
+          columns,
+          description: '',
         });
       }
-    } catch (error) {
-      this.logger.error(`Failed to load tables: ${error.message}`);
+
+      // Charger les relations entre les tables
+      await this.loadTableRelationships();
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors du chargement des tables: ${error.message}`,
+      );
       throw error;
     }
   }
 
-  private async loadEnums() {
+  async getTableColumns(tableName: string): Promise<TableColumn[]> {
     try {
-      const enumsQuery = `
+      // Requête pour obtenir les colonnes d'une table
+      const columnsQuery = `
         SELECT 
-          t.typname as enum_name,
-          array_agg(e.enumlabel) as enum_values,
-          obj_description(t.oid, 'pg_type') as description
+          c.column_name, 
+          c.data_type, 
+          c.is_nullable,
+          CASE WHEN pk.constraint_type = 'PRIMARY KEY' THEN true ELSE false END as is_primary_key,
+          CASE WHEN fk.constraint_name IS NOT NULL THEN true ELSE false END as is_foreign_key
         FROM 
-          pg_type t
-        JOIN 
-          pg_enum e ON t.oid = e.enumtypid
-        JOIN 
-          pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+          information_schema.columns c
+        LEFT JOIN (
+          SELECT 
+            tc.constraint_type, 
+            kcu.column_name
+          FROM 
+            information_schema.table_constraints tc
+          JOIN 
+            information_schema.key_column_usage kcu 
+            ON tc.constraint_name = kcu.constraint_name
+          WHERE 
+            tc.constraint_type = 'PRIMARY KEY' 
+            AND tc.table_name = $1
+        ) pk ON c.column_name = pk.column_name
+        LEFT JOIN (
+          SELECT 
+            tc.constraint_name, 
+            kcu.column_name
+          FROM 
+            information_schema.table_constraints tc
+          JOIN 
+            information_schema.key_column_usage kcu 
+            ON tc.constraint_name = kcu.constraint_name
+          WHERE 
+            tc.constraint_type = 'FOREIGN KEY' 
+            AND tc.table_name = $1
+        ) fk ON c.column_name = fk.column_name
         WHERE 
-          n.nspname = 'public'
-        GROUP BY 
-          t.typname, t.oid
+          c.table_name = $1
+        ORDER BY 
+          c.ordinal_position;
       `;
 
-      const enums = await this.dataSource.query(enumsQuery);
+      const columnsResult = await this.pool.query(columnsQuery, [tableName]);
 
-      this.enums = enums.map((e) => ({
-        name: e.enum_name,
-        values: e.enum_values,
-        description: e.description,
+      return columnsResult.rows.map((row) => ({
+        name: row.column_name,
+        type: row.data_type,
+        nullable: row.is_nullable === 'YES',
+        isPrimaryKey: row.is_primary_key,
+        isForeignKey: row.is_foreign_key,
+        description: '',
       }));
-    } catch (error) {
-      this.logger.error(`Failed to load enums: ${error.message}`);
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la récupération des colonnes pour la table ${tableName}: ${error.message}`,
+      );
       throw error;
     }
   }
 
-  private async loadDatabaseDescription() {
+  async loadTableRelationships() {
     try {
-      // Tenter de récupérer une description de la base de données depuis une table de métadonnées
-      // ou définir une description par défaut
-      this.databaseDescription = "Base de données principale de l'application";
-    } catch (error) {
+      // Requête pour obtenir les relations entre les tables
+      const relationshipsQuery = `
+        SELECT
+          tc.table_name AS source_table,
+          kcu.column_name AS source_column,
+          ccu.table_name AS target_table,
+          ccu.column_name AS target_column
+        FROM
+          information_schema.table_constraints tc
+        JOIN
+          information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+        JOIN
+          information_schema.constraint_column_usage ccu
+          ON tc.constraint_name = ccu.constraint_name
+        WHERE
+          tc.constraint_type = 'FOREIGN KEY';
+      `;
+
+      const relationshipsResult = await this.pool.query(relationshipsQuery);
+
+      for (const row of relationshipsResult.rows) {
+        const sourceTable = this.getTable(row.source_table);
+        const targetTable = this.getTable(row.target_table);
+
+        if (sourceTable && targetTable) {
+          // Déterminer le type de relation
+          // Par défaut, on suppose une relation many-to-one
+          let relationType:
+            | 'one-to-one'
+            | 'one-to-many'
+            | 'many-to-one'
+            | 'many-to-many' = 'many-to-one';
+
+          // Si la colonne source est une clé primaire, c'est probablement une relation one-to-one
+          const sourceColumn = sourceTable.columns.find(
+            (col) => col.name === row.source_column,
+          );
+          if (sourceColumn && sourceColumn.isPrimaryKey) {
+            relationType = 'one-to-one';
+          }
+
+          // Ajouter la relation
+          const relationship: TableRelationship = {
+            sourceTable: row.source_table,
+            targetTable: row.target_table,
+            sourceColumn: row.source_column,
+            targetColumn: row.target_column,
+            relationType,
+          };
+
+          // Stocker la relation dans les métadonnées
+          if (!sourceTable.relationships) {
+            sourceTable.relationships = [];
+          }
+          sourceTable.relationships.push(relationship);
+        }
+      }
+    } catch (error: any) {
       this.logger.error(
-        `Failed to load database description: ${error.message}`,
+        `Erreur lors du chargement des relations entre les tables: ${error.message}`,
       );
-      this.databaseDescription = 'Aucune description disponible';
+      throw error;
     }
+  }
+
+  async loadEnums() {
+    try {
+      // Requête pour obtenir les types enum
+      const enumsQuery = `
+        SELECT
+          t.typname AS enum_name,
+          e.enumlabel AS enum_value
+        FROM
+          pg_type t
+        JOIN
+          pg_enum e ON t.oid = e.enumtypid
+        JOIN
+          pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+        WHERE
+          n.nspname = 'public'
+        ORDER BY
+          t.typname, e.enumsortorder;
+      `;
+
+      const enumsResult = await this.pool.query(enumsQuery);
+
+      // Regrouper les valeurs par nom d'enum
+      const enumMap = new Map<string, string[]>();
+      for (const row of enumsResult.rows) {
+        if (!enumMap.has(row.enum_name)) {
+          enumMap.set(row.enum_name, []);
+        }
+        enumMap.get(row.enum_name)?.push(row.enum_value);
+      }
+
+      // Convertir la map en tableau d'EnumMetadata
+      for (const [name, values] of enumMap.entries()) {
+        this.metadata.enums.push({
+          name,
+          values,
+          description: '',
+        });
+      }
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors du chargement des enums: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  async loadDatabaseDescriptions() {
+    try {
+      // Requête pour obtenir les commentaires sur les tables et les colonnes
+      const descriptionsQuery = `
+        SELECT
+          c.relname AS table_name,
+          a.attname AS column_name,
+          d.description
+        FROM
+          pg_description d
+        JOIN
+          pg_class c ON d.objoid = c.oid
+        LEFT JOIN
+          pg_attribute a ON d.objoid = a.attrelid AND d.objsubid = a.attnum
+        WHERE
+          c.relkind = 'r'
+          AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+        ORDER BY
+          c.relname, a.attname;
+      `;
+
+      const descriptionsResult = await this.pool.query(descriptionsQuery);
+
+      for (const row of descriptionsResult.rows) {
+        const tableName = row.table_name;
+        const columnName = row.column_name;
+        const description = row.description;
+
+        if (columnName) {
+          // Description d'une colonne
+          const table = this.getTable(tableName);
+          if (table) {
+            const column = table.columns.find((col) => col.name === columnName);
+            if (column) {
+              column.description = description;
+            }
+          }
+        } else {
+          // Description d'une table
+          const table = this.getTable(tableName);
+          if (table) {
+            table.description = description;
+          }
+        }
+
+        // Stocker également dans le dictionnaire de descriptions
+        const key = columnName ? `${tableName}.${columnName}` : tableName;
+        this.metadata.descriptions[key] = description;
+      }
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors du chargement des descriptions: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  getTable(
+    tableName: string,
+  ): TableMetadata & { relationships?: TableRelationship[] } {
+    return this.metadata.tables.find(
+      (table) => table.name === tableName,
+    ) as TableMetadata & { relationships?: TableRelationship[] };
+  }
+
+  getTableRelationships(tableName: string): TableRelationship[] {
+    const table = this.getTable(tableName) as TableMetadata & {
+      relationships?: TableRelationship[];
+    };
+    return table?.relationships || [];
   }
 
   getAllTables(): TableMetadata[] {
-    return this.tables;
-  }
-
-  getTable(tableName: string): TableMetadata | undefined {
-    return this.tables.find((t) => t.name === tableName);
+    return this.metadata.tables;
   }
 
   getAllEnums(): EnumMetadata[] {
-    return this.enums;
+    return this.metadata.enums;
   }
 
   getEnum(enumName: string): EnumMetadata | undefined {
-    return this.enums.find((e) => e.name === enumName);
+    return this.metadata.enums.find((e) => e.name === enumName);
   }
 
-  getDatabaseDescription(): string {
-    return this.databaseDescription;
-  }
-
-  getRelationships(tableName: string): { [key: string]: string[] } {
-    const relationships: { [key: string]: string[] } = {};
-
-    // Trouver les tables qui ont une clé étrangère vers cette table
-    for (const table of this.tables) {
-      if (table.name === tableName) continue;
-
-      for (const column of table.columns) {
-        if (column.isForeign && column.foreignTable === tableName) {
-          if (!relationships[table.name]) {
-            relationships[table.name] = [];
-          }
-          relationships[table.name].push(column.name);
-        }
-      }
-    }
-
-    return relationships;
-  }
-
-  refreshMetadata() {
-    this.tables = [];
-    this.enums = [];
-    this.loadMetadata();
+  getDescription(key: string): string {
+    return this.metadata.descriptions[key] || '';
   }
 }

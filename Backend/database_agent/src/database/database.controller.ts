@@ -56,7 +56,7 @@ export class DatabaseController {
         body.params || [],
       );
       return { result };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Erreur lors de l'exécution de la requête: ${error.message}`,
       );
@@ -77,7 +77,6 @@ export class DatabaseController {
       const dbMetadata = {
         tables: this.dbMetadataService.getAllTables(),
         enums: this.dbMetadataService.getAllEnums(),
-        description: this.dbMetadataService.getDatabaseDescription(),
       };
 
       // Analyser la question pour déterminer quelle table ou données sont nécessaires
@@ -100,7 +99,7 @@ export class DatabaseController {
             const data = await this.databaseService.getTableData(table.name, 5);
             response += `Voici un aperçu des données de la table ${table.name}:\n`;
             response += `${JSON.stringify(data, null, 2)}\n\n`;
-          } catch (error) {
+          } catch (error: any) {
             response += `Je n'ai pas pu récupérer les données de la table ${table.name}: ${error.message}\n\n`;
           }
         }
@@ -113,7 +112,7 @@ export class DatabaseController {
       }
 
       return { reponse: response };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Erreur lors du traitement de la requête: ${error.message}`,
       );
@@ -128,7 +127,6 @@ export class DatabaseController {
     return {
       tables: this.dbMetadataService.getAllTables(),
       enums: this.dbMetadataService.getAllEnums(),
-      description: this.dbMetadataService.getDatabaseDescription(),
     };
   }
 
@@ -155,7 +153,7 @@ export class DatabaseController {
         metadata: tableMetadata,
         count,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Erreur lors de la récupération des détails de la table ${tableName}: ${error.message}`,
       );
@@ -174,7 +172,7 @@ export class DatabaseController {
         parseInt(limit, 10),
       );
       return { data };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Erreur lors de la récupération des données de la table ${tableName}: ${error.message}`,
       );
@@ -207,7 +205,7 @@ export class DatabaseController {
         body.limit || 10,
       );
       return { result };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Erreur lors de la recherche: ${error.message}`);
       return { error: error.message };
     }
@@ -226,7 +224,7 @@ export class DatabaseController {
         relatedTable,
       );
       return { data };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Erreur lors de la récupération des données liées: ${error.message}`,
       );

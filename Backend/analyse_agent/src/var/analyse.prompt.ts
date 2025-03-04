@@ -28,7 +28,8 @@ export const analysePrompt = (question: string): string => `
 - Détermine quel agent doit traiter la demande :
   - agent_general : Pour les questions générales sur l'entreprise et ses services, ou nécessitant une recherche internet
   - agent_api : Pour les requêtes nécessitant un accès à la base de données (catalogue, projets, clients, devis, factures)
-  - agent_workflow : Pour les questions liées aux processus de chantier et à la gestion de projet
+    - IMPORTANT: Toutes les questions concernant les chantiers planifiés, les projets en cours ou à venir, les calendriers d'événements doivent être dirigées vers agent_api car ces informations sont stockées dans la base de données.
+  - agent_workflow : Pour les actions automatiques a faire par le workflow
 
 5️⃣ **Évaluation de la priorité**  
 - Définis la priorité de la demande parmi :

@@ -157,7 +157,7 @@ export class RouterService {
 
       // Vérifier si l'agent de workflow est disponible
       try {
-        await axios.get(`${this.workflowAgentUrl}/health`);
+        await axios.get(`${this.workflowAgentUrl}/api/workflow/health`);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'Erreur inconnue';
@@ -179,7 +179,7 @@ export class RouterService {
 
       // Envoyer la requête à l'agent de workflow
       const response = await axios.post<RouterResponse>(
-        `${this.workflowAgentUrl}/process`,
+        `${this.workflowAgentUrl}/api/workflow/process`,
         workflowRequest,
         {
           timeout: 30000, // 30 secondes de timeout

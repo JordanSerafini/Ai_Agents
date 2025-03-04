@@ -10,11 +10,12 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3002
-      - DB_HOST=ai_db
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=postgres
-      - DB_DATABASE=ai_db
+      - PG_HOST=ai_db
+      - PG_PORT=5432
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+      - PG_DATABASE=ai_db
+      - DATABASE_URL=postgresql://postgres:postgres@ai_db:5432/ai_db
     networks:
       - ai_network
     depends_on:
@@ -92,6 +93,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./Database/init_db.sql:/docker-entrypoint-initdb.d/1_init_db.sql
+      - ./Database/seed.sql:/docker-entrypoint-initdb.d/2_seed.sql
     networks:
       - ai_network
 
