@@ -9,19 +9,25 @@ import { plainToClass } from 'class-transformer';
 import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 
 @Injectable()
-export class AnalyseValidationPipe implements PipeTransform<any> {
-  async transform(value: any, metadata: ArgumentMetadata) {
+export class AnalyseValidationPipe implements PipeTransform {
+  async transform(
+    value: any,
+    metadata: ArgumentMetadata,
+  ): Promise<AnalyseRequestDto> {
     if (metadata.type !== 'body') {
-      return value;
+      return value as AnalyseRequestDto;
     }
 
     const dto = plainToClass(AnalyseRequestDto, value);
     const errors = await validate(dto);
 
     if (errors.length > 0) {
-      const messages = errors.map((error) =>
-        Object.values(error.constraints).join(', '),
-      );
+      const messages = errors.map((error) => {
+        if (!error.constraints) {
+          return 'Validation error';
+        }
+        return Object.values(error.constraints).join(', ');
+      });
       throw new BadRequestException(messages);
     }
 
