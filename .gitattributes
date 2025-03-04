@@ -1,0 +1,11 @@
+# Force LF line endings
+* text=auto eol=lf
+*.{cmd,[cC][mM][dD]} text eol=crlf
+*.{bat,[bB][aA][tT]} text eol=crlf
+*.{exe,dll,sys,com} binary
+*.{png,jpg,jpeg,gif,ico,webp} binary
+*.{pdf,doc,docx,xls,xlsx,ppt,pptx} binary
+*.{zip,rar,7z,tar,gz} binary
+*.{ttf,otf,woff,woff2} binary
+*.{json,yml,yaml,md,txt,env} text eol=lf
+*.{ts,js,jsx,tsx,css,scss,html} text eol=lf 

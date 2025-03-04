@@ -1,0 +1,93 @@
+services:
+  # api_gateway:
+  #   build:
+  #     context: ./api_gateway_ai
+  #     dockerfile: Dockerfile
+  #   container_name: api_gateway
+  #   environment:
+  #     - PORT=4000
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #   ports:
+  #     - "4000:4000"
+  #     - "4003:4003"
+  #   restart: always
+  #   depends_on:
+  #     - database_agent
+  #     - ai_analyse_router
+  #   networks:
+  #     - ai_network
+
+  analyse_agent:
+    build:
+      context: ./Backend/analyse_agent
+      dockerfile: Dockerfile
+    container_name: analyse_agent
+    environment:
+      - PORT=4002
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=mongodb://mongodb:27017/analyse_agent
+    ports:
+      - "4002:4002"
+    restart: always
+    depends_on:
+      - mongodb
+    networks:
+      - ai_network
+
+  # analyse_router:
+  #   build:
+  #     context: ./analyse_router
+  #     dockerfile: Dockerfile
+  #   container_name: analyse_router
+  #   environment:
+  #     - PORT=4001
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #   expose:
+  #     - "4001"
+  #   restart: always
+  #   networks:
+  #     - ai_network
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - ai_network
+      
+  redis:
+    image: "redis:alpine"
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - ai_network
+
+  postgres:
+    image: postgres:13
+    container_name: ai_db
+    environment:
+      POSTGRES_DB: ai
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../Database/init_db.sql:/docker-entrypoint-initdb.d/1_init_db.sql
+      - ../Database/seed.sql:/docker-entrypoint-initdb.d/2_seed.sql
+    networks:
+      - ai_network
+
+volumes:
+  postgres_data:
+  mongodb_data:
+
+networks:
+  ai_network:
+    driver: bridge
+
