@@ -934,7 +934,7 @@ export class DatabaseController {
           return 'QUOTATIONS_LAST_MONTH';
         }
       }
-      
+
       // Devis du mois en cours
       if (
         lowerQuery.includes('ce mois') ||
@@ -1588,51 +1588,219 @@ export class DatabaseController {
         sqlQuery = this.QUERIES.quotations.GET_EXPIRED;
         break;
 
+      // Nouvelles intentions pour les devis filtrés par période
+      case 'ACCEPTED_QUOTATIONS_NEXT_MONTH_TOTAL':
+        // Calculer les dates du mois prochain
+        const nextMonthStart = new Date();
+        nextMonthStart.setDate(1);
+        nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+
+        const nextMonthEnd = new Date(nextMonthStart);
+        nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1);
+        nextMonthEnd.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          'accepté',
+          nextMonthStart.toISOString().split('T')[0],
+          nextMonthEnd.toISOString().split('T')[0],
+        ];
+        break;
+
+      case 'REJECTED_QUOTATIONS_NEXT_MONTH_TOTAL':
+        // Calculer les dates du mois prochain
+        const nextMonthStartRej = new Date();
+        nextMonthStartRej.setDate(1);
+        nextMonthStartRej.setMonth(nextMonthStartRej.getMonth() + 1);
+
+        const nextMonthEndRej = new Date(nextMonthStartRej);
+        nextMonthEndRej.setMonth(nextMonthEndRej.getMonth() + 1);
+        nextMonthEndRej.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          'refusé',
+          nextMonthStartRej.toISOString().split('T')[0],
+          nextMonthEndRej.toISOString().split('T')[0],
+        ];
+        break;
+
+      case 'QUOTATIONS_NEXT_MONTH_TOTAL':
+        // Calculer les dates du mois prochain
+        const nextMonthStartAll = new Date();
+        nextMonthStartAll.setDate(1);
+        nextMonthStartAll.setMonth(nextMonthStartAll.getMonth() + 1);
+
+        const nextMonthEndAll = new Date(nextMonthStartAll);
+        nextMonthEndAll.setMonth(nextMonthEndAll.getMonth() + 1);
+        nextMonthEndAll.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          null,
+          nextMonthStartAll.toISOString().split('T')[0],
+          nextMonthEndAll.toISOString().split('T')[0],
+        ];
+        break;
+
+      case 'ACCEPTED_QUOTATIONS_LAST_MONTH_TOTAL':
+        // Calculer les dates du mois dernier
+        const lastMonthStart = new Date();
+        lastMonthStart.setDate(1);
+        lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+
+        const lastMonthEnd = new Date();
+        lastMonthEnd.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          'accepté',
+          lastMonthStart.toISOString().split('T')[0],
+          lastMonthEnd.toISOString().split('T')[0],
+        ];
+        break;
+
+      case 'REJECTED_QUOTATIONS_LAST_MONTH_TOTAL':
+        // Calculer les dates du mois dernier
+        const lastMonthStartRej = new Date();
+        lastMonthStartRej.setDate(1);
+        lastMonthStartRej.setMonth(lastMonthStartRej.getMonth() - 1);
+
+        const lastMonthEndRej = new Date();
+        lastMonthEndRej.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          'refusé',
+          lastMonthStartRej.toISOString().split('T')[0],
+          lastMonthEndRej.toISOString().split('T')[0],
+        ];
+        break;
+
+      case 'QUOTATIONS_LAST_MONTH_TOTAL':
+        // Calculer les dates du mois dernier
+        const lastMonthStartAll = new Date();
+        lastMonthStartAll.setDate(1);
+        lastMonthStartAll.setMonth(lastMonthStartAll.getMonth() - 1);
+
+        const lastMonthEndAll = new Date();
+        lastMonthEndAll.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          null,
+          lastMonthStartAll.toISOString().split('T')[0],
+          lastMonthEndAll.toISOString().split('T')[0],
+        ];
+        break;
+
+      case 'ACCEPTED_QUOTATIONS_CURRENT_MONTH_TOTAL':
+        // Calculer les dates du mois en cours
+        const currentMonthStart = new Date();
+        currentMonthStart.setDate(1);
+
+        const currentMonthEnd = new Date();
+        currentMonthEnd.setMonth(currentMonthEnd.getMonth() + 1);
+        currentMonthEnd.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          'accepté',
+          currentMonthStart.toISOString().split('T')[0],
+          currentMonthEnd.toISOString().split('T')[0],
+        ];
+        break;
+
+      case 'REJECTED_QUOTATIONS_CURRENT_MONTH_TOTAL':
+        // Calculer les dates du mois en cours
+        const currentMonthStartRej = new Date();
+        currentMonthStartRej.setDate(1);
+
+        const currentMonthEndRej = new Date();
+        currentMonthEndRej.setMonth(currentMonthEndRej.getMonth() + 1);
+        currentMonthEndRej.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          'refusé',
+          currentMonthStartRej.toISOString().split('T')[0],
+          currentMonthEndRej.toISOString().split('T')[0],
+        ];
+        break;
+
+      case 'QUOTATIONS_CURRENT_MONTH_TOTAL':
+        // Calculer les dates du mois en cours
+        const currentMonthStartAll = new Date();
+        currentMonthStartAll.setDate(1);
+
+        const currentMonthEndAll = new Date();
+        currentMonthEndAll.setMonth(currentMonthEndAll.getMonth() + 1);
+        currentMonthEndAll.setDate(0);
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+        sqlParams = [
+          null,
+          currentMonthStartAll.toISOString().split('T')[0],
+          currentMonthEndAll.toISOString().split('T')[0],
+        ];
+        break;
+
+      // Intentions pour les listes de devis par période (sans total)
+      case 'ACCEPTED_QUOTATIONS_NEXT_MONTH':
+      case 'REJECTED_QUOTATIONS_NEXT_MONTH':
+      case 'QUOTATIONS_NEXT_MONTH':
+      case 'ACCEPTED_QUOTATIONS_LAST_MONTH':
+      case 'REJECTED_QUOTATIONS_LAST_MONTH':
+      case 'QUOTATIONS_LAST_MONTH':
+      case 'ACCEPTED_QUOTATIONS_CURRENT_MONTH':
+      case 'REJECTED_QUOTATIONS_CURRENT_MONTH':
+      case 'QUOTATIONS_CURRENT_MONTH':
+        // Déterminer la période
+        let startDate: Date, endDate: Date;
+
+        if (intent.includes('NEXT_MONTH')) {
+          startDate = new Date();
+          startDate.setDate(1);
+          startDate.setMonth(startDate.getMonth() + 1);
+
+          endDate = new Date(startDate);
+          endDate.setMonth(endDate.getMonth() + 1);
+          endDate.setDate(0);
+        } else if (intent.includes('LAST_MONTH')) {
+          startDate = new Date();
+          startDate.setDate(1);
+          startDate.setMonth(startDate.getMonth() - 1);
+
+          endDate = new Date();
+          endDate.setDate(0);
+        } else {
+          // CURRENT_MONTH
+          startDate = new Date();
+          startDate.setDate(1);
+
+          endDate = new Date();
+          endDate.setMonth(endDate.getMonth() + 1);
+          endDate.setDate(0);
+        }
+
+        // Déterminer le statut
+        let status: string | null = null;
+        if (intent.includes('ACCEPTED')) {
+          status = 'accepté';
+        } else if (intent.includes('REJECTED')) {
+          status = 'refusé';
+        }
+
+        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS;
+        sqlParams = [
+          status,
+          startDate.toISOString().split('T')[0],
+          endDate.toISOString().split('T')[0],
+        ];
+        break;
+
       case 'QUOTATION_CONVERSION_STATS':
         sqlQuery = this.QUERIES.quotations.CONVERSION_STATS;
-        break;
-
-      case 'QUOTATION_PRODUCTS':
-        if (params.quotationId) {
-          // Si une catégorie est spécifiée, on filtre les produits par catégorie
-          if (params.category) {
-            sqlQuery = `
-              SELECT qp.*, q.reference as quotation_reference
-              FROM quotation_products qp
-              JOIN quotations q ON qp.quotation_id = q.id
-              WHERE qp.quotation_id = $1 AND qp.category ILIKE $2
-              ORDER BY qp.id;
-            `;
-            sqlParams = [params.quotationId, `%${params.category}%`];
-          } else {
-            sqlQuery = this.QUERIES.quotations.GET_PRODUCTS;
-            sqlParams = [params.quotationId];
-          }
-        } else {
-          throw new Error('ID du devis non spécifié');
-        }
-        break;
-
-      case 'SEARCH_QUOTATIONS':
-        if (params.keyword) {
-          sqlQuery = this.QUERIES.quotations.SEARCH;
-          sqlParams = [`%${params.keyword}%`];
-        } else {
-          throw new Error('Mot-clé de recherche non spécifié');
-        }
-        break;
-
-      case 'QUOTATION_BY_ID':
-        if (params.quotationId) {
-          sqlQuery = this.QUERIES.quotations.GET_BY_ID;
-          sqlParams = [params.quotationId];
-        } else {
-          throw new Error('ID de la citation non spécifié');
-        }
-        break;
-
-      case 'LIST_QUOTATIONS':
-        sqlQuery = this.QUERIES.quotations.GET_ALL;
         break;
 
       default:
