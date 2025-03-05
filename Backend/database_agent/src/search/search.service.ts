@@ -80,7 +80,7 @@ export class SearchService {
         body: {
           settings,
           mappings,
-        },
+        } as any,
       });
 
       this.logger.log(`Index ${index} créé avec succès`);

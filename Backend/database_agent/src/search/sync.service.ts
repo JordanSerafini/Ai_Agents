@@ -459,8 +459,8 @@ export class SyncService {
           const failedItems = responseItems
             .filter((item) => item.index && item.index.error)
             .map((item) => ({
-              id: item.index._id,
-              error: item.index.error,
+              id: item.index?._id,
+              error: item.index?.error,
             }));
 
           this.logger.warn(
