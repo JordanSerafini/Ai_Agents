@@ -203,11 +203,11 @@ export class DatabaseController {
               case 'PROJECT_PROGRESS':
                 response += `Le taux d'avancement est de ${result[0]?.progress_percentage || 0}%.\n`;
                 break;
-              case 'OVERDUE_TASKS':
-                response += `Il y a ${result.length} tâche(s) en retard.\n`;
+              case 'OVERDUE_EVENTS':
+                response += `Il y a ${result.length} événement(s) en retard.\n`;
                 break;
-              case 'TASKS_THIS_MONTH':
-                response += `Il y a ${result.length} tâche(s) prévue(s) ce mois-ci.\n`;
+              case 'EVENTS_THIS_MONTH':
+                response += `Il y a ${result.length} événement(s) prévu(s) ce mois-ci.\n`;
                 break;
             }
           } else if (result && typeof result === 'object') {
@@ -773,22 +773,25 @@ export class DatabaseController {
       return 'PROJECT_PROGRESS';
     }
 
-    // Tâches
+    // Tâches (gérées comme des événements dans calendar_events)
     if (
       lowerQuery.includes('tâches en retard') ||
-      lowerQuery.includes('retards')
+      lowerQuery.includes('retards') ||
+      lowerQuery.includes('événements en retard')
     ) {
-      return 'OVERDUE_TASKS';
+      return 'OVERDUE_EVENTS';
     } else if (
       lowerQuery.includes('tâches ce mois') ||
-      lowerQuery.includes('planning mensuel')
+      lowerQuery.includes('planning mensuel') ||
+      lowerQuery.includes('événements ce mois')
     ) {
-      return 'TASKS_THIS_MONTH';
+      return 'EVENTS_THIS_MONTH';
     } else if (
       lowerQuery.includes('tâches de') ||
-      lowerQuery.includes('travail de')
+      lowerQuery.includes('travail de') ||
+      lowerQuery.includes('événements de')
     ) {
-      return 'TASKS_BY_USER';
+      return 'EVENTS_BY_USER';
     } else if (
       lowerQuery.includes('charge de travail') ||
       lowerQuery.includes('planning de')
@@ -800,16 +803,16 @@ export class DatabaseController {
         lowerQuery.includes('en cours') ||
         lowerQuery.includes('à faire'))
     ) {
-      return 'TASKS_BY_STATUS';
+      return 'EVENTS_BY_STATUS';
     } else if (lowerQuery.includes('tâche') && /\d+/.test(lowerQuery)) {
-      return 'TASK_BY_ID';
+      return 'EVENT_BY_ID';
     } else if (
       (lowerQuery.includes('cherche') || lowerQuery.includes('trouve')) &&
       lowerQuery.includes('tâche')
     ) {
-      return 'SEARCH_TASKS';
+      return 'SEARCH_EVENTS';
     } else if (lowerQuery.includes('liste des tâches')) {
-      return 'LIST_TASKS';
+      return 'LIST_EVENTS';
     }
 
     // Utilisateurs
@@ -1878,6 +1881,7 @@ export class DatabaseController {
       analysis?: {
         intention?: string;
         entites?: string[];
+        questionCorrigee?: string;
       };
     };
   }): Promise<{
@@ -1890,8 +1894,20 @@ export class DatabaseController {
       // Extraction des métadonnées pour le filtrage
       const intention = enrichedRequest.metadata?.analysis?.intention || '';
       const status = enrichedRequest.metadata?.filters?.status || null;
-      const timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
+      let timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
       const entities = enrichedRequest.metadata?.analysis?.entites || [];
+      const question = enrichedRequest.question || '';
+      const questionCorrigee = enrichedRequest.metadata?.analysis?.questionCorrigee || '';
+
+      // Détection spécifique pour les questions sur les "chantiers du mois"
+      if (
+        question.toLowerCase().includes('du mois') || 
+        questionCorrigee.toLowerCase().includes('du mois') ||
+        (intention.includes('planning') && question.toLowerCase().includes('mois'))
+      ) {
+        timeframe = 'current_month';
+        this.logger.log('Période détectée: mois courant pour la question sur les chantiers du mois');
+      }
 
       // Structure pour stocker les résultats
       interface ProjectResult {
@@ -1911,11 +1927,17 @@ export class DatabaseController {
       const params: any[] = [];
       const whereConditions: string[] = [];
       let responseMessage = '';
+      
+      // Variables pour le message de réponse
+      let statusFilter = '';
+      let timeFrameText = '';
+      let searchFilter = '';
 
       // Construction des conditions de filtrage
       if (status) {
         whereConditions.push('p.status = $1');
         params.push(status);
+        statusFilter = `avec le statut "${status}"`;
       }
 
       // Filtrage par période
@@ -1924,7 +1946,13 @@ export class DatabaseController {
 
         switch (timeframe) {
           case 'current_month':
-            dateCondition = `DATE_TRUNC('month', p.start_date) = DATE_TRUNC('month', CURRENT_DATE)`;
+            dateCondition = `(
+              (p.start_date BETWEEN DATE_TRUNC('month', CURRENT_DATE) AND (DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month - 1 day'))
+              OR 
+              (p.end_date BETWEEN DATE_TRUNC('month', CURRENT_DATE) AND (DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month - 1 day'))
+              OR
+              (p.start_date <= DATE_TRUNC('month', CURRENT_DATE) AND p.end_date >= (DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month - 1 day'))
+            )`;
             break;
           case 'next_month':
             dateCondition = `DATE_TRUNC('month', p.start_date) = DATE_TRUNC('month', CURRENT_DATE + INTERVAL '1 month')`;
@@ -1946,6 +1974,7 @@ export class DatabaseController {
 
         if (dateCondition) {
           whereConditions.push(dateCondition);
+          timeFrameText = this.getTimeframeText(timeframe);
         }
       }
 
@@ -1963,6 +1992,7 @@ export class DatabaseController {
           `(p.name ILIKE $${params.length + 1} OR c.name ILIKE $${params.length + 1})`,
         );
         params.push(`%${searchTerm}%`);
+        searchFilter = `correspondant à "${searchTerm}"`;
       }
 
       // Création de la clause WHERE
@@ -1975,30 +2005,34 @@ export class DatabaseController {
       if (
         intention.includes('liste') ||
         intention.includes('tous') ||
-        intention.includes('en cours')
+        intention.includes('en cours') ||
+        question.toLowerCase().includes('du mois') ||
+        questionCorrigee.toLowerCase().includes('du mois')
       ) {
         // Requête pour lister les projets
         const orderClause = intention.includes('récent')
           ? 'ORDER BY p.start_date DESC'
-          : 'ORDER BY p.status, p.name';
+          : 'ORDER BY p.start_date ASC';
         const limitClause = 'LIMIT 20';
 
         query = `
-          SELECT p.id, p.name, c.name as client_name, p.status, 
-                 p.start_date, p.end_date,
-                 COALESCE(COUNT(ce.id), 0) as total_events,
-                 COALESCE(SUM(CASE WHEN ce.status = 'completed' THEN 1 ELSE 0 END), 0) as completed_events,
-                 CASE
-                   WHEN COALESCE(COUNT(ce.id), 0) = 0 THEN 0
-                   ELSE ROUND((COALESCE(SUM(CASE WHEN ce.status = 'completed' THEN 1 ELSE 0 END), 0)::float / COUNT(ce.id)) * 100)
-                 END as progress
-          FROM projects p
-          LEFT JOIN clients c ON p.client_id = c.id
-          LEFT JOIN calendar_events ce ON p.id = ce.project_id
-          ${whereClause}
-          GROUP BY p.id, p.name, c.name, p.status, p.start_date, p.end_date
-          ${orderClause}
-          ${limitClause}
+           SELECT p.id, p.name, 
+                  CONCAT(c.firstname, ' ', c.lastname) as client_name, 
+                  p.status, 
+                  p.start_date, p.end_date,
+                  COALESCE(COUNT(ce.id), 0) as total_events,
+                  COALESCE(SUM(CASE WHEN ce.status = 'completed' THEN 1 ELSE 0 END), 0) as completed_events,
+                  CASE
+                    WHEN COALESCE(COUNT(ce.id), 0) = 0 THEN 0
+                    ELSE ROUND((COALESCE(SUM(CASE WHEN ce.status = 'completed' THEN 1 ELSE 0 END), 0)::float / COUNT(ce.id)) * 100)
+                  END as progress
+           FROM projects p
+           LEFT JOIN clients c ON p.client_id = c.id
+           LEFT JOIN calendar_events ce ON p.id = ce.project_id
+           ${whereClause}
+           GROUP BY p.id, p.name, c.firstname, c.lastname, p.status, p.start_date, p.end_date
+           ${orderClause}
+           ${limitClause}
         `;
 
         // Utiliser le cache si aucun filtre spécifique n'est appliqué
@@ -2014,11 +2048,17 @@ export class DatabaseController {
           useCache,
         );
 
-        const statusFilter = status ? `avec le statut "${status}"` : '';
-        const timeFrameText = this.getTimeframeText(timeframe);
-        const searchFilter = searchTerm
-          ? `correspondant à "${searchTerm}"`
-          : '';
+        if (status) {
+          statusFilter = `avec le statut "${status}"`;
+        }
+
+        if (timeframe) {
+          timeFrameText = this.getTimeframeText(timeframe);
+        }
+
+        if (searchTerm) {
+          searchFilter = `correspondant à "${searchTerm}"`;
+        }
 
         responseMessage =
           projects.length > 0
@@ -2087,6 +2127,23 @@ export class DatabaseController {
       // Ajouter un log pour déboguer la réponse
       this.logger.debug(`Réponse générée pour les projets: ${responseMessage}`);
       this.logger.debug(`Nombre de projets trouvés: ${projects.length}`);
+
+      // Génération de la réponse
+      if (projects.length === 0) {
+        if (timeframe === 'current_month') {
+          responseMessage = "Aucun chantier n'est prévu pour le mois en cours.";
+        } else if (timeframe === 'next_month') {
+          responseMessage = "Aucun chantier n'est prévu pour le mois prochain.";
+        } else if (timeframe === 'current_year') {
+          responseMessage = "Aucun chantier n'est prévu pour l'année en cours.";
+        } else if (status) {
+          responseMessage = `Aucun projet avec le statut "${status}" n'a été trouvé.`;
+        } else {
+          responseMessage = "Aucun projet ne correspond à votre recherche.";
+        }
+      } else {
+        responseMessage = `Voici la liste des ${projects.length} projets ${statusFilter} ${timeFrameText} ${searchFilter}.`;
+      }
 
       return {
         success: true,
