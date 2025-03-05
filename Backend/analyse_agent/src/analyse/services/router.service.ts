@@ -254,6 +254,15 @@ export class RouterService {
       agenda: 'calendar_events',
       calendrier: 'calendar_events',
       planning: 'calendar_events',
+      personnel: 'staff',
+      staff: 'staff',
+      employé: 'staff',
+      employés: 'staff',
+      équipe: 'staff',
+      travailleur: 'staff',
+      travailleurs: 'staff',
+      "membre d'équipe": 'staff',
+      "membres d'équipe": 'staff',
     };
 
     // Déterminer la table principale concernée
