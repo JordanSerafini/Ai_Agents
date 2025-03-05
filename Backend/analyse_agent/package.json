@@ -24,6 +24,7 @@
     "@nestjs/common": "^11.0.11",
     "@nestjs/config": "^4.0.1",
     "@nestjs/core": "^11.0.11",
+    "@nestjs/elasticsearch": "^11.0.0",
     "@nestjs/mongoose": "^11.0.1",
     "@nestjs/platform-express": "^11.0.11",
     "axios": "^1.8.1",

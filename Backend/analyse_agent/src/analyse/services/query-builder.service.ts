@@ -543,10 +543,10 @@ export class QueryBuilderService {
   }
 
   private buildElasticsearchFilters(analyseResponse: AnalyseResponseDto) {
-    const filters = [];
+    const filters: any[] = [];
     
-    for (const contrainte of analyseResponse.contraintes) {
-      try {
+    try {
+      analyseResponse.contraintes.forEach(contrainte => {
         if (contrainte.includes('=')) {
           const [field, value] = contrainte.split('=').map(s => s.trim());
           filters.push({
@@ -569,9 +569,9 @@ export class QueryBuilderService {
             match_phrase_prefix: { [field]: value.replace(/%/g, '') }
           });
         }
-      } catch (error) {
-        this.logger.warn(`Impossible de parser la contrainte: ${contrainte}`);
-      }
+      });
+    } catch (error) {
+      this.logger.warn(`Impossible de parser la contrainte: ${error.message}`);
     }
     
     return filters;
@@ -716,7 +716,12 @@ export class QueryBuilderService {
 
   getAvailableJoinConfigurations() {
     // Récupérer les configurations de jointure basées sur le schéma de la base de données
-    const configs = [];
+    const configs: Array<{
+      name: string;
+      description: string;
+      tables: string[];
+      conditions: string[];
+    }> = [];
     
     for (const [mainTable, relatedTables] of Object.entries(this.COMMON_TABLES_RELATIONS)) {
       relatedTables.forEach(relatedTable => {
@@ -846,8 +851,8 @@ export class QueryBuilderService {
       cacheUsed: Math.random() > 0.5,
       indexesUsed: ['idx_primary', 'idx_created_at'],
       optimizationHints: [
-        'Considérer l'ajout d'un index sur la colonne status',
-        'La jointure pourrait bénéficier d'un index composite'
+        "Considérer l'ajout d'un index sur la colonne status",
+        "La jointure pourrait bénéficier d'un index composite"
       ]
     };
   }
@@ -867,59 +872,44 @@ export class QueryBuilderService {
       const similarQueries = similarDocuments.map(doc => {
         try {
           return JSON.parse(doc.document.answer);
-        } catch {
+        } catch (e) {
           return null;
         }
-      }).filter(Boolean);
+      }).filter(q => q !== null);
       
-      if (similarQueries.length === 0) {
-        // Si aucune requête similaire n'est trouvée, utiliser la construction standard
-        return this.buildQuery(analyseResponse, options);
-      }
+      // Extraire les tables suggérées des requêtes similaires
+      const suggestedTables = this.extractTablesFromSimilarQueries(similarQueries);
       
-      // Trouver la requête la plus similaire (celle avec le meilleur score)
-      const bestMatch = similarQueries[0];
+      // Identifier les tables à partir des entités
+      const entitiesTables = this.identifierTables(analyseResponse.entites);
       
-      // Identifier les tables et colonnes de la requête la plus similaire
-      const suggestedTables = bestMatch.tables || [];
+      // Combiner les tables des entités avec celles suggérées par RAG
+      const combinedTables = this.combineTablesFromRag(entitiesTables, suggestedTables);
       
-      // Construire une base de requête en utilisant les informations du RAG
-      const tables = this.combineTablesFromRag(analyseResponse.entites, suggestedTables);
-      const columns = this.identifierColonnes(analyseResponse.entites, tables);
-      const conditions = this.identifierConditions(analyseResponse.contraintes, analyseResponse.entites);
-      
-      // Construire la requête SQL
-      let sql = '';
-      if (this.isAggregationQuery(analyseResponse)) {
-        sql = this.construireRequeteAgregation(tables, columns, conditions, 
-                                              analyseResponse.intentionPrincipale.nom);
-      } else {
-        sql = this.construireRequeteSelect(tables, columns, conditions);
-      }
-      
-      // Appliquer une limite si nécessaire
-      if (options?.maxResults) {
-        sql += ` LIMIT ${options.maxResults}`;
-      }
-      
-      return {
-        sql,
-        params: this.extraireParametres(conditions),
-        tables,
-        columns,
-        conditions,
-        success: true,
-        explanation: `Requête générée avec l'aide des connaissances RAG à partir de requêtes similaires.`,
-        metadata: {
-          ragEnhanced: true,
-          similarityScore: similarDocuments[0].score,
-          baseQueryQuestion: similarDocuments[0].document.question,
-          suggestedTables
-        }
+      // Remplacer les tables dans l'analyse
+      const enhancedAnalyse = {
+        ...analyseResponse,
+        entites: [...analyseResponse.entites, ...suggestedTables.filter(t => !analyseResponse.entites.includes(t))]
       };
+      
+      // Construire la requête avec les tables combinées
+      const result = this.buildQuery(enhancedAnalyse, options);
+      
+      // Ajouter des métadonnées sur l'enrichissement RAG
+      if (result.metadata) {
+        result.metadata = {
+          ...result.metadata,
+          ragEnhanced: true,
+          similarityScore: similarDocuments.length > 0 ? similarDocuments[0].score : 0,
+          baseQueryQuestion: similarDocuments.length > 0 ? similarDocuments[0].document.question : '',
+          suggestedTables: suggestedTables
+        };
+      }
+      
+      return result;
     } catch (error) {
-      this.logger.error(`Erreur lors de la construction avec RAG: ${error.message}`);
-      // En cas d'erreur, retomber sur la construction standard
+      this.logger.error(`Erreur lors de l'enrichissement RAG: ${error.message}`);
+      // En cas d'erreur, revenir à la construction standard
       return this.buildQuery(analyseResponse, options);
     }
   }
@@ -991,5 +981,20 @@ export class QueryBuilderService {
     return aggregationKeywords.some(keyword => 
       questionText.toLowerCase().includes(keyword.toLowerCase())
     );
+  }
+
+  /**
+   * Extrait les tables des requêtes similaires
+   */
+  private extractTablesFromSimilarQueries(similarQueries: any[]): string[] {
+    const tables = new Set<string>();
+    
+    similarQueries.forEach(query => {
+      if (query && Array.isArray(query.tables)) {
+        query.tables.forEach((table: string) => tables.add(table));
+      }
+    });
+    
+    return Array.from(tables);
   }
 } 

@@ -5,6 +5,7 @@ import { QueryBuilderOptions } from '../interfaces/query-builder.interface';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
 import { RagService } from '../services/rag.service';
 import { AgentType } from '../services/analyse.service';
+import { AggregationConfig } from '../interfaces/query-builder.interface';
 
 @Controller('query-builder')
 export class QueryBuilderController {
@@ -113,10 +114,11 @@ export class QueryBuilderController {
     const searchQuery = this.queryBuilderService.buildElasticsearchQuery(analyseResponse);
     
     try {
+      // Utiliser any pour contourner les problèmes de typage avec l'API Elasticsearch
       const result = await this.elasticsearchService.search({
         index: this.getElasticsearchIndex(analyseResponse.entites),
         body: {
-          query: searchQuery,
+          query: searchQuery.query as any,
           size: options.maxResults || 10,
           sort: this.getDefaultSort(analyseResponse)
         }
@@ -198,7 +200,7 @@ export class QueryBuilderController {
       query: string;
       filters?: Record<string, any>;
       sort?: Record<string, 'asc' | 'desc'>;
-      aggregations?: string[];
+      aggregations?: AggregationConfig[];
     },
     @Query('useElasticsearch') useElasticsearch?: boolean,
   ) {
@@ -257,13 +259,13 @@ export class QueryBuilderController {
     }));
   }
 
-  private transformAggregations(aggregations?: string[]) {
+  private transformAggregations(aggregations?: AggregationConfig[]) {
     if (!aggregations) return {};
     
     return aggregations.reduce((acc, field) => ({
       ...acc,
-      [field]: {
-        terms: { field }
+      [field.field]: {
+        terms: { field: field.field }
       }
     }), {});
   }

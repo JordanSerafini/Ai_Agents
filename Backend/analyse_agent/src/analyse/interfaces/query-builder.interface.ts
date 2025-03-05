@@ -17,6 +17,10 @@ export interface QueryMetadata {
   cacheUsed?: boolean;
   indexesUsed?: string[];
   optimizationHints?: string[];
+  ragEnhanced?: boolean;
+  similarityScore?: number;
+  baseQueryQuestion?: string;
+  suggestedTables?: string[];
 }
 
 export interface QueryBuilderOptions {
@@ -125,7 +129,7 @@ export interface ElasticsearchQueryBody {
     must?: ElasticsearchQueryClause[];
     must_not?: ElasticsearchQueryClause[];
     should?: ElasticsearchQueryClause[];
-    filter?: ElasticsearchFilterClause[];
+    filter?: ElasticsearchFilterClause[] | any[];
     minimum_should_match?: number;
   };
   match?: Record<string, any>;
@@ -146,6 +150,8 @@ export interface ElasticsearchQueryClause {
     query: string;
     fields: string[];
     type?: string;
+    operator?: 'and' | 'or';
+    fuzziness?: string | number;
   };
   term?: Record<string, any>;
   range?: Record<string, any>;
@@ -154,6 +160,7 @@ export interface ElasticsearchQueryClause {
 export interface ElasticsearchFilterClause {
   term?: Record<string, any>;
   terms?: Record<string, any[]>;
+  match_phrase_prefix?: Record<string, any>;
   range?: Record<string, {
     gt?: number | string;
     gte?: number | string;
