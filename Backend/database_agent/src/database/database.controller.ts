@@ -1136,6 +1136,11 @@ export class DatabaseController {
       `Requête devis identifiée - Status: ${status}, Période: ${timeframe}`,
     );
 
+    // Ajouter un log pour déboguer le type et la valeur exacte du statut
+    this.logger.debug(
+      `Type du statut: ${typeof status}, Valeur exacte: "${status}"`,
+    );
+
     // Définir les dates de début et de fin en fonction de la période
     let startDate = new Date();
     let endDate = new Date();
@@ -1175,6 +1180,12 @@ export class DatabaseController {
       // Année prochaine
       startDate = new Date(startDate.getFullYear() + 1, 0, 1);
       endDate = new Date(startDate.getFullYear(), 11, 31);
+    } else if (timeframe === 'tomorrow') {
+      startDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      endDate = new Date(startDate);
+    } else if (timeframe === 'today') {
+      startDate = new Date();
+      endDate = new Date(startDate);
     } else {
       // Par défaut, utiliser le mois actuel
       startDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
@@ -1220,7 +1231,7 @@ export class DatabaseController {
         SELECT COUNT(*) as count
         FROM quotations q
         WHERE 
-          ($1::text IS NULL OR q.status = $1)
+          ($1::text IS NULL OR q.status::text = $1::text)
           AND q.created_date BETWEEN $2::date AND $3::date
       `;
 
@@ -1240,7 +1251,7 @@ export class DatabaseController {
           JOIN projects p ON q.project_id = p.id
           JOIN clients c ON p.client_id = c.id
           WHERE 
-            ($1::text IS NULL OR q.status = $1)
+            ($1::text IS NULL OR q.status::text = $1::text)
             AND q.created_date BETWEEN $2::date AND $3::date
           ORDER BY q.created_date DESC
           LIMIT 5
@@ -1268,6 +1279,8 @@ export class DatabaseController {
         periodDesc = 'de la semaine prochaine';
       else if (timeframe === 'current_year') periodDesc = "de l'année en cours";
       else if (timeframe === 'next_year') periodDesc = "de l'année prochaine";
+      else if (timeframe === 'tomorrow') periodDesc = 'de demain';
+      else if (timeframe === 'today') periodDesc = "d'aujourd'hui";
       else periodDesc = 'de la période spécifiée';
 
       let statusDesc = '';
@@ -1350,6 +1363,11 @@ export class DatabaseController {
           periodEnd =
             "DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '1 year' - INTERVAL '1 day'";
           periodDescription = "de l'année courante";
+          break;
+        case 'last_month':
+          periodStart = "CURRENT_DATE - INTERVAL '1 month'";
+          periodEnd = 'CURRENT_DATE';
+          periodDescription = 'des 3 derniers mois';
           break;
         default:
           // Par défaut, on prend les 3 derniers mois
@@ -1766,6 +1784,12 @@ export class DatabaseController {
           case 'last_month':
             dateCondition = `DATE_TRUNC('month', p.start_date) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')`;
             break;
+          case 'tomorrow':
+            dateCondition = `DATE(p.start_date) = CURRENT_DATE + INTERVAL '1 day'`;
+            break;
+          case 'today':
+            dateCondition = `DATE(p.start_date) = CURRENT_DATE`;
+            break;
         }
 
         if (dateCondition) {
@@ -1937,6 +1961,10 @@ export class DatabaseController {
         return "de l'année en cours";
       case 'last_month':
         return 'du mois dernier';
+      case 'tomorrow':
+        return 'de demain';
+      case 'today':
+        return "d'aujourd'hui";
       default:
         return '';
     }

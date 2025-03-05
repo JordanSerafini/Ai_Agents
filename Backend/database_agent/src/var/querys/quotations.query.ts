@@ -180,7 +180,7 @@ export const QUOTATIONS_QUERIES = {
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
     WHERE 
-      ($1::text IS NULL OR q.status = $1)
+      ($1::text IS NULL OR q.status::text = $1::text)
       AND q.created_date BETWEEN $2::date AND $3::date
     ORDER BY q.created_date DESC
   `,
@@ -190,7 +190,7 @@ export const QUOTATIONS_QUERIES = {
     SELECT SUM(q.total) as total_amount
     FROM quotations q
     WHERE 
-      ($1::text IS NULL OR q.status = $1)
+      ($1::text IS NULL OR q.status::text = $1::text)
       AND q.created_date BETWEEN $2::date AND $3::date
   `,
 };

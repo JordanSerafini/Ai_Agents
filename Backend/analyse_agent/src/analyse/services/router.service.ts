@@ -315,6 +315,15 @@ export class RouterService {
         questionLower.includes('semaine actuelle')
       ) {
         timeframe = 'current_week';
+      } else if (questionLower.includes('demain')) {
+        timeframe = 'tomorrow';
+      } else if (
+        questionLower.includes("aujourd'hui") ||
+        questionLower.includes('ce jour') ||
+        questionLower.includes('aujourd') ||
+        questionLower.includes('ojd')
+      ) {
+        timeframe = 'today';
       } else if (
         questionLower.includes('année') ||
         questionLower.includes('an')
@@ -331,7 +340,10 @@ export class RouterService {
 
       // Déterminer le statut concerné
       let status: string | null = null;
-      if (questionLower.includes('accepté')) {
+      if (
+        questionLower.includes('accepté') ||
+        questionLower.includes('accepte')
+      ) {
         status = 'accepté';
       } else if (questionLower.includes('validé')) {
         status = 'validé';
