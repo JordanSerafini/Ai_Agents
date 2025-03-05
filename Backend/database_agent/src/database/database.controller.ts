@@ -1803,6 +1803,49 @@ export class DatabaseController {
         sqlQuery = this.QUERIES.quotations.CONVERSION_STATS;
         break;
 
+      case 'SEARCH_QUOTATIONS':
+        const keywordRegex = /(?:cherche|recherche|trouve)\s+["']?([^"']+)["']?/i;
+        const keywordMatch = userQuery.match(keywordRegex);
+
+        if (keywordMatch && keywordMatch[1]) {
+          params.keyword = keywordMatch[1];
+        }
+        break;
+
+      case 'QUOTATIONS_BY_PROJECT':
+        const idRegex = /(?:projet|project|chantier)\s+(\d+)/i;
+        const idMatch =
+          userQuery.match(idRegex) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+
+        if (idMatch && idMatch[1]) {
+          params.projectId = parseInt(idMatch[1], 10);
+        } else {
+          const nameRegex = /(?:projet|project|chantier)\s+["']?([^"']+)["']?/i;
+          const nameMatch = userQuery.match(nameRegex);
+
+          if (nameMatch && nameMatch[1]) {
+            params.projectName = nameMatch[1];
+          }
+        }
+        break;
+
+      case 'QUOTATIONS_BY_CLIENT':
+        const idRegexClient = /(?:client)\s+(\d+)/i;
+        const idMatchClient =
+          userQuery.match(idRegexClient) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+
+        if (idMatchClient && idMatchClient[1]) {
+          params.clientId = parseInt(idMatchClient[1], 10);
+        } else {
+          const nameRegexClient = /(?:client)\s+["']?([^"']+)["']?/i;
+          const nameMatchClient = userQuery.match(nameRegexClient);
+
+          if (nameMatchClient && nameMatchClient[1]) {
+            params.clientName = nameMatchClient[1];
+          }
+        }
+        break;
+
       default:
         throw new Error(`Intention inconnue: ${intent}`);
     }
