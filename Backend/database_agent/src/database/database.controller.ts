@@ -50,7 +50,23 @@ export class DatabaseController {
   }
 
   private async initializeQueries() {
-    this.QUERIES = await import('../var/index.query');
+    try {
+      const queries = await import('../var/index.query');
+      this.QUERIES = queries.QUERIES;
+      this.logger.log('Requêtes SQL initialisées avec succès');
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'initialisation des requêtes SQL: ${error.message}`,
+      );
+      // Initialiser avec un objet vide pour éviter les erreurs null/undefined
+      this.QUERIES = {
+        projects: {},
+        tasks: {},
+        clients: {},
+        users: {},
+        // Autres modules de requêtes
+      };
+    }
   }
 
   @Get('health')
@@ -989,6 +1005,16 @@ export class DatabaseController {
     intent: string,
     userQuery: string,
   ): Promise<any> {
+    // Vérifier si les requêtes sont initialisées
+    if (!this.QUERIES || !this.QUERIES.projects || !this.QUERIES.tasks) {
+      await this.initializeQueries();
+
+      // Vérifier à nouveau après l'initialisation
+      if (!this.QUERIES || !this.QUERIES.projects || !this.QUERIES.tasks) {
+        throw new Error("Impossible d'initialiser les requêtes SQL");
+      }
+    }
+
     // Extraction des paramètres de la requête utilisateur
     const params = this.extractQueryParams(intent, userQuery);
 

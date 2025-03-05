@@ -438,6 +438,47 @@ La question concerne un processus ou une étape de projet. Réponds en français
         contexte: string;
       };
 
+      // Vérification supplémentaire pour les questions liées aux plannings et chantiers
+      const questionLower = question.toLowerCase();
+      const planningKeywords = [
+        'chantier',
+        'chantiers',
+        'projet',
+        'projets',
+        'travaux',
+        'demain',
+        "aujourd'hui",
+        'cette semaine',
+        'ce mois',
+        'planning',
+        'calendrier',
+        'programmé',
+        'prévu',
+        'à venir',
+        'en cours',
+        'commencent',
+        'débutent',
+        'planifié',
+      ];
+
+      // Vérifier si la question contient des mots-clés liés aux plannings
+      const containsPlanningKeywords = planningKeywords.some((keyword) =>
+        questionLower.includes(keyword),
+      );
+
+      // Si la question contient des mots-clés de planning mais n'a pas été classifiée comme API,
+      // forcer la classification vers l'agent API
+      if (
+        containsPlanningKeywords &&
+        parsedResponse.agentCible !== 'agent_api'
+      ) {
+        this.logger.log(
+          `Reclassification: Question contenant des mots-clés de planning "${question}" redirigée vers agent_api`,
+        );
+        parsedResponse.agentCible = 'agent_api';
+        parsedResponse.categorie = 'API';
+      }
+
       // Convertir la chaîne agentCible en enum AgentType
       let agentCible: AgentType;
       switch (parsedResponse.agentCible) {
