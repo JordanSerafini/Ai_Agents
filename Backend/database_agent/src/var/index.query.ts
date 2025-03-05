@@ -17,6 +17,7 @@ import { TASKS_QUERIES } from './querys/tasks.query';
 import { ACTIVITY_QUERIES } from './querys/activity.query';
 import { NOTES_QUERIES, TAGS_QUERIES } from './querys/notes.query';
 import { DOCUMENTS_QUERIES } from './querys/documents.query';
+import { QUOTATIONS_QUERIES } from './querys/quotations.query';
 
 // Export de toutes les requêtes
 export {
@@ -35,6 +36,7 @@ export {
   NOTES_QUERIES,
   TAGS_QUERIES,
   DOCUMENTS_QUERIES,
+  QUOTATIONS_QUERIES,
 };
 
 // Export d'un objet contenant toutes les requêtes pour un accès plus facile
@@ -54,4 +56,5 @@ export const QUERIES = {
   notes: NOTES_QUERIES,
   tags: TAGS_QUERIES,
   documents: DOCUMENTS_QUERIES,
+  quotations: QUOTATIONS_QUERIES,
 };

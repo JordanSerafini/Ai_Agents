@@ -857,6 +857,68 @@ export class DatabaseController {
       }
     }
 
+    // Recherche de devis
+    if (
+      lowerQuery.includes('devis') ||
+      lowerQuery.includes('quotation') ||
+      lowerQuery.includes('proposition commerciale')
+    ) {
+      if (lowerQuery.includes('projet') || lowerQuery.includes('chantier')) {
+        return 'QUOTATIONS_BY_PROJECT';
+      } else if (lowerQuery.includes('client')) {
+        return 'QUOTATIONS_BY_CLIENT';
+      } else if (
+        lowerQuery.includes('accepté') ||
+        lowerQuery.includes('accepte') ||
+        lowerQuery.includes('accepted')
+      ) {
+        return 'ACCEPTED_QUOTATIONS';
+      } else if (
+        lowerQuery.includes('refusé') ||
+        lowerQuery.includes('refuse') ||
+        lowerQuery.includes('rejected')
+      ) {
+        return 'REJECTED_QUOTATIONS';
+      } else if (
+        lowerQuery.includes('en attente') ||
+        lowerQuery.includes('pending')
+      ) {
+        return 'PENDING_QUOTATIONS';
+      } else if (
+        lowerQuery.includes('expiré') ||
+        lowerQuery.includes('expire') ||
+        lowerQuery.includes('expired')
+      ) {
+        return 'EXPIRED_QUOTATIONS';
+      } else if (
+        lowerQuery.includes('conversion') ||
+        lowerQuery.includes('taux') ||
+        lowerQuery.includes('statistique')
+      ) {
+        return 'QUOTATION_CONVERSION_STATS';
+      } else if (
+        lowerQuery.includes('produit') ||
+        lowerQuery.includes('product') ||
+        lowerQuery.includes('article')
+      ) {
+        return 'QUOTATION_PRODUCTS';
+      } else if (
+        lowerQuery.includes('cherche') ||
+        lowerQuery.includes('recherche') ||
+        lowerQuery.includes('trouve')
+      ) {
+        return 'SEARCH_QUOTATIONS';
+      } else if (
+        lowerQuery.match(/devis\s+(\d+)/) ||
+        lowerQuery.match(/quotation\s+(\d+)/) ||
+        lowerQuery.includes('id')
+      ) {
+        return 'QUOTATION_BY_ID';
+      } else {
+        return 'LIST_QUOTATIONS';
+      }
+    }
+
     // Paramètres système
     if (
       lowerQuery.includes('paramètre') ||
@@ -865,19 +927,45 @@ export class DatabaseController {
       lowerQuery.includes('configuration') ||
       lowerQuery.includes('setting')
     ) {
-      if (lowerQuery.includes('entreprise') || lowerQuery.includes('société') || lowerQuery.includes('company')) {
+      if (
+        lowerQuery.includes('entreprise') ||
+        lowerQuery.includes('société') ||
+        lowerQuery.includes('company')
+      ) {
         return 'COMPANY_SETTINGS';
-      } else if (lowerQuery.includes('ia') || lowerQuery.includes('intelligence artificielle') || lowerQuery.includes('ai')) {
+      } else if (
+        lowerQuery.includes('ia') ||
+        lowerQuery.includes('intelligence artificielle') ||
+        lowerQuery.includes('ai')
+      ) {
         return 'AI_SETTINGS';
-      } else if (lowerQuery.includes('facture') || lowerQuery.includes('facturation') || lowerQuery.includes('invoice')) {
+      } else if (
+        lowerQuery.includes('facture') ||
+        lowerQuery.includes('facturation') ||
+        lowerQuery.includes('invoice')
+      ) {
         return 'INVOICE_SETTINGS';
-      } else if (lowerQuery.includes('devis') || lowerQuery.includes('quotation')) {
+      } else if (
+        lowerQuery.includes('devis') ||
+        lowerQuery.includes('quotation')
+      ) {
         return 'QUOTATION_SETTINGS';
-      } else if (lowerQuery.includes('notification') || lowerQuery.includes('alerte')) {
+      } else if (
+        lowerQuery.includes('notification') ||
+        lowerQuery.includes('alerte')
+      ) {
         return 'NOTIFICATION_SETTINGS';
-      } else if (lowerQuery.includes('sécurité') || lowerQuery.includes('securite') || lowerQuery.includes('security')) {
+      } else if (
+        lowerQuery.includes('sécurité') ||
+        lowerQuery.includes('securite') ||
+        lowerQuery.includes('security')
+      ) {
         return 'SECURITY_SETTINGS';
-      } else if (lowerQuery.includes('version') || lowerQuery.includes('système') || lowerQuery.includes('system')) {
+      } else if (
+        lowerQuery.includes('version') ||
+        lowerQuery.includes('système') ||
+        lowerQuery.includes('system')
+      ) {
         return 'SYSTEM_VERSION';
       } else {
         return 'SETTINGS_LIST';
@@ -1255,6 +1343,115 @@ export class DatabaseController {
         }
         break;
 
+      case 'QUOTATIONS_BY_PROJECT':
+        if (params.projectId) {
+          sqlQuery = QUERIES.quotations.GET_BY_PROJECT;
+          sqlParams = [params.projectId];
+        } else if (params.projectName) {
+          // Recherche d'abord le projet par son nom
+          const projectSearchQuery = QUERIES.projects.SEARCH_BY_NAME;
+          const projects = await this.databaseService.executeQuery(
+            projectSearchQuery,
+            [`%${params.projectName}%`],
+          );
+
+          if (projects && projects.length > 0) {
+            sqlQuery = QUERIES.quotations.GET_BY_PROJECT;
+            sqlParams = [projects[0].id];
+          } else {
+            throw new Error(`Projet "${params.projectName}" non trouvé`);
+          }
+        } else {
+          throw new Error('Nom ou ID du projet non spécifié');
+        }
+        break;
+
+      case 'QUOTATIONS_BY_CLIENT':
+        if (params.clientId) {
+          sqlQuery = QUERIES.quotations.GET_BY_CLIENT;
+          sqlParams = [params.clientId];
+        } else if (params.clientName) {
+          // Recherche d'abord le client par son nom
+          const clientSearchQuery = QUERIES.clients.SEARCH_BY_NAME;
+          const clients = await this.databaseService.executeQuery(
+            clientSearchQuery,
+            [`%${params.clientName}%`],
+          );
+
+          if (clients && clients.length > 0) {
+            sqlQuery = QUERIES.quotations.GET_BY_CLIENT;
+            sqlParams = [clients[0].id];
+          } else {
+            throw new Error(`Client "${params.clientName}" non trouvé`);
+          }
+        } else {
+          throw new Error('Nom ou ID du client non spécifié');
+        }
+        break;
+
+      case 'ACCEPTED_QUOTATIONS':
+        sqlQuery = QUERIES.quotations.GET_ACCEPTED;
+        break;
+
+      case 'REJECTED_QUOTATIONS':
+        sqlQuery = QUERIES.quotations.GET_REJECTED;
+        break;
+
+      case 'PENDING_QUOTATIONS':
+        sqlQuery = QUERIES.quotations.GET_PENDING;
+        break;
+
+      case 'EXPIRED_QUOTATIONS':
+        sqlQuery = QUERIES.quotations.GET_EXPIRED;
+        break;
+
+      case 'QUOTATION_CONVERSION_STATS':
+        sqlQuery = QUERIES.quotations.CONVERSION_STATS;
+        break;
+
+      case 'QUOTATION_PRODUCTS':
+        if (params.quotationId) {
+          // Si une catégorie est spécifiée, on filtre les produits par catégorie
+          if (params.category) {
+            sqlQuery = `
+              SELECT qp.*, q.reference as quotation_reference
+              FROM quotation_products qp
+              JOIN quotations q ON qp.quotation_id = q.id
+              WHERE qp.quotation_id = $1 AND qp.category ILIKE $2
+              ORDER BY qp.id;
+            `;
+            sqlParams = [params.quotationId, `%${params.category}%`];
+          } else {
+            sqlQuery = QUERIES.quotations.GET_PRODUCTS;
+            sqlParams = [params.quotationId];
+          }
+        } else {
+          throw new Error('ID du devis non spécifié');
+        }
+        break;
+
+      case 'SEARCH_QUOTATIONS':
+        if (params.keyword) {
+          sqlQuery = QUERIES.quotations.SEARCH;
+          sqlParams = [`%${params.keyword}%`];
+        } else {
+          throw new Error('Mot-clé de recherche non spécifié');
+        }
+        break;
+
+      case 'QUOTATION_BY_ID':
+        if (params.quotationId) {
+          sqlQuery = QUERIES.quotations.GET_BY_ID;
+          sqlParams = [params.quotationId];
+        } else {
+          throw new Error('ID de la citation non spécifié');
+        }
+        break;
+
+      case 'LIST_QUOTATIONS':
+        sqlQuery = QUERIES.quotations.GET_ALL;
+        break;
+
       default:
         throw new Error(`Intention inconnue: ${intent}`);
     }
@@ -1399,6 +1596,75 @@ export class DatabaseController {
 
         if (searchMatch && searchMatch[1]) {
           params.supplierName = searchMatch[1];
+        }
+      }
+    }
+
+    // Extraction de l'ID du devis et des informations sur les produits
+    if (intent === 'QUOTATION_BY_ID' || intent === 'QUOTATION_PRODUCTS') {
+      const idRegex = /(?:devis|quotation)\s+(\d+)/i;
+      const idMatch =
+        userQuery.match(idRegex) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+
+      if (idMatch && idMatch[1]) {
+        params.quotationId = parseInt(idMatch[1], 10);
+      }
+
+      // Pour QUOTATION_PRODUCTS, on peut extraire des informations supplémentaires
+      if (intent === 'QUOTATION_PRODUCTS') {
+        // Extraction d'une catégorie de produit spécifique si mentionnée
+        const categoryRegex =
+          /(?:catégorie|categorie|category)\s+["']?([^"']+)["']?/i;
+        const categoryMatch = userQuery.match(categoryRegex);
+
+        if (categoryMatch && categoryMatch[1]) {
+          params.category = categoryMatch[1];
+        }
+      }
+    }
+
+    // Extraction du mot-clé pour la recherche de devis
+    if (intent === 'SEARCH_QUOTATIONS') {
+      const keywordRegex = /(?:cherche|recherche|trouve)\s+["']?([^"']+)["']?/i;
+      const keywordMatch = userQuery.match(keywordRegex);
+
+      if (keywordMatch && keywordMatch[1]) {
+        params.keyword = keywordMatch[1];
+      }
+    }
+
+    // Extraction de l'ID du projet pour les devis
+    if (intent === 'QUOTATIONS_BY_PROJECT') {
+      const idRegex = /(?:projet|project|chantier)\s+(\d+)/i;
+      const idMatch =
+        userQuery.match(idRegex) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+
+      if (idMatch && idMatch[1]) {
+        params.projectId = parseInt(idMatch[1], 10);
+      } else {
+        const nameRegex = /(?:projet|project|chantier)\s+["']?([^"']+)["']?/i;
+        const nameMatch = userQuery.match(nameRegex);
+
+        if (nameMatch && nameMatch[1]) {
+          params.projectName = nameMatch[1];
+        }
+      }
+    }
+
+    // Extraction de l'ID du client pour les devis
+    if (intent === 'QUOTATIONS_BY_CLIENT') {
+      const idRegex = /(?:client)\s+(\d+)/i;
+      const idMatch =
+        userQuery.match(idRegex) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+
+      if (idMatch && idMatch[1]) {
+        params.clientId = parseInt(idMatch[1], 10);
+      } else {
+        const nameRegex = /(?:client)\s+["']?([^"']+)["']?/i;
+        const nameMatch = userQuery.match(nameRegex);
+
+        if (nameMatch && nameMatch[1]) {
+          params.clientName = nameMatch[1];
         }
       }
     }
