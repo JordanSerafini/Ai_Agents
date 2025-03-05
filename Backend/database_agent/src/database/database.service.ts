@@ -2,15 +2,6 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Pool } from 'pg';
 import { DatabaseMetadataService } from './services/database-metadata.service';
 
-// Interface pour les relations entre tables
-interface TableRelationship {
-  sourceTable: string;
-  targetTable: string;
-  sourceColumn: string;
-  targetColumn: string;
-  relationType: string;
-}
-
 @Injectable()
 export class DatabaseService {
   private readonly logger = new Logger(DatabaseService.name);
@@ -23,12 +14,17 @@ export class DatabaseService {
   async executeQuery<T = any[]>(query: string, params: any[] = []): Promise<T> {
     try {
       this.logger.log(`Exécution de la requête: ${query}`);
-      const result = await this.dbPool.query(query, params);
-      return result.rows as T;
+      this.logger.debug(`Paramètres: ${JSON.stringify(params)}`);
+
+      const client = await this.dbPool.connect();
+      try {
+        const result = await client.query(query, params);
+        return result.rows as unknown as T;
+      } finally {
+        client.release();
+      }
     } catch (error) {
-      this.logger.error(
-        `Erreur lors de l'exécution de la requête: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      this.logger.error(`Erreur d'exécution de requête SQL: ${error}`);
       throw error;
     }
   }
@@ -38,19 +34,14 @@ export class DatabaseService {
     limit: number = 10,
   ): Promise<T[]> {
     try {
-      // Vérifier si la table existe dans les métadonnées
-      const tableMetadata = this.dbMetadataService.getTable(tableName);
-      if (!tableMetadata) {
-        throw new Error(
-          `Table '${tableName}' non trouvée dans les métadonnées`,
-        );
-      }
-
-      const query = `SELECT * FROM ${tableName} LIMIT $1`;
+      const query = `
+        SELECT * FROM ${tableName}
+        LIMIT $1
+      `;
       return await this.executeQuery<T[]>(query, [limit]);
     } catch (error) {
       this.logger.error(
-        `Erreur lors de la récupération des données de la table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+        `Erreur lors de la récupération des données de la table ${tableName}: ${error}`,
       );
       throw error;
     }
@@ -63,30 +54,32 @@ export class DatabaseService {
     limit: number = 10,
   ): Promise<T[]> {
     try {
-      // Vérifier si la table existe dans les métadonnées
-      const tableMetadata = this.dbMetadataService.getTable(tableName);
-      if (!tableMetadata) {
-        throw new Error(
-          `Table '${tableName}' non trouvée dans les métadonnées`,
-        );
-      }
-
-      // Vérifier si la colonne existe
-      const columnExists = tableMetadata.columns.some(
-        (col) => col.name === column,
+      this.logger.log(
+        `Recherche dans ${tableName}.${column} pour le terme "${searchTerm}"`,
       );
-      if (!columnExists) {
-        throw new Error(
-          `Colonne '${column}' non trouvée dans la table '${tableName}'`,
-        );
-      }
 
-      const query = `SELECT * FROM ${tableName} WHERE ${column} ILIKE $1 LIMIT $2`;
-      return await this.executeQuery<T[]>(query, [`%${searchTerm}%`, limit]);
+      const columnType = await this.getColumnType(tableName, column);
+      let query: string;
+
+      // Ajuster la recherche en fonction du type de colonne
+      if (columnType && columnType.toLowerCase().includes('text')) {
+        query = `
+          SELECT * FROM ${tableName}
+          WHERE ${column} ILIKE $1
+          LIMIT $2
+        `;
+        return await this.executeQuery<T[]>(query, [`%${searchTerm}%`, limit]);
+      } else {
+        // Pour les types non-texte, essayer une correspondance exacte convertie en texte
+        query = `
+          SELECT * FROM ${tableName}
+          WHERE ${column}::text = $1
+          LIMIT $2
+        `;
+        return await this.executeQuery<T[]>(query, [searchTerm, limit]);
+      }
     } catch (error) {
-      this.logger.error(
-        `Erreur lors de la recherche dans la table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      this.logger.error(`Erreur lors de la recherche: ${error}`);
       throw error;
     }
   }
@@ -97,32 +90,23 @@ export class DatabaseService {
     relatedTable: string,
   ): Promise<T[]> {
     try {
-      // Vérifier si les tables existent dans les métadonnées
-      const tableMetadata = this.dbMetadataService.getTable(tableName);
-      const relatedTableMetadata =
-        this.dbMetadataService.getTable(relatedTable);
+      this.logger.log(
+        `Récupération des données de ${relatedTable} liées à ${tableName} (id: ${id})`,
+      );
 
-      if (!tableMetadata) {
-        throw new Error(
-          `Table principale '${tableName}' non trouvée dans les métadonnées`,
-        );
-      }
+      // Trouver les relations entre les tables
+      const relationships =
+        this.dbMetadataService.getTableRelationships(tableName);
 
-      if (!relatedTableMetadata) {
-        throw new Error(
-          `Table liée '${relatedTable}' non trouvée dans les métadonnées`,
-        );
-      }
-
-      // Trouver la relation entre les tables
-      const relationship = this.dbMetadataService.getRelationship(
-        tableName,
-        relatedTable,
+      // Filtrer pour trouver la relation spécifique avec la table cible
+      const relationship = relationships.find(
+        (rel) =>
+          rel.targetTable === relatedTable || rel.sourceTable === relatedTable,
       );
 
       if (!relationship) {
         throw new Error(
-          `Pas de relation trouvée entre '${tableName}' et '${relatedTable}'`,
+          `Aucune relation trouvée entre ${tableName} et ${relatedTable}`,
         );
       }
 
@@ -134,38 +118,40 @@ export class DatabaseService {
         interface MainRecord {
           [key: string]: any;
         }
-        const mainRecord = await this.executeQuery<MainRecord[]>(
-          `SELECT * FROM ${tableName} WHERE id = $1`,
+
+        const mainRecordQuery = `SELECT * FROM ${tableName} WHERE id = $1`;
+        const mainRecordResult = await this.executeQuery<MainRecord[]>(
+          mainRecordQuery,
           [id],
         );
 
-        if (!mainRecord || mainRecord.length === 0) {
-          this.logger.error(
-            `Enregistrement avec id=${id} non trouvé dans la table ${tableName}`,
-          );
+        if (!mainRecordResult || mainRecordResult.length === 0) {
           throw new Error(
-            `Enregistrement avec id=${id} non trouvé dans la table ${tableName}`,
+            `Aucun enregistrement trouvé dans ${tableName} avec id = ${id}`,
           );
         }
+
+        const mainRecord = mainRecordResult;
 
         // Récupérer les enregistrements liés
         query = `SELECT * FROM ${relatedTable} WHERE ${relationship.targetColumn} = $1`;
         params = [mainRecord[0][relationship.sourceColumn]];
       } else {
         // Si la relation est de type "la table liée a une clé étrangère vers cette table"
-        query = `SELECT * FROM ${relatedTable} WHERE ${relationship.sourceColumn} = $1`;
+        query = `SELECT * FROM ${relatedTable} WHERE ${
+          relationship.sourceTable === tableName
+            ? relationship.sourceColumn
+            : relationship.targetColumn
+        } = $1`;
         params = [id];
       }
 
-      // Exécuter la requête
-      return await this.executeQuery<T[]>(query, params);
+      return this.executeQuery<T[]>(query, params);
     } catch (error) {
       this.logger.error(
-        `Erreur lors de la récupération des données liées: ${error instanceof Error ? error.message : String(error)}`,
+        `Erreur lors de la récupération des données liées: ${error}`,
       );
-      throw new Error(
-        `Erreur lors de la récupération des données liées: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      throw error;
     }
   }
 
@@ -175,15 +161,44 @@ export class DatabaseService {
         count: string;
       }
 
-      const result = await this.executeQuery<CountResult[]>(
-        `SELECT COUNT(*) FROM ${tableName}`,
-      );
+      const query = `SELECT COUNT(*) as count FROM ${tableName}`;
+      const result = await this.executeQuery<CountResult[]>(query);
       return parseInt(result[0].count, 10);
     } catch (error) {
       this.logger.error(
-        `Erreur lors du comptage des enregistrements dans ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+        `Erreur lors du comptage des lignes dans ${tableName}: ${error}`,
       );
       throw error;
+    }
+  }
+
+  private async getColumnType(
+    tableName: string,
+    columnName: string,
+  ): Promise<string | null> {
+    try {
+      const query = `
+        SELECT data_type
+        FROM information_schema.columns
+        WHERE table_name = $1
+        AND column_name = $2
+      `;
+
+      interface ColumnTypeResult {
+        data_type: string;
+      }
+
+      const result = await this.executeQuery<ColumnTypeResult[]>(query, [
+        tableName,
+        columnName,
+      ]);
+
+      return result.length > 0 ? result[0].data_type : null;
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la récupération du type de colonne: ${error}`,
+      );
+      return null;
     }
   }
 }

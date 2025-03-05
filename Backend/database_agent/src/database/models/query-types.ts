@@ -183,3 +183,10 @@ export interface ErrorResponse {
   message?: string;
   statusCode?: number;
 }
+
+export interface ErrorData {
+  message: string;
+  stack?: string;
+  code?: string | number;
+  [key: string]: any;
+}
