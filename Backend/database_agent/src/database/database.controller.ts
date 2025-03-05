@@ -2347,21 +2347,25 @@ export class DatabaseController {
       // Définition d'une interface pour les résultats
       interface StaffResult {
         id: number;
-        name: string;
-        email?: string;
+        firstname: string;
+        lastname: string;
+        email: string;
+        role: string;
         phone?: string;
-        category?: string;
-        created_at?: string;
+        is_available: boolean;
+        created_at: string;
       }
 
       // Construction de la requête de base
       let query = `
         SELECT 
           s.id,
-          s.name,
+          s.firstname,
+          s.lastname,
           s.email,
+          s.role,
           s.phone,
-          s.category,
+          s.is_available,
           s.created_at
         FROM staff s
       `;
@@ -2370,71 +2374,24 @@ export class DatabaseController {
       const params: any[] = [];
 
       // Ajout des conditions de filtrage basées sur la période
-      if (timeframe) {
-        switch (timeframe) {
-          case 'today':
-            whereConditions.push('DATE(s.created_at) = CURRENT_DATE');
-            break;
-          case 'tomorrow':
-            whereConditions.push(
-              "DATE(s.created_at) = (CURRENT_DATE + INTERVAL '1 day')",
-            );
-            break;
-          case 'yesterday':
-            whereConditions.push(
-              "DATE(s.created_at) = (CURRENT_DATE - INTERVAL '1 day')",
-            );
-            break;
-          case 'this_week':
-            whereConditions.push(
-              "DATE_PART('week', s.created_at) = DATE_PART('week', CURRENT_DATE) AND DATE_PART('year', s.created_at) = DATE_PART('year', CURRENT_DATE)",
-            );
-            break;
-          case 'next_week':
-            whereConditions.push(
-              "DATE_PART('week', s.created_at) = DATE_PART('week', CURRENT_DATE + INTERVAL '7 days') AND DATE_PART('year', s.created_at) = DATE_PART('year', CURRENT_DATE + INTERVAL '7 days')",
-            );
-            break;
-          case 'last_week':
-            whereConditions.push(
-              "DATE_PART('week', s.created_at) = DATE_PART('week', CURRENT_DATE - INTERVAL '7 days') AND DATE_PART('year', s.created_at) = DATE_PART('year', CURRENT_DATE - INTERVAL '7 days')",
-            );
-            break;
-          case 'current_month':
-            whereConditions.push(
-              "DATE_PART('month', s.created_at) = DATE_PART('month', CURRENT_DATE) AND DATE_PART('year', s.created_at) = DATE_PART('year', CURRENT_DATE)",
-            );
-            break;
-          case 'next_month':
-            whereConditions.push(
-              "(DATE_PART('month', s.created_at) = DATE_PART('month', CURRENT_DATE + INTERVAL '1 month') AND DATE_PART('year', s.created_at) = DATE_PART('year', CURRENT_DATE + INTERVAL '1 month'))",
-            );
-            break;
-          case 'last_month':
-            whereConditions.push(
-              "(DATE_PART('month', s.created_at) = DATE_PART('month', CURRENT_DATE - INTERVAL '1 month') AND DATE_PART('year', s.created_at) = DATE_PART('year', CURRENT_DATE - INTERVAL '1 month'))",
-            );
-            break;
-          default:
-            // Pas de filtrage par défaut
-            break;
-        }
+      if (timeframe === 'tomorrow') {
+        // Pour "demain", nous filtrons les membres du personnel disponibles
+        whereConditions.push('s.is_available = true');
       }
 
       // Filtrage par entité si spécifié
       if (entities.length > 0) {
         // Filtrer les entités qui ne sont pas des termes génériques liés au personnel
         const staffEntities = entities.filter(entity => 
-          !['personnel', 'employé', 'employés', 'staff', 'personnel', 'personnel', 'personnel', 'personnel', 'personnel', 'personnel'].includes(entity.toLowerCase())
+          !['personnel', 'employé', 'employés', 'staff', 'équipe', 'travailleur', 'travailleurs'].includes(entity.toLowerCase())
         );
         
         if (staffEntities.length > 0) {
           const staffNames = staffEntities.map((entity) => entity.toLowerCase());
           whereConditions.push(
-            `(LOWER(s.name) IN (${staffNames.map((_, i) => `$${i + 1}`).join(', ')}) OR LOWER(s.email) IN (${staffNames.map((_, i) => `$${i + staffNames.length + 1}`).join(', ')}) OR LOWER(s.phone) IN (${staffNames.map((_, i) => `$${i + staffNames.length * 2 + 1}`).join(', ')}) OR LOWER(s.category) IN (${staffNames.map((_, i) => `$${i + staffNames.length * 3 + 1}`).join(', ')}))`,
+            `(LOWER(s.firstname) IN (${staffNames.map((_, i) => `$${i + 1}`).join(', ')}) OR LOWER(s.lastname) IN (${staffNames.map((_, i) => `$${i + staffNames.length + 1}`).join(', ')}) OR LOWER(s.role) IN (${staffNames.map((_, i) => `$${i + staffNames.length * 2 + 1}`).join(', ')}))`,
           );
-          // Ajouter les noms pour la recherche dans name, email, phone et category
-          staffNames.forEach((name) => params.push(name));
+          // Ajouter les noms pour la recherche dans firstname, lastname et role
           staffNames.forEach((name) => params.push(name));
           staffNames.forEach((name) => params.push(name));
           staffNames.forEach((name) => params.push(name));
@@ -2447,7 +2404,7 @@ export class DatabaseController {
       }
 
       // Ajout de l'ordre de tri
-      query += ` ORDER BY s.name ASC`;
+      query += ` ORDER BY s.lastname ASC, s.firstname ASC`;
 
       // Exécution de la requête
       const staff = await this.databaseService.executeQuery<StaffResult[]>(
@@ -2458,17 +2415,23 @@ export class DatabaseController {
       // Formatage de la réponse
       let responseText = '';
       if (staff.length === 0) {
-        responseText = `Aucun personnel trouvé ${this.getTimeframeText(timeframe)}.`;
+        if (timeframe === 'tomorrow') {
+          responseText = `Aucun membre du personnel n'est disponible pour travailler demain.`;
+        } else {
+          responseText = `Aucun membre du personnel trouvé ${this.getTimeframeText(timeframe)}.`;
+        }
       } else {
-        responseText = `Voici la liste des personnels ${this.getTimeframeText(timeframe)} :\n\n`;
+        if (timeframe === 'tomorrow') {
+          responseText = `Voici la liste du personnel disponible pour travailler demain :\n\n`;
+        } else {
+          responseText = `Voici la liste du personnel ${this.getTimeframeText(timeframe)} :\n\n`;
+        }
 
         staff.forEach((personnel, index) => {
-          const formattedDate = new Date(personnel.created_at).toLocaleDateString('fr-FR');
-
-          responseText += `${index + 1}. ${personnel.name} (${personnel.category})\n`;
-          if (personnel.email) responseText += `   Email: ${personnel.email}\n`;
+          responseText += `${index + 1}. ${personnel.firstname} ${personnel.lastname} (${personnel.role})\n`;
+          responseText += `   Email: ${personnel.email}\n`;
           if (personnel.phone) responseText += `   Téléphone: ${personnel.phone}\n`;
-          responseText += `   Ajouté le: ${formattedDate}\n`;
+          responseText += `   Disponible: ${personnel.is_available ? 'Oui' : 'Non'}\n`;
           responseText += '\n';
         });
       }
