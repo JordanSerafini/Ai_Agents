@@ -161,4 +161,36 @@ export const QUOTATIONS_QUERIES = {
     FROM quotations
     WHERE created_date >= CURRENT_DATE - INTERVAL '1 year';
   `,
+
+  // Récupérer le montant total des devis acceptés pour le mois prochain
+  GET_ACCEPTED_NEXT_MONTH_TOTAL: `
+    SELECT SUM(q.total) as total_amount
+    FROM quotations q
+    WHERE q.status = 'accepté'
+    AND q.created_date BETWEEN 
+      DATE_TRUNC('month', CURRENT_DATE + INTERVAL '1 month') 
+      AND 
+      (DATE_TRUNC('month', CURRENT_DATE + INTERVAL '1 month') + INTERVAL '1 month - 1 day')
+  `,
+
+  // Requête modulable pour filtrer les devis par statut et période
+  GET_FILTERED_QUOTATIONS: `
+    SELECT q.*, p.name as project_name, c.name as client_name
+    FROM quotations q
+    JOIN projects p ON q.project_id = p.id
+    JOIN clients c ON p.client_id = c.id
+    WHERE 
+      ($1::text IS NULL OR q.status = $1)
+      AND q.created_date BETWEEN $2::date AND $3::date
+    ORDER BY q.created_date DESC
+  `,
+
+  // Requête modulable pour obtenir le montant total des devis filtrés par statut et période
+  GET_FILTERED_QUOTATIONS_TOTAL: `
+    SELECT SUM(q.total) as total_amount
+    FROM quotations q
+    WHERE 
+      ($1::text IS NULL OR q.status = $1)
+      AND q.created_date BETWEEN $2::date AND $3::date
+  `,
 };
