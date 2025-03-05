@@ -111,7 +111,7 @@ export class RouterService {
         )}`,
       );
 
-      const endpointUrl = `${this.databaseAgentUrl}/database/query`;
+      const endpointUrl = `${this.databaseAgentUrl}/api/database/enriched-query`;
 
       const response = await this.httpService.axiosRef.post<DatabaseResponse>(
         endpointUrl,

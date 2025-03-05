@@ -994,7 +994,7 @@ export class DatabaseController {
    * Traite les requêtes enrichies avec des métadonnées provenant de l'agent d'analyse
    * Cet endpoint est spécialement conçu pour fonctionner avec les métadonnées enrichies
    */
-  @Post('query')
+  @Post('enriched-query')
   async processEnrichedQuery(
     @Body()
     enrichedRequest: {
