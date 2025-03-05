@@ -903,10 +903,10 @@ export class DatabaseController {
     ProjectResult[] | TaskResult[] | QuotationResult[] | Record<string, unknown>
   > {
     // Vérifier si les requêtes sont initialisées
-    if (!this.QUERIES || !this.QUERIES.projects || !this.QUERIES.tasks) {
+    if (!this.QUERIES || !this.QUERIES.projects) {
       this.initializeQueries();
       // Vérifier à nouveau après l'initialisation
-      if (!this.QUERIES || !this.QUERIES.projects || !this.QUERIES.tasks) {
+      if (!this.QUERIES || !this.QUERIES.projects) {
         return Promise.reject(new Error('Requêtes SQL non initialisées'));
       }
     }
@@ -1012,6 +1012,7 @@ export class DatabaseController {
           intention?: string;
           entites?: string[];
           contexte?: string;
+          questionCorrigee?: string;
         };
         noTableIdentified?: boolean;
         possibleTables?: string[];
@@ -1021,6 +1022,15 @@ export class DatabaseController {
     this.logger.log(
       `Traitement de la requête enrichie: ${enrichedRequest.question}`,
     );
+
+    // Utiliser la question corrigée si disponible
+    const questionToProcess = enrichedRequest.metadata?.analysis?.questionCorrigee || enrichedRequest.question;
+    
+    if (enrichedRequest.metadata?.analysis?.questionCorrigee) {
+      this.logger.log(
+        `Question corrigée utilisée: ${enrichedRequest.metadata.analysis.questionCorrigee}`,
+      );
+    }
 
     if (enrichedRequest.metadata) {
       this.logger.log(
@@ -1041,9 +1051,13 @@ export class DatabaseController {
 
       // -------- GESTION DES REQUÊTES FINANCIÈRES SUR LES DEVIS --------
       if (
-        enrichedRequest.metadata.primaryTable === 'quotations' &&
-        enrichedRequest.metadata.isFinancialQuery
+        enrichedRequest.metadata.primaryTable === 'quotations' && 
+        (enrichedRequest.metadata.isFinancialQuery === true || 
+         questionToProcess.toLowerCase().includes('montant') || 
+         (questionToProcess.toLowerCase().includes('devis') && 
+          questionToProcess.toLowerCase().includes('accepté')))
       ) {
+        this.logger.log("Traitement d'une requête financière sur les devis");
         const response =
           await this.handleQuotationsFinancialQuery(enrichedRequest);
         this.logger.debug(
@@ -1114,6 +1128,24 @@ export class DatabaseController {
         };
       }
 
+      // Si la question contient des mots-clés liés au personnel, router vers handleStaffQuery
+      if (
+        questionToProcess.toLowerCase().includes('travail') ||
+        questionToProcess.toLowerCase().includes('travaille') ||
+        questionToProcess.toLowerCase().includes('qui') ||
+        questionToProcess.toLowerCase().includes('personnel') ||
+        questionToProcess.toLowerCase().includes('employé') ||
+        questionToProcess.toLowerCase().includes('staff')
+      ) {
+        enrichedRequest.metadata = enrichedRequest.metadata || {};
+        enrichedRequest.metadata.primaryTable = 'staff';
+        const response = await this.handleStaffQuery(enrichedRequest);
+        this.logger.debug(
+          `Réponse finale pour personnel: ${JSON.stringify(response)}`,
+        );
+        return response;
+      }
+
       // Si aucun traitement spécifique n'a été effectué, essayer la méthode générique
       const processResult = await this.processRequest({
         question: enrichedRequest.question,
@@ -1161,15 +1193,25 @@ export class DatabaseController {
       analysis?: {
         intention?: string;
         entites?: string[];
+        questionCorrigee?: string;
       };
     };
   }): Promise<{ reponse: string; success: boolean; error?: string }> {
+    // Utiliser la question corrigée si disponible
+    const questionToProcess = enrichedRequest.metadata?.analysis?.questionCorrigee || enrichedRequest.question;
+    
+    if (enrichedRequest.metadata?.analysis?.questionCorrigee) {
+      this.logger.debug(
+        `Question corrigée utilisée: ${enrichedRequest.metadata.analysis.questionCorrigee}`,
+      );
+    }
+    
     // Récupérer le statut et la période depuis les métadonnées
     const status = enrichedRequest.metadata?.filters?.status || null;
     const timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
 
     this.logger.log(
-      `Requête devis identifiée - Status: ${status}, Période: ${timeframe}`,
+      `Requête devis identifiée - Status: ${status}, Période: ${timeframe}, Question: "${questionToProcess}"`,
     );
 
     // Ajouter un log pour déboguer le type et la valeur exacte du statut
@@ -1332,9 +1374,13 @@ export class DatabaseController {
 
       // Si demandé, récupérer également les détails des devis
       let detailsInfo = '';
-      if (count > 0 && count <= 5) {
+      // Vérifier si la question mentionne les clients ou si le nombre de devis est petit
+      const showDetails = enrichedRequest.question.toLowerCase().includes('client') || (count > 0 && count <= 5);
+      
+      if (count > 0 && showDetails) {
         const detailsQuery = `
-          SELECT q.id, q.reference, q.total, q.created_date, c.name as client_name
+          SELECT q.id, q.reference, q.total, q.created_date, 
+                 CONCAT(c.firstname, ' ', c.lastname) as client_name
           FROM quotations q
           JOIN projects p ON q.project_id = p.id
           JOIN clients c ON p.client_id = c.id
@@ -1342,7 +1388,7 @@ export class DatabaseController {
             ($1::text IS NULL OR q.status::text = $1::text)
             AND q.created_date BETWEEN $2::date AND $3::date
           ORDER BY q.created_date DESC
-          LIMIT 5
+          LIMIT 10
         `;
 
         const details = await this.databaseService.executeQuery<
@@ -1370,6 +1416,7 @@ export class DatabaseController {
       else if (timeframe === 'tomorrow') periodDesc = 'de demain';
       else if (timeframe === 'today') periodDesc = "d'aujourd'hui";
       else if (timeframe === 'yesterday') periodDesc = "d'hier";
+      else if (timeframe === 'last_month') periodDesc = 'du mois dernier';
       else if (timeframe === 'last_week') periodDesc = 'de la semaine dernière';
       else if (timeframe === 'last_year') periodDesc = "de l'année dernière";
       else if (timeframe === 'current_quarter')
@@ -1379,6 +1426,9 @@ export class DatabaseController {
       else if (timeframe === 'last_quarter')
         periodDesc = 'du trimestre dernier';
       else periodDesc = 'de la période spécifiée';
+
+      // Ajouter un log pour déboguer la période
+      this.logger.debug(`Période identifiée: ${timeframe}, description: ${periodDesc}`);
 
       let statusDesc = '';
       if (status === 'accepté') statusDesc = 'acceptés';
@@ -1852,8 +1902,8 @@ export class DatabaseController {
         start_date?: string;
         end_date?: string;
         progress?: number;
-        total_tasks?: number;
-        completed_tasks?: number;
+        total_events?: number;
+        completed_events?: number;
       }
 
       let projects: ProjectResult[] = [];
@@ -1936,15 +1986,15 @@ export class DatabaseController {
         query = `
           SELECT p.id, p.name, c.name as client_name, p.status, 
                  p.start_date, p.end_date,
-                 COALESCE(COUNT(t.id), 0) as total_tasks,
-                 COALESCE(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END), 0) as completed_tasks,
+                 COALESCE(COUNT(ce.id), 0) as total_events,
+                 COALESCE(SUM(CASE WHEN ce.status = 'completed' THEN 1 ELSE 0 END), 0) as completed_events,
                  CASE
-                   WHEN COALESCE(COUNT(t.id), 0) = 0 THEN 0
-                   ELSE ROUND((COALESCE(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END), 0)::float / COUNT(t.id)) * 100)
+                   WHEN COALESCE(COUNT(ce.id), 0) = 0 THEN 0
+                   ELSE ROUND((COALESCE(SUM(CASE WHEN ce.status = 'completed' THEN 1 ELSE 0 END), 0)::float / COUNT(ce.id)) * 100)
                  END as progress
           FROM projects p
           LEFT JOIN clients c ON p.client_id = c.id
-          LEFT JOIN tasks t ON p.id = t.project_id
+          LEFT JOIN calendar_events ce ON p.id = ce.project_id
           ${whereClause}
           GROUP BY p.id, p.name, c.name, p.status, p.start_date, p.end_date
           ${orderClause}
@@ -2028,8 +2078,8 @@ export class DatabaseController {
             responseMessage += `\n   Date de fin: ${new Date(project.end_date).toLocaleDateString('fr-FR')}`;
           if (project.progress !== undefined)
             responseMessage += `\n   Progression: ${project.progress}%`;
-          if (project.total_tasks)
-            responseMessage += `\n   Tâches: ${project.completed_tasks}/${project.total_tasks} complétées`;
+          if (project.total_events)
+            responseMessage += `\n   Événements: ${project.completed_events}/${project.total_events} complétés`;
           responseMessage += '\n';
         });
       }
@@ -2327,6 +2377,7 @@ export class DatabaseController {
       analysis?: {
         intention?: string;
         entites?: string[];
+        questionCorrigee?: string;
       };
     };
   }): Promise<{
@@ -2335,9 +2386,17 @@ export class DatabaseController {
     error?: string;
     data?: any;
   }> {
+    // Utiliser la question corrigée si disponible
+    const questionToProcess = enrichedRequest.metadata?.analysis?.questionCorrigee || enrichedRequest.question;
+    
     this.logger.debug(
       `Traitement de la requête sur le personnel: ${JSON.stringify(enrichedRequest)}`,
     );
+    if (enrichedRequest.metadata?.analysis?.questionCorrigee) {
+      this.logger.debug(
+        `Question corrigée utilisée: ${enrichedRequest.metadata.analysis.questionCorrigee}`,
+      );
+    }
 
     // Extraction des métadonnées pour le filtrage
     const timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
@@ -2376,6 +2435,18 @@ export class DatabaseController {
       // Ajout des conditions de filtrage basées sur la période
       if (timeframe === 'tomorrow') {
         // Pour "demain", nous filtrons les membres du personnel disponibles
+        whereConditions.push('s.is_available = true');
+      } else if (timeframe === 'next_week') {
+        // Pour "la semaine prochaine", nous filtrons les membres du personnel disponibles
+        whereConditions.push('s.is_available = true');
+      } else if (timeframe === 'current_week') {
+        // Pour "cette semaine", nous filtrons les membres du personnel disponibles
+        whereConditions.push('s.is_available = true');
+      } else if (timeframe === 'current_month') {
+        // Pour "ce mois", nous filtrons les membres du personnel disponibles
+        whereConditions.push('s.is_available = true');
+      } else if (timeframe === 'next_month') {
+        // Pour "le mois prochain", nous filtrons les membres du personnel disponibles
         whereConditions.push('s.is_available = true');
       }
 
@@ -2417,12 +2488,28 @@ export class DatabaseController {
       if (staff.length === 0) {
         if (timeframe === 'tomorrow') {
           responseText = `Aucun membre du personnel n'est disponible pour travailler demain.`;
+        } else if (timeframe === 'next_week') {
+          responseText = `Aucun membre du personnel n'est disponible pour travailler la semaine prochaine.`;
+        } else if (timeframe === 'current_week') {
+          responseText = `Aucun membre du personnel n'est disponible pour travailler cette semaine.`;
+        } else if (timeframe === 'current_month') {
+          responseText = `Aucun membre du personnel n'est disponible pour travailler ce mois-ci.`;
+        } else if (timeframe === 'next_month') {
+          responseText = `Aucun membre du personnel n'est disponible pour travailler le mois prochain.`;
         } else {
           responseText = `Aucun membre du personnel trouvé ${this.getTimeframeText(timeframe)}.`;
         }
       } else {
         if (timeframe === 'tomorrow') {
           responseText = `Voici la liste du personnel disponible pour travailler demain :\n\n`;
+        } else if (timeframe === 'next_week') {
+          responseText = `Voici la liste du personnel disponible pour travailler la semaine prochaine :\n\n`;
+        } else if (timeframe === 'current_week') {
+          responseText = `Voici la liste du personnel disponible pour travailler cette semaine :\n\n`;
+        } else if (timeframe === 'current_month') {
+          responseText = `Voici la liste du personnel disponible pour travailler ce mois-ci :\n\n`;
+        } else if (timeframe === 'next_month') {
+          responseText = `Voici la liste du personnel disponible pour travailler le mois prochain :\n\n`;
         } else {
           responseText = `Voici la liste du personnel ${this.getTimeframeText(timeframe)} :\n\n`;
         }

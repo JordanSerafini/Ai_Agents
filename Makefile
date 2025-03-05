@@ -27,7 +27,7 @@ help:
 build:
 	@echo "$(GREEN)Construction des images Docker...$(NC)"
 	$(DOCKER_COMPOSE) build && \
-	docker compose up 
+	docker-compose up 
 
 up:
 	@echo "$(GREEN)Démarrage des conteneurs en arrière-plan...$(NC)"

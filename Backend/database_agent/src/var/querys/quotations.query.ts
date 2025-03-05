@@ -187,7 +187,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Requête modulable pour obtenir le montant total des devis filtrés par statut et période
   GET_FILTERED_QUOTATIONS_TOTAL: `
-    SELECT SUM(q.total) as total_amount
+    SELECT COALESCE(SUM(q.total), 0) as total_amount
     FROM quotations q
     WHERE 
       ($1::text IS NULL OR q.status::text = $1::text)

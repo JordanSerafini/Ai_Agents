@@ -259,10 +259,17 @@ export class RouterService {
       employé: 'staff',
       employés: 'staff',
       équipe: 'staff',
+      travail: 'staff',
+      travaille: 'staff',
       travailleur: 'staff',
       travailleurs: 'staff',
       "membre d'équipe": 'staff',
       "membres d'équipe": 'staff',
+      horaire: 'staff',
+      horaires: 'staff',
+      disponible: 'staff',
+      disponibilité: 'staff',
+      qui: 'staff',  // Pour des questions comme "qui travaille..."
     };
 
     // Déterminer la table principale concernée
@@ -332,7 +339,9 @@ export class RouterService {
         questionLower.includes('mois dernier') ||
         questionLower.includes('mois passé') ||
         questionLower.includes('mois précédent') ||
-        questionLower.includes('dernier mois')
+        questionLower.includes('dernier mois') ||
+        questionLower.includes('moiis dernier') ||
+        questionLower.includes('moi dernier')
       ) {
         timeframe = 'last_month';
       } else if (
@@ -430,7 +439,9 @@ export class RouterService {
         isFinancialQuery:
           questionLower.includes('montant') ||
           questionLower.includes('total') ||
-          questionLower.includes('somme'),
+          questionLower.includes('somme') ||
+          (primaryTable === 'quotations' && 
+           (questionLower.includes('montant') || questionLower.includes('devis accepté'))),
         aggregationType:
           questionLower.includes('total') || questionLower.includes('somme')
             ? 'sum'
