@@ -1361,13 +1361,8 @@ export class DatabaseController {
       else if (timeframe === 'tomorrow') periodDesc = 'de demain';
       else if (timeframe === 'today') periodDesc = "d'aujourd'hui";
       else if (timeframe === 'yesterday') periodDesc = "d'hier";
-      else if (timeframe === 'current_week')
-        periodDesc = 'de la semaine actuelle';
-      else if (timeframe === 'next_week')
-        periodDesc = 'de la semaine prochaine';
       else if (timeframe === 'last_week') periodDesc = 'de la semaine dernière';
       else if (timeframe === 'last_year') periodDesc = "de l'année dernière";
-      else if (timeframe === 'next_year') periodDesc = "de l'année prochaine";
       else if (timeframe === 'current_quarter')
         periodDesc = 'du trimestre actuel';
       else if (timeframe === 'next_quarter')
@@ -2136,7 +2131,8 @@ export class DatabaseController {
         start_date: string;
         end_date: string;
         location?: string;
-        client_name?: string;
+        client_firstname?: string;
+        client_lastname?: string;
       }
 
       // Construction de la requête de base
@@ -2148,7 +2144,8 @@ export class DatabaseController {
           ce.start_date,
           ce.end_date,
           ce.location,
-          c.name as client_name
+          c.firstname as client_firstname,
+          c.lastname as client_lastname
         FROM calendar_events ce
         LEFT JOIN clients c ON ce.client_id = c.id
       `;
@@ -2210,11 +2207,20 @@ export class DatabaseController {
 
       // Filtrage par client si spécifié
       if (entities.length > 0) {
-        const clientNames = entities.map((entity) => entity.toLowerCase());
-        whereConditions.push(
-          `LOWER(c.name) IN (${clientNames.map((_, i) => `$${i + 1}`).join(', ')})`,
+        // Filtrer les entités qui ne sont pas des termes génériques liés aux rendez-vous
+        const clientEntities = entities.filter(entity => 
+          !['rendez-vous', 'rendez vous', 'rdv', 'semaine prochaine', 'semaine', 'prochaine', 'agenda', 'calendrier', 'planning'].includes(entity.toLowerCase())
         );
-        clientNames.forEach((name) => params.push(name));
+        
+        if (clientEntities.length > 0) {
+          const clientNames = clientEntities.map((entity) => entity.toLowerCase());
+          whereConditions.push(
+            `(LOWER(c.firstname) IN (${clientNames.map((_, i) => `$${i + 1}`).join(', ')}) OR LOWER(c.lastname) IN (${clientNames.map((_, i) => `$${i + clientNames.length + 1}`).join(', ')}))`,
+          );
+          // Ajouter les noms pour la recherche dans firstname et lastname
+          clientNames.forEach((name) => params.push(name));
+          clientNames.forEach((name) => params.push(name));
+        }
       }
 
       // Ajout des conditions WHERE à la requête
@@ -2267,8 +2273,8 @@ export class DatabaseController {
             responseText += `   Lieu: ${appointment.location}\n`;
           }
 
-          if (appointment.client_name) {
-            responseText += `   Client: ${appointment.client_name}\n`;
+          if (appointment.client_firstname && appointment.client_lastname) {
+            responseText += `   Client: ${appointment.client_firstname} ${appointment.client_lastname}\n`;
           }
 
           if (appointment.description) {
