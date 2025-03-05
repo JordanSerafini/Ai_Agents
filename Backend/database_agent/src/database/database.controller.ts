@@ -22,22 +22,9 @@ import {
   GenericResponse,
 } from './models/query-types';
 
-// Création des interfaces pour les services manquants
-export interface SearchService {
-  searchProjects(
-    query: string,
-    filters?: Record<string, any>,
-  ): Promise<SearchResult[]>;
-  findSimilarProjects(projectId: number): Promise<SearchResult[]>;
-  searchDocuments(query: string): Promise<SearchResult[]>;
-  searchSuppliers(query: string): Promise<SearchResult[]>;
-}
-
-export interface SyncService {
-  syncAll(): Promise<void>;
-  syncEntity(entity: string, entityId: number): Promise<void>;
-  deleteEntity(entity: string, entityId: number): Promise<void>;
-}
+// Importer les services concrets
+import { SearchService } from '../search/search.service';
+import { SyncService } from '../search/sync.service';
 
 // Interface pour les erreurs
 interface ErrorWithMessage {

@@ -54,11 +54,13 @@ export class SearchService {
       });
 
       if (!exists) {
+        this.logger.log(`Création de l'index ${index}`);
         await this.createIndex(index);
         return true;
       }
+
       return true;
-    } catch (error: any) {
+    } catch (error) {
       this.logger.error(
         `Erreur lors de la vérification de l'index ${index}: ${error.message}`,
       );

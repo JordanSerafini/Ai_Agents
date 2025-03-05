@@ -30,6 +30,7 @@ BEGIN
             'livraison_materiaux',
             'intervention_urgente',
             'maintenance',
+            'absence',
             'autre'
         );
     END IF;
@@ -54,10 +55,13 @@ DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'activity_type') THEN
         CREATE TYPE activity_type AS ENUM (
+            'create',
             'creation',
+            'update',
             'modification',
-            'suppression',
+            'view',
             'consultation',
+            'suppression',
             'validation',
             'refus',
             'commentaire',
@@ -202,6 +206,104 @@ CREATE TABLE IF NOT EXISTS materials (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Création de la table des fournisseurs
+CREATE TABLE IF NOT EXISTS suppliers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    contact_name VARCHAR(100),
+    email VARCHAR(100),
+    phone VARCHAR(20),
+    address TEXT,
+    website VARCHAR(255),
+    notes TEXT,
+    payment_terms VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Création de la table des catégories de produits
+CREATE TABLE IF NOT EXISTS product_categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Création de la table des produits
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    supplier_id INTEGER REFERENCES suppliers(id),
+    category_id INTEGER REFERENCES product_categories(id),
+    name VARCHAR(255) NOT NULL,
+    reference VARCHAR(50),
+    description TEXT,
+    unit_price DECIMAL(10, 2) NOT NULL,
+    unit VARCHAR(20) NOT NULL,
+    min_order_quantity INTEGER DEFAULT 1,
+    lead_time_days INTEGER,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Création de la table des catégories d'équipements
+CREATE TABLE IF NOT EXISTS equipment_categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Création de la table des équipements
+CREATE TABLE IF NOT EXISTS equipment (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    reference VARCHAR(50),
+    category_id INTEGER REFERENCES equipment_categories(id),
+    supplier_id INTEGER REFERENCES suppliers(id),
+    purchase_date DATE,
+    purchase_price DECIMAL(10, 2),
+    status VARCHAR(20) DEFAULT 'disponible',
+    location VARCHAR(100),
+    maintenance_interval INTEGER, -- en jours
+    last_maintenance_date DATE,
+    next_maintenance_date DATE,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Création de la table des réservations d'équipements
+CREATE TABLE IF NOT EXISTS equipment_reservations (
+    id SERIAL PRIMARY KEY,
+    equipment_id INTEGER REFERENCES equipment(id),
+    project_id INTEGER REFERENCES projects(id),
+    staff_id INTEGER REFERENCES staff(id),
+    start_date TIMESTAMP WITH TIME ZONE,
+    end_date TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) DEFAULT 'confirmé',
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Création de la table des registres de maintenance
+CREATE TABLE IF NOT EXISTS maintenance_records (
+    id SERIAL PRIMARY KEY,
+    equipment_id INTEGER REFERENCES equipment(id),
+    maintenance_date DATE NOT NULL,
+    maintenance_type VARCHAR(50),
+    description TEXT,
+    cost DECIMAL(10, 2),
+    performed_by VARCHAR(100),
+    next_maintenance_date DATE,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Création de la table des devis
 CREATE TABLE IF NOT EXISTS quotations (
     id SERIAL PRIMARY KEY,
@@ -344,6 +446,10 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 CREATE TABLE IF NOT EXISTS activity_logs_y2023m12 PARTITION OF activity_logs
     FOR VALUES FROM ('2023-12-01') TO ('2024-01-01');
 
+-- Création d'une partition pour le mois de mars 2025 (date actuelle dans l'environnement Docker)
+CREATE TABLE IF NOT EXISTS activity_logs_y2025m03 PARTITION OF activity_logs
+    FOR VALUES FROM ('2025-03-01') TO ('2025-04-01');
+
 -- Fonction pour créer automatiquement les partitions de logs
 CREATE OR REPLACE FUNCTION create_partition_and_insert()
 RETURNS TRIGGER AS $$
@@ -421,7 +527,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     issue_date DATE NOT NULL,
     due_date DATE NOT NULL,
     total_ht DECIMAL(10,2) NOT NULL,
-    total_tva DECIMAL(10,2) NOT NULL,
+    tva_rate DECIMAL(5,2) NOT NULL,
     total_ttc DECIMAL(10,2) NOT NULL,
     status VARCHAR(50) DEFAULT 'brouillon',
     notes TEXT,
@@ -429,6 +535,19 @@ CREATE TABLE IF NOT EXISTS invoices (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_invoice_project FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+-- Création de la table des éléments de facture
+CREATE TABLE IF NOT EXISTS invoice_items (
+    id SERIAL PRIMARY KEY,
+    invoice_id INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    quantity DECIMAL(10,2) NOT NULL,
+    unit_price DECIMAL(10,2) NOT NULL,
+    total_price DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_invoice_item_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id)
 );
 
 -- Création de la table des paiements
@@ -445,19 +564,28 @@ CREATE TABLE IF NOT EXISTS payments (
     CONSTRAINT fk_payment_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id)
 );
 
+-- Création de la table des catégories de dépenses
+CREATE TABLE IF NOT EXISTS expense_categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Création de la table des dépenses
 CREATE TABLE IF NOT EXISTS expenses (
     id SERIAL PRIMARY KEY,
-    project_id INTEGER,
-    staff_id INTEGER,
-    amount DECIMAL(10,2) NOT NULL,
+    project_id INTEGER REFERENCES projects(id),
+    category_id INTEGER REFERENCES expense_categories(id),
     description TEXT NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
     expense_date DATE NOT NULL,
-    category VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_expense_project FOREIGN KEY (project_id) REFERENCES projects(id),
-    CONSTRAINT fk_expense_staff FOREIGN KEY (staff_id) REFERENCES staff(id)
+    payment_method VARCHAR(50),
+    receipt_file VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Création de la table des feuilles de temps
@@ -657,5 +785,50 @@ BEGIN
         last_detected = CURRENT_TIMESTAMP;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Création de la table des commandes fournisseurs
+CREATE TABLE IF NOT EXISTS supplier_orders (
+    id SERIAL PRIMARY KEY,
+    supplier_id INTEGER REFERENCES suppliers(id),
+    project_id INTEGER REFERENCES projects(id),
+    reference VARCHAR(50),
+    order_date DATE NOT NULL,
+    expected_delivery_date DATE,
+    actual_delivery_date DATE,
+    status VARCHAR(20) DEFAULT 'en_attente',
+    total_amount DECIMAL(10, 2),
+    shipping_cost DECIMAL(10, 2),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Création de la table des articles de commande
+CREATE TABLE IF NOT EXISTS order_items (
+    id SERIAL PRIMARY KEY,
+    order_id INTEGER REFERENCES supplier_orders(id),
+    product_id INTEGER REFERENCES products(id),
+    quantity INTEGER NOT NULL,
+    unit_price DECIMAL(10, 2) NOT NULL,
+    total_price DECIMAL(10, 2) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Création de la table des budgets de projets
+CREATE TABLE IF NOT EXISTS project_budgets (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id),
+    total_budget DECIMAL(12, 2) NOT NULL,
+    materials_budget DECIMAL(10, 2),
+    labor_budget DECIMAL(10, 2),
+    equipment_budget DECIMAL(10, 2),
+    subcontractor_budget DECIMAL(10, 2),
+    other_budget DECIMAL(10, 2),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
 COMMIT;

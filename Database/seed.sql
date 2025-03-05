@@ -1,5 +1,8 @@
 BEGIN;
 
+-- Désactiver temporairement le trigger de création de partition
+ALTER TABLE activity_logs DISABLE TRIGGER activity_logs_insert_trigger;
+
 -- Insertion d'utilisateurs admin et standards
 INSERT INTO users (firstname, lastname, age, email, password, role_id) VALUES 
     ('Jordan', 'Serafini', 35, 'jordan@solution-logique.fr', 'pass123', 1),
@@ -621,27 +624,27 @@ INSERT INTO document_embeddings (document_type, document_id, content) VALUES
 -- Insertion de logs d'activité pour simuler l'utilisation du système
 INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details, ip_address) VALUES
     -- Activités passées
-    (1, 'create', 'project', 1, '{"name": "Rénovation salle de bain", "client_id": 1}', '192.168.1.10'),
-    (1, 'create', 'quotation', 1, '{"project_id": 1, "total": 2800.00}', '192.168.1.10'),
-    (2, 'update', 'quotation', 1, '{"status": "accepté", "previous_status": "en_attente"}', '192.168.1.15'),
-    (2, 'create', 'project', 2, '{"name": "Chape et carrelage appartements", "client_id": 2}', '192.168.1.15'),
-    (1, 'update', 'project', 1, '{"status": "termine", "previous_status": "en_cours"}', '192.168.1.10'),
-    (3, 'view', 'client', 3, '{"timestamp": "' || (CURRENT_DATE - INTERVAL '8 days')::TEXT || '"}', '192.168.1.20'),
+    (1, 'create', 'project', 1, '{"name": "Rénovation salle de bain", "client_id": 1}'::jsonb, '192.168.1.10'),
+    (1, 'create', 'quotation', 1, '{"project_id": 1, "total": 2800.00}'::jsonb, '192.168.1.10'),
+    (2, 'update', 'quotation', 1, '{"status": "accepté", "previous_status": "en_attente"}'::jsonb, '192.168.1.15'),
+    (2, 'create', 'project', 2, '{"name": "Chape et carrelage appartements", "client_id": 2}'::jsonb, '192.168.1.15'),
+    (1, 'update', 'project', 1, '{"status": "termine", "previous_status": "en_cours"}'::jsonb, '192.168.1.10'),
+    (3, 'view', 'client', 3, ('{"timestamp": "' || (CURRENT_DATE - INTERVAL '8 days')::TEXT || '"}')::jsonb, '192.168.1.20'),
     
     -- Activités récentes
-    (1, 'create', 'project', 9, '{"name": "Salle de bain moderne", "client_id": 1}', '192.168.1.10'),
-    (2, 'create', 'quotation', 9, '{"project_id": 9, "total": 3200.00}', '192.168.1.15'),
-    (2, 'update', 'quotation', 9, '{"status": "accepté", "previous_status": "en_attente"}', '192.168.1.15'),
-    (1, 'create', 'project', 10, '{"name": "Cuisine contemporaine", "client_id": 3}', '192.168.1.10'),
-    (3, 'view', 'client', 5, '{"timestamp": "' || (CURRENT_DATE - INTERVAL '2 days')::TEXT || '"}', '192.168.1.20'),
-    (1, 'update', 'project', 4, '{"status": "en_cours", "previous_status": "prospect"}', '192.168.1.10'),
+    (1, 'create', 'project', 9, '{"name": "Salle de bain moderne", "client_id": 1}'::jsonb, '192.168.1.10'),
+    (2, 'create', 'quotation', 9, '{"project_id": 9, "total": 3200.00}'::jsonb, '192.168.1.15'),
+    (2, 'update', 'quotation', 9, '{"status": "accepté", "previous_status": "en_attente"}'::jsonb, '192.168.1.15'),
+    (1, 'create', 'project', 10, '{"name": "Cuisine contemporaine", "client_id": 3}'::jsonb, '192.168.1.10'),
+    (3, 'view', 'client', 5, ('{"timestamp": "' || (CURRENT_DATE - INTERVAL '2 days')::TEXT || '"}')::jsonb, '192.168.1.20'),
+    (1, 'update', 'project', 4, '{"status": "en_cours", "previous_status": "prospect"}'::jsonb, '192.168.1.10'),
     
     -- Activités d'aujourd'hui
-    (2, 'view', 'project', 5, '{"timestamp": "' || CURRENT_DATE::TEXT || '"}', '192.168.1.15'),
-    (1, 'create', 'calendar_event', 5, '{"title": "Réunion de chantier - Les Clarines", "project_id": 5}', '192.168.1.10'),
-    (3, 'update', 'quotation', 5, '{"notes": "Prix négocié pour volume important", "previous_notes": ""}', '192.168.1.20'),
-    (2, 'view', 'stage', 15, '{"timestamp": "' || CURRENT_DATE::TEXT || '"}', '192.168.1.15'),
-    (1, 'update', 'staff', 3, '{"is_available": false, "previous_status": true}', '192.168.1.10');
+    (2, 'view', 'project', 5, ('{"timestamp": "' || CURRENT_DATE::TEXT || '"}')::jsonb, '192.168.1.15'),
+    (1, 'create', 'calendar_event', 5, '{"title": "Réunion de chantier - Les Clarines", "project_id": 5}'::jsonb, '192.168.1.10'),
+    (3, 'update', 'quotation', 5, '{"notes": "Prix négocié pour volume important", "previous_notes": ""}'::jsonb, '192.168.1.20'),
+    (2, 'view', 'stage', 15, ('{"timestamp": "' || CURRENT_DATE::TEXT || '"}')::jsonb, '192.168.1.15'),
+    (1, 'update', 'staff', 3, '{"is_available": false, "previous_status": true}'::jsonb, '192.168.1.10');
 
 -- Ajout de plusieurs événements de calendrier pour avoir un planning complet
 -- Réunions clients
@@ -661,7 +664,7 @@ INSERT INTO calendar_events (
     (
         'Rendez-vous client - Projet balcons',
         'Discussion technique et planning',
-        'reunion_client',
+        'rendez_vous_client',
         CURRENT_DATE + INTERVAL '2 days' + INTERVAL '14 hours',
         CURRENT_DATE + INTERVAL '2 days' + INTERVAL '15 hours',
         false,
@@ -674,7 +677,7 @@ INSERT INTO calendar_events (
     (
         'Signature devis - Cave à vin',
         'Finalisation contrat',
-        'reunion_client',
+        'rendez_vous_client',
         CURRENT_DATE + INTERVAL '3 days' + INTERVAL '10 hours',
         CURRENT_DATE + INTERVAL '3 days' + INTERVAL '11 hours',
         false,
@@ -687,7 +690,7 @@ INSERT INTO calendar_events (
     (
         'Présentation échantillons - Spa Hôtel',
         'Choix finaux matériaux',
-        'reunion_client',
+        'rendez_vous_client',
         CURRENT_DATE + INTERVAL '5 days' + INTERVAL '9 hours',
         CURRENT_DATE + INTERVAL '5 days' + INTERVAL '10 hours 30 minutes',
         false,
@@ -1105,5 +1108,8 @@ INSERT INTO user_intents (intent_name, count, examples, last_detected) VALUES
     ('demande_service', 31, ARRAY['Faites-vous des terrasses', 'Est-ce que vous posez du carrelage mural', 'Rénovation de douche'], CURRENT_TIMESTAMP - INTERVAL '1 day'),
     ('demande_information', 20, ARRAY['Comment se passe un chantier', 'Quelle est la différence entre grès cérame et faïence', 'Avantages de la chape fluide'], CURRENT_TIMESTAMP - INTERVAL '4 days'),
     ('prise_rdv', 15, ARRAY['Je voudrais prendre rendez-vous', 'Quand pourriez-vous passer voir le chantier', 'Disponibilité pour une visite'], CURRENT_TIMESTAMP - INTERVAL '5 days');
+
+-- Réactiver le trigger
+ALTER TABLE activity_logs ENABLE TRIGGER activity_logs_insert_trigger;
 
 COMMIT;
