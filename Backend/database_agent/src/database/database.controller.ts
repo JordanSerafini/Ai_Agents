@@ -1316,77 +1316,178 @@ export class DatabaseController {
         timeframe?: string | null;
       };
     };
-  }): Promise<{ reponse: string; success: boolean; error?: string }> {
+  }): Promise<{
+    reponse: string;
+    success: boolean;
+    error?: string;
+    data?: any;
+  }> {
     try {
-      const status = enrichedRequest.metadata?.filters?.status || 'accepted';
-      const timeframe =
-        enrichedRequest.metadata?.filters?.timeframe || 'current_month';
+      // Extraction des métadonnées pour le filtrage
+      const status = enrichedRequest.metadata?.filters?.status || null;
+      const timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
 
-      // Logique similaire à handleQuotationsFinancialQuery
-      // Construction des périodes
-      const now = new Date();
-      let startDate: Date;
-      let endDate: Date;
+      // Définir la période en fonction du timeframe
+      let periodStart = '';
+      let periodEnd = '';
+      let periodDescription = '';
 
-      // Déterminer la période basée sur timeframe
       switch (timeframe) {
         case 'current_month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          periodStart = "DATE_TRUNC('month', CURRENT_DATE)";
+          periodEnd =
+            "DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day'";
+          periodDescription = 'du mois actuel';
           break;
         case 'next_month':
-          startDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+          periodStart =
+            "DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'";
+          periodEnd =
+            "DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '2 month' - INTERVAL '1 day'";
+          periodDescription = 'du mois prochain';
           break;
         case 'current_year':
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = new Date(now.getFullYear(), 11, 31);
+          periodStart = "DATE_TRUNC('year', CURRENT_DATE)";
+          periodEnd =
+            "DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '1 year' - INTERVAL '1 day'";
+          periodDescription = "de l'année courante";
           break;
         default:
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-          break;
+          // Par défaut, on prend les 3 derniers mois
+          periodStart = "CURRENT_DATE - INTERVAL '3 month'";
+          periodEnd = 'CURRENT_DATE';
+          periodDescription = 'des 3 derniers mois';
       }
 
-      // Ajouter un await pour résoudre l'erreur "Async method has no await expression"
-      // Utilisez try/catch pour gérer les erreurs potentielles de l'await
-      try {
-        // Obtenir la source de données de manière sécurisée
-        const db = await this.databaseService.getDataSource();
-
-        // Utiliser db pour une requête afin d'éviter l'erreur "db is assigned a value but never used"
-        const invoicesCount = await db.query(
-          `SELECT COUNT(*) FROM invoices WHERE status = $1 AND created_at BETWEEN $2 AND $3`,
-          [status, startDate, endDate],
-        );
-
-        // Utiliser invoicesCount pour générer un message plus précis
-        return {
-          success: true,
-          reponse: `Voici les informations sur les factures ${status} pour la période ${timeframe} (du ${startDate.toLocaleDateString('fr-FR')} au ${endDate.toLocaleDateString('fr-FR')}).`,
-        };
-      } catch (dbError) {
-        // Gestion sécurisée de l'erreur
-        this.logger.error(
-          `Erreur de base de données: ${dbError instanceof Error ? dbError.message : 'Erreur inconnue'}`,
-        );
-
-        // Retourner un message d'erreur générique
-        return {
-          success: true,
-          reponse: `Voici les informations sur les factures ${status} pour la période ${timeframe} (du ${startDate.toLocaleDateString('fr-FR')} au ${endDate.toLocaleDateString('fr-FR')}). Remarque: Les données détaillées ne sont pas disponibles pour le moment.`,
-        };
+      // Construire la condition de filtrage par statut
+      let statusCondition = '';
+      if (status) {
+        statusCondition = `AND status = '${status}'`;
       }
-    } catch (error) {
-      // Type guard sur error pour éviter les problèmes de typage
-      const errorMessage =
-        error instanceof Error ? error.message : 'Erreur inconnue';
-      this.logger.error(
-        `Erreur lors de la récupération des données des factures: ${errorMessage}`,
+
+      // Requête pour obtenir la somme des factures selon les critères
+      const sumQuery = `
+        SELECT 
+          COALESCE(SUM(total_amount), 0) as total,
+          COUNT(*) as count 
+        FROM invoices 
+        WHERE issue_date BETWEEN ${periodStart} AND ${periodEnd}
+        ${statusCondition}
+      `;
+
+      interface InvoiceTotal {
+        total: string;
+        count: string;
+      }
+
+      // Exécuter la requête avec cache si pas de statut spécifique
+      const useCache = !status && timeframe === 'current_month';
+      const result = await this.databaseService.executeQuery<InvoiceTotal[]>(
+        sumQuery,
+        [],
+        useCache,
       );
+
+      let responseMessage = '';
+
+      if (result && result.length > 0) {
+        const total = parseFloat(result[0].total).toLocaleString('fr-FR', {
+          style: 'currency',
+          currency: 'EUR',
+        });
+        const count = parseInt(result[0].count);
+
+        const statusText = status ? `avec le statut "${status}"` : '';
+
+        if (count > 0) {
+          responseMessage = `Le montant total des factures ${statusText} ${periodDescription} est de ${total} (${count} facture${count > 1 ? 's' : ''}).`;
+
+          // Si on a un petit nombre de factures, récupérer les détails
+          if (count <= 10) {
+            const detailsQuery = `
+              SELECT 
+                id, 
+                reference,
+                total_amount as total,
+                issue_date,
+                due_date,
+                status,
+                (SELECT name FROM clients WHERE id = invoices.client_id) as client_name
+              FROM invoices 
+              WHERE issue_date BETWEEN ${periodStart} AND ${periodEnd}
+              ${statusCondition}
+              ORDER BY issue_date DESC
+            `;
+
+            interface InvoiceDetail {
+              id: number;
+              reference: string;
+              total: number;
+              issue_date: string;
+              due_date: string;
+              status: string;
+              client_name: string;
+            }
+
+            const details = await this.databaseService.executeQuery<
+              InvoiceDetail[]
+            >(detailsQuery, []);
+
+            if (details && details.length > 0) {
+              responseMessage += '\n\nVoici le détail :\n';
+
+              details.forEach((invoice, index) => {
+                const issueDate = new Date(
+                  invoice.issue_date,
+                ).toLocaleDateString('fr-FR');
+                const dueDate = new Date(invoice.due_date).toLocaleDateString(
+                  'fr-FR',
+                );
+                const amount = parseFloat(
+                  invoice.total.toString(),
+                ).toLocaleString('fr-FR', {
+                  style: 'currency',
+                  currency: 'EUR',
+                });
+
+                responseMessage += `\n${index + 1}. Facture ${invoice.reference} - ${amount}`;
+                responseMessage += `\n   Client: ${invoice.client_name}`;
+                responseMessage += `\n   Émise le: ${issueDate}`;
+                responseMessage += `\n   Échéance: ${dueDate}`;
+                responseMessage += `\n   Statut: ${invoice.status}`;
+                responseMessage += '\n';
+              });
+            }
+          }
+        } else {
+          responseMessage = `Aucune facture ${statusText} trouvée ${periodDescription}.`;
+        }
+      } else {
+        responseMessage =
+          'Aucune donnée de facture disponible pour la période demandée.';
+      }
+
+      return {
+        success: true,
+        reponse: responseMessage,
+        data: {
+          total: result[0]?.total || 0,
+          count: result[0]?.count || 0,
+          period: {
+            timeframe,
+            description: periodDescription,
+          },
+        },
+      };
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      this.logger.error(
+        `Erreur lors de la récupération des factures: ${errorMessage}`,
+      );
+
       return {
         success: false,
-        reponse: `Désolé, une erreur est survenue lors de la récupération des données des factures: ${errorMessage}`,
+        reponse: `Désolé, une erreur est survenue lors de la récupération des données de factures: ${errorMessage}`,
         error: errorMessage,
       };
     }
