@@ -13,7 +13,6 @@ import { SearchService } from '../search/search.service';
 import { SyncService } from '../search/sync.service';
 // Importer les variables de prompt et les requêtes SQL
 import * as PROMPTS from '../var/prompt';
-import { QUERIES } from '../var/index.query';
 
 interface SearchResult {
   id: number;
@@ -38,13 +37,21 @@ interface SearchResponse {
 @Controller('database')
 export class DatabaseController {
   private readonly logger = new Logger(DatabaseController.name);
+  private QUERIES: any;
 
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly dbMetadataService: DatabaseMetadataService,
     private readonly searchService: SearchService,
     private readonly syncService: SyncService,
-  ) {}
+  ) {
+    // Initialiser QUERIES immédiatement
+    this.initializeQueries();
+  }
+
+  private async initializeQueries() {
+    this.QUERIES = await import('../var/index.query');
+  }
 
   @Get('health')
   health() {
@@ -100,9 +107,8 @@ export class DatabaseController {
     );
 
     try {
-      // Importer les variables de prompt et les requêtes SQL
+      // Importer les variables de prompt
       const PROMPTS = await import('../var/prompt');
-      const QUERIES = await import('../var/querys/query_ALL');
 
       // Récupérer les métadonnées de la base de données
       const dbMetadata = {
@@ -154,9 +160,9 @@ export class DatabaseController {
             response += PROMPTS.PROMPT_EXAMPLES.USER_ASSIGNMENTS + '\n';
             response += PROMPTS.PROMPT_EXAMPLES.PROJECT_PROGRESS + '\n';
           }
-        } catch (error) {
+        } catch (error: unknown) {
           response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
-          response += `Je n'ai pas pu exécuter la requête: ${error.message}\n\n`;
+          response += `Je n'ai pas pu exécuter la requête: ${error instanceof Error ? error.message : String(error)}\n\n`;
           response += `Voici quelques exemples de requêtes que vous pouvez essayer:\n`;
           response += PROMPTS.PROMPT_EXAMPLES.FIND_PROJECT + '\n';
           response += PROMPTS.PROMPT_EXAMPLES.TASKS_THIS_MONTH + '\n';
@@ -185,8 +191,8 @@ export class DatabaseController {
               );
               response += `Voici un aperçu des données de la table ${table.name}:\n`;
               response += `${JSON.stringify(data, null, 2)}\n\n`;
-            } catch (error: any) {
-              response += `Je n'ai pas pu récupérer les données de la table ${table.name}: ${error.message}\n\n`;
+            } catch (error: unknown) {
+              response += `Je n'ai pas pu récupérer les données de la table ${table.name}: ${error instanceof Error ? error.message : String(error)}\n\n`;
             }
           }
         } else {
@@ -992,32 +998,32 @@ export class DatabaseController {
 
     switch (intent) {
       case 'ALL_PROJECTS':
-        sqlQuery = QUERIES.projects.GET_ALL;
+        sqlQuery = this.QUERIES.projects.GET_ALL;
         break;
 
       case 'PROJECTS_TOMORROW':
-        sqlQuery = QUERIES.projects.GET_TOMORROW;
+        sqlQuery = this.QUERIES.projects.GET_TOMORROW;
         break;
 
       case 'PROJECTS_TODAY':
-        sqlQuery = QUERIES.projects.GET_TODAY;
+        sqlQuery = this.QUERIES.projects.GET_TODAY;
         break;
 
       case 'PROJECTS_BY_CLIENT':
         // Extraction de l'ID du client ou recherche par nom
         if (params.clientId) {
-          sqlQuery = QUERIES.projects.GET_BY_CLIENT;
+          sqlQuery = this.QUERIES.projects.GET_BY_CLIENT;
           sqlParams = [params.clientId];
         } else if (params.clientName) {
           // Recherche d'abord le client par son nom
-          const clientSearchQuery = QUERIES.clients.SEARCH_BY_NAME;
+          const clientSearchQuery = this.QUERIES.clients.SEARCH_BY_NAME;
           const clients = await this.databaseService.executeQuery(
             clientSearchQuery,
             [`%${params.clientName}%`],
           );
 
           if (clients && clients.length > 0) {
-            sqlQuery = QUERIES.projects.GET_BY_CLIENT;
+            sqlQuery = this.QUERIES.projects.GET_BY_CLIENT;
             sqlParams = [clients[0].id];
           } else {
             throw new Error(`Client "${params.clientName}" non trouvé`);
@@ -1028,27 +1034,27 @@ export class DatabaseController {
         break;
 
       case 'ACTIVE_PROJECTS':
-        sqlQuery = QUERIES.projects.GET_ACTIVE;
+        sqlQuery = this.QUERIES.projects.GET_ACTIVE;
         break;
 
       case 'COMPLETED_PROJECTS':
-        sqlQuery = QUERIES.projects.GET_COMPLETED;
+        sqlQuery = this.QUERIES.projects.GET_COMPLETED;
         break;
 
       case 'PROJECT_PROGRESS':
         if (params.projectId) {
-          sqlQuery = QUERIES.projects.CALCULATE_PROGRESS;
+          sqlQuery = this.QUERIES.projects.CALCULATE_PROGRESS;
           sqlParams = [params.projectId];
         } else if (params.projectName) {
           // Recherche d'abord le projet par son nom
-          const projectSearchQuery = QUERIES.projects.SEARCH_BY_NAME;
+          const projectSearchQuery = this.QUERIES.projects.SEARCH_BY_NAME;
           const projects = await this.databaseService.executeQuery(
             projectSearchQuery,
             [`%${params.projectName}%`],
           );
 
           if (projects && projects.length > 0) {
-            sqlQuery = QUERIES.projects.CALCULATE_PROGRESS;
+            sqlQuery = this.QUERIES.projects.CALCULATE_PROGRESS;
             sqlParams = [projects[0].id];
           } else {
             throw new Error(`Projet "${params.projectName}" non trouvé`);
@@ -1059,11 +1065,11 @@ export class DatabaseController {
         break;
 
       case 'OVERDUE_TASKS':
-        sqlQuery = QUERIES.tasks.GET_OVERDUE;
+        sqlQuery = this.QUERIES.tasks.GET_OVERDUE;
         break;
 
       case 'TASKS_THIS_MONTH':
-        sqlQuery = QUERIES.tasks.GET_UPCOMING;
+        sqlQuery = this.QUERIES.tasks.GET_UPCOMING;
         sqlParams = [
           PROMPTS.DATE_UTILS.getFirstDayOfCurrentMonth(),
           PROMPTS.DATE_UTILS.getLastDayOfCurrentMonth(),
@@ -1072,18 +1078,18 @@ export class DatabaseController {
 
       case 'TASKS_BY_USER':
         if (params.userId) {
-          sqlQuery = QUERIES.tasks.GET_BY_USER;
+          sqlQuery = this.QUERIES.tasks.GET_BY_USER;
           sqlParams = [params.userId];
         } else if (params.userName) {
           // Recherche d'abord l'utilisateur par son nom
-          const userSearchQuery = QUERIES.users.SEARCH_BY_NAME;
+          const userSearchQuery = this.QUERIES.users.SEARCH_BY_NAME;
           const users = await this.databaseService.executeQuery(
             userSearchQuery,
             [`%${params.userName}%`],
           );
 
           if (users && users.length > 0) {
-            sqlQuery = QUERIES.tasks.GET_BY_USER;
+            sqlQuery = this.QUERIES.tasks.GET_BY_USER;
             sqlParams = [users[0].id];
           } else {
             throw new Error(`Utilisateur "${params.userName}" non trouvé`);
@@ -1095,18 +1101,18 @@ export class DatabaseController {
 
       case 'USER_WORKLOAD':
         if (params.userId) {
-          sqlQuery = QUERIES.users.GET_WORKLOAD;
+          sqlQuery = this.QUERIES.users.GET_WORKLOAD;
           sqlParams = [params.userId];
         } else if (params.userName) {
           // Recherche d'abord l'utilisateur par son nom
-          const userSearchQuery = QUERIES.users.SEARCH_BY_NAME;
+          const userSearchQuery = this.QUERIES.users.SEARCH_BY_NAME;
           const users = await this.databaseService.executeQuery(
             userSearchQuery,
             [`%${params.userName}%`],
           );
 
           if (users && users.length > 0) {
-            sqlQuery = QUERIES.users.GET_WORKLOAD;
+            sqlQuery = this.QUERIES.users.GET_WORKLOAD;
             sqlParams = [users[0].id];
           } else {
             throw new Error(`Utilisateur "${params.userName}" non trouvé`);
@@ -1117,12 +1123,12 @@ export class DatabaseController {
         break;
 
       case 'PROJECT_PROGRESS_REPORT':
-        sqlQuery = QUERIES.reports.PROJECT_PROGRESS_REPORT;
+        sqlQuery = this.QUERIES.reports.PROJECT_PROGRESS_REPORT;
         break;
 
       case 'TASKS_BY_STATUS':
         if (params.status) {
-          sqlQuery = QUERIES.tasks.GET_BY_STATUS;
+          sqlQuery = this.QUERIES.tasks.GET_BY_STATUS;
           sqlParams = [params.status];
         } else {
           throw new Error('Statut non spécifié');
@@ -1130,12 +1136,12 @@ export class DatabaseController {
         break;
 
       case 'RECENT_TASKS':
-        sqlQuery = QUERIES.tasks.GET_RECENT;
+        sqlQuery = this.QUERIES.tasks.GET_RECENT;
         break;
 
       case 'TASK_BY_ID':
         if (params.taskId) {
-          sqlQuery = QUERIES.tasks.GET_BY_ID;
+          sqlQuery = this.QUERIES.tasks.GET_BY_ID;
           sqlParams = [params.taskId];
         } else {
           throw new Error('ID de la tâche non spécifié');
@@ -1144,7 +1150,7 @@ export class DatabaseController {
 
       case 'SEARCH_TASKS':
         if (params.keyword) {
-          sqlQuery = QUERIES.tasks.SEARCH_BY_KEYWORD;
+          sqlQuery = this.QUERIES.tasks.SEARCH_BY_KEYWORD;
           sqlParams = [`%${params.keyword}%`];
         } else {
           throw new Error('Mot-clé de recherche non spécifié');
@@ -1152,40 +1158,40 @@ export class DatabaseController {
         break;
 
       case 'LIST_TASKS':
-        sqlQuery = QUERIES.tasks.GET_ALL;
+        sqlQuery = this.QUERIES.tasks.GET_ALL;
         break;
 
       case 'USER_PERFORMANCE':
-        sqlQuery = QUERIES.reports.STAFF_PERFORMANCE_REPORT;
+        sqlQuery = this.QUERIES.reports.STAFF_PERFORMANCE_REPORT;
         break;
 
       case 'CLIENT_PROFITABILITY':
-        sqlQuery = QUERIES.reports.CLIENT_PROFITABILITY_REPORT;
+        sqlQuery = this.QUERIES.reports.CLIENT_PROFITABILITY_REPORT;
         break;
 
       case 'QUOTATION_PERFORMANCE':
-        sqlQuery = QUERIES.reports.QUOTATION_PERFORMANCE_REPORT;
+        sqlQuery = this.QUERIES.reports.QUOTATION_PERFORMANCE_REPORT;
         break;
 
       case 'AI_ACTIVITY':
-        sqlQuery = QUERIES.ai.GET_ACTIVITY;
+        sqlQuery = this.QUERIES.ai.GET_ACTIVITY;
         break;
 
       case 'FINANCIAL_SUMMARY':
-        sqlQuery = QUERIES.financial.FINANCIAL_SUMMARY;
+        sqlQuery = this.QUERIES.financial.FINANCIAL_SUMMARY;
         break;
 
       case 'SUPPLIER_PERFORMANCE':
-        sqlQuery = QUERIES.suppliers.SUPPLIER_PERFORMANCE_REPORT;
+        sqlQuery = this.QUERIES.suppliers.SUPPLIER_PERFORMANCE_REPORT;
         break;
 
       case 'LIST_SUPPLIERS':
-        sqlQuery = QUERIES.suppliers.GET_ALL;
+        sqlQuery = this.QUERIES.suppliers.GET_ALL;
         break;
 
       case 'SUPPLIER_BY_ID':
         if (params.supplierId) {
-          sqlQuery = QUERIES.suppliers.GET_BY_ID;
+          sqlQuery = this.QUERIES.suppliers.GET_BY_ID;
           sqlParams = [params.supplierId];
         } else {
           throw new Error('ID du fournisseur non spécifié');
@@ -1194,7 +1200,7 @@ export class DatabaseController {
 
       case 'SEARCH_SUPPLIERS':
         if (params.supplierName) {
-          sqlQuery = QUERIES.suppliers.SEARCH;
+          sqlQuery = this.QUERIES.suppliers.SEARCH;
           sqlParams = [`%${params.supplierName}%`];
         } else {
           throw new Error('Nom du fournisseur non spécifié');
@@ -1203,18 +1209,18 @@ export class DatabaseController {
 
       case 'SUPPLIER_PRODUCTS':
         if (params.supplierId) {
-          sqlQuery = QUERIES.suppliers.GET_SUPPLIER_PRODUCTS;
+          sqlQuery = this.QUERIES.suppliers.GET_SUPPLIER_PRODUCTS;
           sqlParams = [params.supplierId];
         } else if (params.supplierName) {
           // Recherche d'abord le fournisseur par son nom
-          const supplierSearchQuery = QUERIES.suppliers.SEARCH;
+          const supplierSearchQuery = this.QUERIES.suppliers.SEARCH;
           const suppliers = await this.databaseService.executeQuery(
             supplierSearchQuery,
             [`%${params.supplierName}%`],
           );
 
           if (suppliers && suppliers.length > 0) {
-            sqlQuery = QUERIES.suppliers.GET_SUPPLIER_PRODUCTS;
+            sqlQuery = this.QUERIES.suppliers.GET_SUPPLIER_PRODUCTS;
             sqlParams = [suppliers[0].id];
           } else {
             throw new Error(`Fournisseur "${params.supplierName}" non trouvé`);
@@ -1226,18 +1232,18 @@ export class DatabaseController {
 
       case 'SUPPLIER_ORDERS':
         if (params.supplierId) {
-          sqlQuery = QUERIES.suppliers.GET_SUPPLIER_ORDERS;
+          sqlQuery = this.QUERIES.suppliers.GET_SUPPLIER_ORDERS;
           sqlParams = [params.supplierId];
         } else if (params.supplierName) {
           // Recherche d'abord le fournisseur par son nom
-          const supplierSearchQuery = QUERIES.suppliers.SEARCH;
+          const supplierSearchQuery = this.QUERIES.suppliers.SEARCH;
           const suppliers = await this.databaseService.executeQuery(
             supplierSearchQuery,
             [`%${params.supplierName}%`],
           );
 
           if (suppliers && suppliers.length > 0) {
-            sqlQuery = QUERIES.suppliers.GET_SUPPLIER_ORDERS;
+            sqlQuery = this.QUERIES.suppliers.GET_SUPPLIER_ORDERS;
             sqlParams = [suppliers[0].id];
           } else {
             throw new Error(`Fournisseur "${params.supplierName}" non trouvé`);
@@ -1248,77 +1254,77 @@ export class DatabaseController {
         break;
 
       case 'TOP_SUPPLIERS':
-        sqlQuery = QUERIES.suppliers.GET_TOP_SUPPLIERS;
+        sqlQuery = this.QUERIES.suppliers.GET_TOP_SUPPLIERS;
         sqlParams = [10]; // Récupérer les 10 meilleurs fournisseurs par défaut
         break;
 
       case 'EQUIPMENT_STATUS':
-        sqlQuery = QUERIES.equipment.EQUIPMENT_STATUS_REPORT;
+        sqlQuery = this.QUERIES.equipment.EQUIPMENT_STATUS_REPORT;
         break;
 
       case 'DASHBOARD_SUMMARY':
-        sqlQuery = QUERIES.dashboard.DASHBOARD_SUMMARY;
+        sqlQuery = this.QUERIES.dashboard.DASHBOARD_SUMMARY;
         break;
 
       case 'GENERAL_REPORT':
-        sqlQuery = QUERIES.dashboard.DASHBOARD_SUMMARY;
+        sqlQuery = this.QUERIES.dashboard.DASHBOARD_SUMMARY;
         break;
 
       case 'NOTES_LIST':
-        sqlQuery = QUERIES.notes.GET_ALL;
+        sqlQuery = this.QUERIES.notes.GET_ALL;
         break;
 
       case 'TAGS_LIST':
-        sqlQuery = QUERIES.tags.GET_ALL;
+        sqlQuery = this.QUERIES.tags.GET_ALL;
         break;
 
       case 'DOCUMENTS_LIST':
-        sqlQuery = QUERIES.documents.GET_ALL;
+        sqlQuery = this.QUERIES.documents.GET_ALL;
         break;
 
       case 'ACTIVITY_LOG':
-        sqlQuery = QUERIES.activity.GET_RECENT;
+        sqlQuery = this.QUERIES.activity.GET_RECENT;
         break;
 
       case 'SETTINGS_LIST':
-        sqlQuery = QUERIES.settings.GET_ALL;
+        sqlQuery = this.QUERIES.settings.GET_ALL;
         break;
 
       case 'COMPANY_SETTINGS':
-        sqlQuery = QUERIES.settings.GET_COMPANY_INFO;
+        sqlQuery = this.QUERIES.settings.GET_COMPANY_INFO;
         break;
 
       case 'AI_SETTINGS':
-        sqlQuery = QUERIES.settings.GET_AI_SETTINGS;
+        sqlQuery = this.QUERIES.settings.GET_AI_SETTINGS;
         break;
 
       case 'INVOICE_SETTINGS':
-        sqlQuery = QUERIES.settings.GET_INVOICE_SETTINGS;
+        sqlQuery = this.QUERIES.settings.GET_INVOICE_SETTINGS;
         break;
 
       case 'QUOTATION_SETTINGS':
-        sqlQuery = QUERIES.settings.GET_QUOTATION_SETTINGS;
+        sqlQuery = this.QUERIES.settings.GET_QUOTATION_SETTINGS;
         break;
 
       case 'NOTIFICATION_SETTINGS':
-        sqlQuery = QUERIES.settings.GET_NOTIFICATION_SETTINGS;
+        sqlQuery = this.QUERIES.settings.GET_NOTIFICATION_SETTINGS;
         break;
 
       case 'SECURITY_SETTINGS':
-        sqlQuery = QUERIES.settings.GET_SECURITY_SETTINGS;
+        sqlQuery = this.QUERIES.settings.GET_SECURITY_SETTINGS;
         break;
 
       case 'SYSTEM_VERSION':
-        sqlQuery = QUERIES.settings.GET_SYSTEM_VERSION;
+        sqlQuery = this.QUERIES.settings.GET_SYSTEM_VERSION;
         break;
 
       case 'LIST_USERS':
-        sqlQuery = QUERIES.users.GET_ALL;
+        sqlQuery = this.QUERIES.users.GET_ALL;
         break;
 
       case 'USER_BY_NAME':
         if (params.userName) {
-          sqlQuery = QUERIES.users.SEARCH_BY_NAME;
+          sqlQuery = this.QUERIES.users.SEARCH_BY_NAME;
           sqlParams = [`%${params.userName}%`];
         } else {
           throw new Error("Nom de l'utilisateur non spécifié");
@@ -1327,7 +1333,7 @@ export class DatabaseController {
 
       case 'USER_BY_ID':
         if (params.userId) {
-          sqlQuery = QUERIES.users.GET_BY_ID;
+          sqlQuery = this.QUERIES.users.GET_BY_ID;
           sqlParams = [params.userId];
         } else {
           throw new Error("ID de l'utilisateur non spécifié");
@@ -1336,7 +1342,7 @@ export class DatabaseController {
 
       case 'USERS_BY_ROLE':
         if (params.role) {
-          sqlQuery = QUERIES.users.GET_BY_ROLE;
+          sqlQuery = this.QUERIES.users.GET_BY_ROLE;
           sqlParams = [params.role];
         } else {
           throw new Error('Rôle non spécifié');
@@ -1345,18 +1351,18 @@ export class DatabaseController {
 
       case 'QUOTATIONS_BY_PROJECT':
         if (params.projectId) {
-          sqlQuery = QUERIES.quotations.GET_BY_PROJECT;
+          sqlQuery = this.QUERIES.quotations.GET_BY_PROJECT;
           sqlParams = [params.projectId];
         } else if (params.projectName) {
           // Recherche d'abord le projet par son nom
-          const projectSearchQuery = QUERIES.projects.SEARCH_BY_NAME;
+          const projectSearchQuery = this.QUERIES.projects.SEARCH_BY_NAME;
           const projects = await this.databaseService.executeQuery(
             projectSearchQuery,
             [`%${params.projectName}%`],
           );
 
           if (projects && projects.length > 0) {
-            sqlQuery = QUERIES.quotations.GET_BY_PROJECT;
+            sqlQuery = this.QUERIES.quotations.GET_BY_PROJECT;
             sqlParams = [projects[0].id];
           } else {
             throw new Error(`Projet "${params.projectName}" non trouvé`);
@@ -1368,18 +1374,18 @@ export class DatabaseController {
 
       case 'QUOTATIONS_BY_CLIENT':
         if (params.clientId) {
-          sqlQuery = QUERIES.quotations.GET_BY_CLIENT;
+          sqlQuery = this.QUERIES.quotations.GET_BY_CLIENT;
           sqlParams = [params.clientId];
         } else if (params.clientName) {
           // Recherche d'abord le client par son nom
-          const clientSearchQuery = QUERIES.clients.SEARCH_BY_NAME;
+          const clientSearchQuery = this.QUERIES.clients.SEARCH_BY_NAME;
           const clients = await this.databaseService.executeQuery(
             clientSearchQuery,
             [`%${params.clientName}%`],
           );
 
           if (clients && clients.length > 0) {
-            sqlQuery = QUERIES.quotations.GET_BY_CLIENT;
+            sqlQuery = this.QUERIES.quotations.GET_BY_CLIENT;
             sqlParams = [clients[0].id];
           } else {
             throw new Error(`Client "${params.clientName}" non trouvé`);
@@ -1390,23 +1396,23 @@ export class DatabaseController {
         break;
 
       case 'ACCEPTED_QUOTATIONS':
-        sqlQuery = QUERIES.quotations.GET_ACCEPTED;
+        sqlQuery = this.QUERIES.quotations.GET_ACCEPTED;
         break;
 
       case 'REJECTED_QUOTATIONS':
-        sqlQuery = QUERIES.quotations.GET_REJECTED;
+        sqlQuery = this.QUERIES.quotations.GET_REJECTED;
         break;
 
       case 'PENDING_QUOTATIONS':
-        sqlQuery = QUERIES.quotations.GET_PENDING;
+        sqlQuery = this.QUERIES.quotations.GET_PENDING;
         break;
 
       case 'EXPIRED_QUOTATIONS':
-        sqlQuery = QUERIES.quotations.GET_EXPIRED;
+        sqlQuery = this.QUERIES.quotations.GET_EXPIRED;
         break;
 
       case 'QUOTATION_CONVERSION_STATS':
-        sqlQuery = QUERIES.quotations.CONVERSION_STATS;
+        sqlQuery = this.QUERIES.quotations.CONVERSION_STATS;
         break;
 
       case 'QUOTATION_PRODUCTS':
@@ -1422,7 +1428,7 @@ export class DatabaseController {
             `;
             sqlParams = [params.quotationId, `%${params.category}%`];
           } else {
-            sqlQuery = QUERIES.quotations.GET_PRODUCTS;
+            sqlQuery = this.QUERIES.quotations.GET_PRODUCTS;
             sqlParams = [params.quotationId];
           }
         } else {
@@ -1432,7 +1438,7 @@ export class DatabaseController {
 
       case 'SEARCH_QUOTATIONS':
         if (params.keyword) {
-          sqlQuery = QUERIES.quotations.SEARCH;
+          sqlQuery = this.QUERIES.quotations.SEARCH;
           sqlParams = [`%${params.keyword}%`];
         } else {
           throw new Error('Mot-clé de recherche non spécifié');
@@ -1441,7 +1447,7 @@ export class DatabaseController {
 
       case 'QUOTATION_BY_ID':
         if (params.quotationId) {
-          sqlQuery = QUERIES.quotations.GET_BY_ID;
+          sqlQuery = this.QUERIES.quotations.GET_BY_ID;
           sqlParams = [params.quotationId];
         } else {
           throw new Error('ID de la citation non spécifié');
@@ -1449,7 +1455,7 @@ export class DatabaseController {
         break;
 
       case 'LIST_QUOTATIONS':
-        sqlQuery = QUERIES.quotations.GET_ALL;
+        sqlQuery = this.QUERIES.quotations.GET_ALL;
         break;
 
       default:
