@@ -942,4 +942,169 @@ export class DatabaseController {
       };
     }
   }
+
+  /**
+   * Traite les requêtes enrichies avec des métadonnées provenant de l'agent d'analyse
+   * Cet endpoint est spécialement conçu pour fonctionner avec les métadonnées enrichies
+   */
+  @Post('query')
+  async processEnrichedQuery(
+    @Body()
+    enrichedRequest: {
+      question: string;
+      userId?: string;
+      metadata?: {
+        primaryTable?: string;
+        isFinancialQuery?: boolean;
+        aggregationType?: string | null;
+        filters?: {
+          status?: string | null;
+          timeframe?: string | null;
+        };
+        analysis?: {
+          intention?: string;
+          entites?: string[];
+          contexte?: string;
+        };
+        noTableIdentified?: boolean;
+        possibleTables?: string[];
+      };
+    },
+  ) {
+    this.logger.log(
+      `Traitement de la requête enrichie: ${enrichedRequest.question}`,
+    );
+
+    if (enrichedRequest.metadata) {
+      this.logger.log(
+        `Métadonnées reçues: ${JSON.stringify(enrichedRequest.metadata)}`,
+      );
+    }
+
+    try {
+      // Si la table principale est quotations et c'est une requête financière
+      if (
+        enrichedRequest.metadata?.primaryTable === 'quotations' &&
+        enrichedRequest.metadata?.isFinancialQuery
+      ) {
+        // Récupérer le statut et la période depuis les métadonnées
+        const status = enrichedRequest.metadata.filters?.status || null;
+        const timeframe = enrichedRequest.metadata.filters?.timeframe || null;
+
+        this.logger.log(
+          `Requête devis identifiée - Status: ${status}, Période: ${timeframe}`,
+        );
+
+        // Définir les dates de début et de fin en fonction de la période
+        let startDate = new Date();
+        let endDate = new Date();
+
+        // Configurer les dates en fonction de la période
+        if (timeframe === 'current_month') {
+          // Mois actuel
+          startDate = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth(),
+            1,
+          );
+          endDate = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth() + 1,
+            0,
+          );
+        } else if (timeframe === 'next_month') {
+          // Mois prochain
+          startDate = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth() + 1,
+            1,
+          );
+          endDate = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth() + 1,
+            0,
+          );
+        } else if (timeframe === 'current_year') {
+          // Année actuelle
+          startDate = new Date(startDate.getFullYear(), 0, 1);
+          endDate = new Date(startDate.getFullYear(), 11, 31);
+        } else if (timeframe === 'next_year') {
+          // Année prochaine
+          startDate = new Date(startDate.getFullYear() + 1, 0, 1);
+          endDate = new Date(startDate.getFullYear() + 1, 11, 31);
+        } else {
+          // Par défaut, utiliser le mois actuel
+          startDate = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth(),
+            1,
+          );
+          endDate = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth() + 1,
+            0,
+          );
+        }
+
+        // Convertir les dates en format ISO pour SQL
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+
+        this.logger.log(`Période calculée: ${startDateStr} à ${endDateStr}`);
+
+        // Exécuter la requête avec le type approprié
+        interface QuotationTotal {
+          total_amount: number;
+        }
+
+        const result = await this.databaseService.executeQuery<
+          QuotationTotal[]
+        >(this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL, [
+          status,
+          startDateStr,
+          endDateStr,
+        ]);
+
+        const totalAmount =
+          result && result.length > 0 ? result[0].total_amount : 0;
+
+        // Formater un message de réponse selon la période et le statut
+        let periodDesc = '';
+        if (timeframe === 'current_month') periodDesc = 'du mois actuel';
+        else if (timeframe === 'next_month') periodDesc = 'du mois prochain';
+        else if (timeframe === 'current_year')
+          periodDesc = "de l'année en cours";
+        else if (timeframe === 'next_year') periodDesc = "de l'année prochaine";
+
+        const statusDesc = status || 'tous statuts confondus';
+
+        let responseMessage = '';
+        if (totalAmount > 0) {
+          responseMessage = `Le montant total des devis ${statusDesc} ${periodDesc} est de ${totalAmount.toLocaleString('fr-FR')} €.`;
+        } else {
+          responseMessage = `Aucun devis ${statusDesc} n'a été trouvé ${periodDesc}.`;
+        }
+
+        return {
+          reponse: responseMessage,
+        };
+      }
+
+      // Traiter d'autres types de requêtes ici...
+
+      // Si aucun traitement spécifique n'a été effectué, utiliser le traitement standard
+      return this.processRequest({
+        question: enrichedRequest.question,
+        userId: enrichedRequest.userId || 'anonymous',
+        analysedData: enrichedRequest.metadata || {},
+      });
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors du traitement de la requête enrichie: ${getErrorMessage(error)}`,
+      );
+      return {
+        reponse: `Désolé, une erreur est survenue lors du traitement de votre demande: ${getErrorMessage(error)}`,
+      };
+    }
+  }
 }

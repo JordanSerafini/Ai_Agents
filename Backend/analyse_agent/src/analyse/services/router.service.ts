@@ -47,10 +47,10 @@ export class RouterService {
     this.logger.log(`Routage de la requête vers l'agent: ${agentType}`);
 
     try {
-      // Enrichir la requête avant de la transmettre à l'agent de base de données
+      // Enrichir la requête si nécessaire
       let enrichedRequest = request;
       if (agentType === AgentType.API) {
-        enrichedRequest = await this.enrichRequestForDatabaseAgent(
+        enrichedRequest = this.enrichRequestForDatabaseAgent(
           request,
           analysedData,
         );
@@ -58,34 +58,23 @@ export class RouterService {
 
       switch (agentType) {
         case AgentType.API:
-          return await this.routeToDatabaseAgent(enrichedRequest, analysedData);
-
+          return this.routeToDatabaseAgent(enrichedRequest, analysedData);
         case AgentType.WORKFLOW:
-          return await this.routeToWorkflowAgent(enrichedRequest, analysedData);
-
-        case AgentType.AUTRE:
-          // Pour l'instant, on renvoie un message indiquant que cet agent n'est pas encore implémenté
-          return {
-            reponse:
-              "Désolé, cet agent n'est pas encore implémenté. Votre demande a été classifiée comme nécessitant un traitement spécial.",
-          };
-
+          return this.routeToWorkflowAgent(enrichedRequest, analysedData);
         default:
-          // Si le type d'agent n'est pas reconnu, on renvoie un message d'erreur
-          this.logger.warn(`Type d'agent non reconnu: ${agentType}`);
           return {
-            reponse:
-              "Désolé, je ne sais pas comment traiter cette demande. Veuillez reformuler ou contacter l'administrateur.",
+            reponse: `Agent ${agentType} non supporté. Veuillez utiliser "API" ou "WORKFLOW".`,
           };
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Erreur inconnue';
       this.logger.error(
-        `Erreur lors du routage vers l'agent ${agentType}: ${errorMessage}`,
+        `Erreur lors du routage de la requête: ${
+          error instanceof Error ? error.message : 'Erreur inconnue'
+        }`,
       );
       return {
-        reponse: `Désolé, une erreur est survenue lors de la communication avec l'agent spécialisé. Détail: ${errorMessage}`,
+        reponse:
+          'Désolé, une erreur est survenue lors du routage de votre requête.',
       };
     }
   }
@@ -99,55 +88,55 @@ export class RouterService {
   ): Promise<RouterResponse> {
     try {
       this.logger.log(
-        `Tentative de routage vers l'agent de base de données: ${this.databaseAgentUrl}`,
+        "Tentative de routage vers l'agent de base de données: " +
+          this.databaseAgentUrl,
       );
 
-      // Vérifier si l'agent de base de données est disponible
-      try {
-        await axios.get(`${this.databaseAgentUrl}/api/database/health`);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Erreur inconnue';
-        this.logger.warn(
-          `L'agent de base de données n'est pas disponible: ${errorMessage}`,
-        );
-        return {
-          reponse:
-            "Désolé, le service de base de données n'est pas disponible actuellement. Votre question nécessite l'accès à des données spécifiques.",
-        };
-      }
-
-      // Préparer la requête pour l'agent de base de données
-      const databaseRequest = {
-        question: request.question,
-        userId: request.userId,
+      // Enrichir la requête avec des métadonnées pour l'agent de base de données
+      const enrichedRequest = this.enrichRequestForDatabaseAgent(
+        request,
         analysedData,
-      };
+      );
 
-      // Envoyer la requête à l'agent de base de données
-      const response = await axios.post<RouterResponse>(
-        `${this.databaseAgentUrl}/api/database/process`,
-        databaseRequest,
+      // Log des métadonnées pour debug
+      this.logger.log(
+        `Métadonnées transmises à l'agent de base de données: ${JSON.stringify(enrichedRequest.metadata || {})}`,
+      );
+
+      const response = await axios.post(
+        `${this.databaseAgentUrl}/database/query`,
+        enrichedRequest,
         {
-          timeout: 30000, // 30 secondes de timeout
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000,
         },
       );
 
-      // Retourner la réponse de l'agent de base de données
+      // Vérification de type pour éviter l'erreur de linter
+      if (response.data && typeof response.data.reponse === 'string') {
+        return {
+          reponse: response.data.reponse,
+        };
+      }
+
       return {
         reponse:
-          response.data.reponse ||
-          "L'agent de base de données a traité votre demande mais n'a pas fourni de réponse.",
+          "L'agent de base de données a traité votre demande mais n'a pas fourni de réponse valide.",
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Erreur inconnue';
       this.logger.error(
-        `Erreur lors de la communication avec l'agent de base de données: ${errorMessage}`,
+        `Erreur lors du routage vers l'agent de base de données: ${
+          error instanceof Error ? error.message : 'Erreur inconnue'
+        }`,
       );
+
+      // Retourner un message d'erreur convivial
       return {
-        reponse:
-          "Désolé, une erreur est survenue lors de la communication avec l'agent de base de données. Veuillez réessayer plus tard.",
+        reponse: `Désolé, je n'ai pas pu obtenir les informations demandées. L'agent de base de données a rencontré un problème: ${
+          error instanceof Error ? error.message : 'Erreur de communication'
+        }`,
       };
     }
   }
@@ -214,10 +203,10 @@ export class RouterService {
     }
   }
 
-  private async enrichRequestForDatabaseAgent(
+  private enrichRequestForDatabaseAgent(
     request: AnalyseRequestDto,
     analyseResult: Record<string, unknown>,
-  ): Promise<AnalyseRequestDto> {
+  ): AnalyseRequestDto {
     // Copier la requête originale
     const enrichedRequest = { ...request };
 
@@ -252,6 +241,11 @@ export class RouterService {
       (questionLower.includes('devis') || questionLower.includes('accepté'))
     ) {
       primaryTable = 'quotations';
+
+      // Ajout d'un log spécifique pour déboguer
+      this.logger.log(
+        `Requête financière sur devis détectée: table 'quotations' sélectionnée`,
+      );
     }
     // Sinon, utiliser le mapping standard
     else {
@@ -274,6 +268,9 @@ export class RouterService {
         questionLower.includes('validé')
       ) {
         primaryTable = 'quotations'; // Par défaut pour les requêtes de devis acceptés/validés
+        this.logger.log(
+          `Requête sur montants acceptés/validés détectée: table 'quotations' sélectionnée par défaut`,
+        );
       } else if (
         questionLower.includes('facture') ||
         questionLower.includes('payé')
@@ -284,25 +281,85 @@ export class RouterService {
 
     // Si une table principale a été identifiée, enrichir la requête
     if (primaryTable) {
+      // Déterminer la période concernée
+      let timeframe: string | null = null;
+      if (questionLower.includes('mois prochain')) {
+        timeframe = 'next_month';
+      } else if (
+        questionLower.includes('mois actuel') ||
+        questionLower.includes('mois courant') ||
+        questionLower.includes('ce mois')
+      ) {
+        timeframe = 'current_month';
+      } else if (questionLower.includes('semaine prochaine')) {
+        timeframe = 'next_week';
+      } else if (
+        questionLower.includes('cette semaine') ||
+        questionLower.includes('semaine actuelle')
+      ) {
+        timeframe = 'current_week';
+      } else if (
+        questionLower.includes('année') ||
+        questionLower.includes('an')
+      ) {
+        if (
+          questionLower.includes('prochain') ||
+          questionLower.includes('prochaine')
+        ) {
+          timeframe = 'next_year';
+        } else {
+          timeframe = 'current_year';
+        }
+      }
+
+      // Déterminer le statut concerné
+      let status: string | null = null;
+      if (questionLower.includes('accepté')) {
+        status = 'accepté';
+      } else if (questionLower.includes('validé')) {
+        status = 'validé';
+      } else if (questionLower.includes('en attente')) {
+        status = 'en_attente';
+      } else if (questionLower.includes('refusé')) {
+        status = 'refusé';
+      }
+
       // Ajouter des informations supplémentaires pour l'agent de base de données
       enrichedRequest.metadata = {
         ...enrichedRequest.metadata,
         primaryTable,
         isFinancialQuery:
-          questionLower.includes('montant') || questionLower.includes('total'),
+          questionLower.includes('montant') ||
+          questionLower.includes('total') ||
+          questionLower.includes('somme'),
+        aggregationType:
+          questionLower.includes('total') || questionLower.includes('somme')
+            ? 'sum'
+            : null,
         filters: {
-          status: questionLower.includes('accepté')
-            ? 'accepté'
-            : questionLower.includes('validé')
-              ? 'validé'
-              : null,
-          timeframe: questionLower.includes('mois prochain')
-            ? 'next_month'
-            : questionLower.includes('mois actuel') ||
-                questionLower.includes('mois courant')
-              ? 'current_month'
-              : null,
+          status,
+          timeframe,
         },
+        // Ajouter l'analyse complète dans les métadonnées pour donner plus de contexte
+        analysis: {
+          intention: analyseResult.intention,
+          entites: analyseResult.entites,
+          contexte: analyseResult.contexte,
+        },
+      };
+
+      // Log pour confirmer les métadonnées générées
+      this.logger.log(
+        `Table identifiée: ${primaryTable}, statut: ${status}, période: ${timeframe}`,
+      );
+    } else {
+      // Aucune table identifiée, on ajoute quand même des métadonnées minimales
+      this.logger.warn('Aucune table spécifique identifiée dans la requête');
+      enrichedRequest.metadata = {
+        ...enrichedRequest.metadata,
+        noTableIdentified: true,
+        possibleTables: ['quotations', 'invoices', 'projects'],
+        rawQuestion: request.question,
       };
     }
 
