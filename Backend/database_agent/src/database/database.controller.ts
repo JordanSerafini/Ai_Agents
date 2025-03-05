@@ -1393,56 +1393,460 @@ export class DatabaseController {
   }
 
   /**
-   * Gère les requêtes sur les clients
+   * Gère les requêtes sur les clients avec filtrage avancé
    */
   private async handleClientsQuery(enrichedRequest: {
     question: string;
     metadata?: {
       primaryTable?: string;
+      filters?: {
+        status?: string | null;
+        timeframe?: string | null;
+      };
+      analysis?: {
+        intention?: string;
+        entites?: string[];
+      };
     };
-  }): Promise<{ reponse: string; success: boolean; error?: string }> {
+  }): Promise<{
+    reponse: string;
+    success: boolean;
+    error?: string;
+    data?: any;
+  }> {
     try {
-      // Exemple d'implémentation basique
-      const clientMetadata = enrichedRequest.metadata?.primaryTable;
+      // Récupération de la source de données
+      const db = this.databaseService.getDataSource();
 
-      // Ici la logique pour récupérer les informations des clients
+      // Extraction des métadonnées pour le filtrage
+      const intention = enrichedRequest.metadata?.analysis?.intention || '';
+      const timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
+
+      // Structure pour stocker les résultats
+      interface ClientResult {
+        id: number;
+        name: string;
+        email?: string;
+        phone?: string;
+        contact_person?: string;
+        created_at?: string;
+        total_projects?: number;
+        total_quotations?: number;
+        total_invoices?: number;
+      }
+
+      let clients: ClientResult[] = [];
+      let query = '';
+      let params: any[] = [];
+      let responseMessage = '';
+
+      // Déterminer le type de requête basé sur l'intention
+      if (
+        intention.includes('liste') ||
+        intention.includes('tous') ||
+        intention.includes('récent')
+      ) {
+        // Requête pour lister tous les clients, potentiellement avec une limite sur les plus récents
+        const limit = intention.includes('récent') ? 10 : 100;
+
+        query = `
+          SELECT c.id, c.name, c.email, c.phone, c.contact_person, c.created_at,
+            COUNT(DISTINCT p.id) as total_projects,
+            COUNT(DISTINCT q.id) as total_quotations,
+            COUNT(DISTINCT i.id) as total_invoices
+          FROM clients c
+          LEFT JOIN projects p ON c.id = p.client_id
+          LEFT JOIN quotations q ON c.id = q.client_id
+          LEFT JOIN invoices i ON c.id = i.client_id
+          GROUP BY c.id
+          ORDER BY c.created_at DESC
+          LIMIT $1
+        `;
+
+        params = [limit];
+
+        // Utiliser le cache pour cette requête fréquente
+        clients = await this.databaseService.executeQuery<ClientResult[]>(
+          query,
+          params,
+          true,
+        );
+
+        responseMessage =
+          clients.length > 0
+            ? `Voici la liste des ${clients.length} clients ${intention.includes('récent') ? 'les plus récents' : ''}.`
+            : 'Aucun client trouvé dans la base de données.';
+      } else if (
+        intention.includes('statistique') ||
+        intention.includes('nombre')
+      ) {
+        // Requête pour obtenir des statistiques sur les clients
+        query = `
+          SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN 1 END) as last_month,
+            COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as last_week
+          FROM clients
+        `;
+
+        interface ClientStats {
+          total: string;
+          last_month: string;
+          last_week: string;
+        }
+
+        // Cette requête est moins fréquente, ne pas utiliser le cache
+        const stats =
+          await this.databaseService.executeQuery<ClientStats[]>(query);
+
+        if (stats.length > 0) {
+          responseMessage = `Statistiques des clients :\n`;
+          responseMessage += `- Nombre total de clients : ${stats[0].total}\n`;
+          responseMessage += `- Nouveaux clients (30 derniers jours) : ${stats[0].last_month}\n`;
+          responseMessage += `- Nouveaux clients (7 derniers jours) : ${stats[0].last_week}`;
+        } else {
+          responseMessage =
+            'Impossible de récupérer les statistiques des clients.';
+        }
+      } else if (
+        intention.includes('recherche') ||
+        intention.includes('trouver')
+      ) {
+        // Recherche de clients par nom ou email
+        const entities = enrichedRequest.metadata?.analysis?.entites || [];
+        let searchTerm = '';
+
+        // Extraire le terme de recherche des entités
+        for (const entity of entities) {
+          if (entity && entity.length > 2) {
+            searchTerm = entity;
+            break;
+          }
+        }
+
+        if (!searchTerm) {
+          return {
+            success: false,
+            reponse:
+              "Je n'ai pas pu identifier de terme de recherche pour les clients. Pourriez-vous préciser le nom ou l'email du client que vous recherchez?",
+          };
+        }
+
+        query = `
+          SELECT c.id, c.name, c.email, c.phone, c.contact_person, c.created_at,
+            COUNT(DISTINCT p.id) as total_projects,
+            COUNT(DISTINCT q.id) as total_quotations,
+            COUNT(DISTINCT i.id) as total_invoices
+          FROM clients c
+          LEFT JOIN projects p ON c.id = p.client_id
+          LEFT JOIN quotations q ON c.id = q.client_id
+          LEFT JOIN invoices i ON c.id = i.client_id
+          WHERE c.name ILIKE $1 OR c.email ILIKE $1 OR c.contact_person ILIKE $1
+          GROUP BY c.id
+          ORDER BY c.name
+          LIMIT 10
+        `;
+
+        params = [`%${searchTerm}%`];
+
+        clients = await this.databaseService.executeQuery<ClientResult[]>(
+          query,
+          params,
+        );
+
+        responseMessage =
+          clients.length > 0
+            ? `J'ai trouvé ${clients.length} client(s) correspondant à "${searchTerm}".`
+            : `Aucun client ne correspond à "${searchTerm}" dans notre base de données.`;
+      }
+
+      // Formater la réponse avec les résultats
+      if (clients.length > 0) {
+        responseMessage += '\n\nVoici les détails :\n';
+        clients.forEach((client, index) => {
+          responseMessage += `\n${index + 1}. ${client.name}`;
+          if (client.email) responseMessage += `\n   Email: ${client.email}`;
+          if (client.phone)
+            responseMessage += `\n   Téléphone: ${client.phone}`;
+          if (client.contact_person)
+            responseMessage += `\n   Contact: ${client.contact_person}`;
+          if (client.total_projects)
+            responseMessage += `\n   Projets: ${client.total_projects}`;
+          if (client.total_quotations)
+            responseMessage += `\n   Devis: ${client.total_quotations}`;
+          if (client.total_invoices)
+            responseMessage += `\n   Factures: ${client.total_invoices}`;
+          responseMessage += '\n';
+        });
+      }
+
       return {
         success: true,
-        reponse: `Voici les informations sur les clients que vous avez demandées. Table identifiée: ${clientMetadata}`,
+        reponse: responseMessage,
+        data: { clients },
       };
     } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      this.logger.error(
+        `Erreur lors de la récupération des clients: ${errorMessage}`,
+      );
+
       return {
         success: false,
-        reponse: `Désolé, une erreur est survenue lors de la récupération des données clients: ${error.message}`,
-        error: error.message,
+        reponse: `Désolé, une erreur est survenue lors de la récupération des données clients: ${errorMessage}`,
+        error: errorMessage,
       };
     }
   }
 
   /**
-   * Gère les requêtes sur les projets
+   * Gère les requêtes sur les projets avec filtrage avancé
    */
   private async handleProjectsQuery(enrichedRequest: {
     question: string;
     metadata?: {
       primaryTable?: string;
+      filters?: {
+        status?: string | null;
+        timeframe?: string | null;
+      };
+      analysis?: {
+        intention?: string;
+        entites?: string[];
+      };
     };
-  }): Promise<{ reponse: string; success: boolean; error?: string }> {
+  }): Promise<{
+    reponse: string;
+    success: boolean;
+    error?: string;
+    data?: any;
+  }> {
     try {
-      // Exemple d'implémentation basique
-      const projectMetadata = enrichedRequest.metadata?.primaryTable;
+      // Récupération de la source de données
+      const db = this.databaseService.getDataSource();
 
-      // Ici la logique pour récupérer les informations des projets
+      // Extraction des métadonnées pour le filtrage
+      const intention = enrichedRequest.metadata?.analysis?.intention || '';
+      const status = enrichedRequest.metadata?.filters?.status || null;
+      const timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
+      const entities = enrichedRequest.metadata?.analysis?.entites || [];
+
+      // Structure pour stocker les résultats
+      interface ProjectResult {
+        id: number;
+        name: string;
+        client_name: string;
+        status: string;
+        start_date?: string;
+        end_date?: string;
+        progress?: number;
+        total_tasks?: number;
+        completed_tasks?: number;
+      }
+
+      let projects: ProjectResult[] = [];
+      let query = '';
+      const params: any[] = [];
+      const whereConditions: string[] = [];
+      let responseMessage = '';
+
+      // Construction des conditions de filtrage
+      if (status) {
+        whereConditions.push('p.status = $1');
+        params.push(status);
+      }
+
+      // Filtrage par période
+      if (timeframe) {
+        let dateCondition = '';
+        const paramIndex = params.length + 1;
+
+        switch (timeframe) {
+          case 'current_month':
+            dateCondition = `DATE_TRUNC('month', p.start_date) = DATE_TRUNC('month', CURRENT_DATE)`;
+            break;
+          case 'next_month':
+            dateCondition = `DATE_TRUNC('month', p.start_date) = DATE_TRUNC('month', CURRENT_DATE + INTERVAL '1 month')`;
+            break;
+          case 'current_year':
+            dateCondition = `EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE)`;
+            break;
+          case 'last_month':
+            dateCondition = `DATE_TRUNC('month', p.start_date) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')`;
+            break;
+        }
+
+        if (dateCondition) {
+          whereConditions.push(dateCondition);
+        }
+      }
+
+      // Recherche par entité (client ou nom de projet)
+      let searchTerm = '';
+      for (const entity of entities) {
+        if (entity && entity.length > 2) {
+          searchTerm = entity;
+          break;
+        }
+      }
+
+      if (searchTerm) {
+        whereConditions.push(
+          `(p.name ILIKE $${params.length + 1} OR c.name ILIKE $${params.length + 1})`,
+        );
+        params.push(`%${searchTerm}%`);
+      }
+
+      // Création de la clause WHERE
+      const whereClause =
+        whereConditions.length > 0
+          ? 'WHERE ' + whereConditions.join(' AND ')
+          : '';
+
+      // Déterminer le type de requête basé sur l'intention
+      if (
+        intention.includes('liste') ||
+        intention.includes('tous') ||
+        intention.includes('en cours')
+      ) {
+        // Requête pour lister les projets
+        const orderClause = intention.includes('récent')
+          ? 'ORDER BY p.start_date DESC'
+          : 'ORDER BY p.status, p.name';
+        const limitClause = 'LIMIT 20';
+
+        query = `
+          SELECT p.id, p.name, c.name as client_name, p.status, 
+                 p.start_date, p.end_date,
+                 COALESCE(COUNT(t.id), 0) as total_tasks,
+                 COALESCE(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END), 0) as completed_tasks,
+                 CASE
+                   WHEN COALESCE(COUNT(t.id), 0) = 0 THEN 0
+                   ELSE ROUND((COALESCE(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END), 0)::float / COUNT(t.id)) * 100)
+                 END as progress
+          FROM projects p
+          LEFT JOIN clients c ON p.client_id = c.id
+          LEFT JOIN tasks t ON p.id = t.project_id
+          ${whereClause}
+          GROUP BY p.id, p.name, c.name, p.status, p.start_date, p.end_date
+          ${orderClause}
+          ${limitClause}
+        `;
+
+        // Utiliser le cache si aucun filtre spécifique n'est appliqué
+        const useCache = whereConditions.length === 0;
+        projects = await this.databaseService.executeQuery<ProjectResult[]>(
+          query,
+          params,
+          useCache,
+        );
+
+        const statusFilter = status ? `avec le statut "${status}"` : '';
+        const timeFrameText = this.getTimeframeText(timeframe);
+        const searchFilter = searchTerm
+          ? `correspondant à "${searchTerm}"`
+          : '';
+
+        responseMessage =
+          projects.length > 0
+            ? `Voici la liste des ${projects.length} projets ${statusFilter} ${timeFrameText} ${searchFilter}.`
+            : `Aucun projet ${statusFilter} ${timeFrameText} ${searchFilter} n'a été trouvé.`;
+      } else if (
+        intention.includes('statistique') ||
+        intention.includes('nombre')
+      ) {
+        // Requête pour obtenir des statistiques sur les projets
+        query = `
+          SELECT
+            COUNT(*) as total,
+            COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress,
+            COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed,
+            COUNT(CASE WHEN status = 'on_hold' THEN 1 END) as on_hold,
+            COUNT(CASE WHEN end_date < CURRENT_DATE AND status != 'completed' THEN 1 END) as late
+          FROM projects p
+          ${whereClause}
+        `;
+
+        interface ProjectStats {
+          total: string;
+          in_progress: string;
+          completed: string;
+          on_hold: string;
+          late: string;
+        }
+
+        const stats = await this.databaseService.executeQuery<ProjectStats[]>(
+          query,
+          params,
+        );
+
+        if (stats.length > 0) {
+          responseMessage = `Statistiques des projets :\n`;
+          responseMessage += `- Nombre total de projets : ${stats[0].total}\n`;
+          responseMessage += `- Projets en cours : ${stats[0].in_progress}\n`;
+          responseMessage += `- Projets terminés : ${stats[0].completed}\n`;
+          responseMessage += `- Projets en attente : ${stats[0].on_hold}\n`;
+          responseMessage += `- Projets en retard : ${stats[0].late}`;
+        } else {
+          responseMessage =
+            'Impossible de récupérer les statistiques des projets.';
+        }
+      }
+
+      // Formater la réponse avec les résultats
+      if (projects.length > 0) {
+        responseMessage += '\n\nVoici les détails :\n';
+        projects.forEach((project, index) => {
+          responseMessage += `\n${index + 1}. ${project.name} (${project.status})`;
+          responseMessage += `\n   Client: ${project.client_name}`;
+          if (project.start_date)
+            responseMessage += `\n   Date de début: ${new Date(project.start_date).toLocaleDateString('fr-FR')}`;
+          if (project.end_date)
+            responseMessage += `\n   Date de fin: ${new Date(project.end_date).toLocaleDateString('fr-FR')}`;
+          if (project.progress !== undefined)
+            responseMessage += `\n   Progression: ${project.progress}%`;
+          if (project.total_tasks)
+            responseMessage += `\n   Tâches: ${project.completed_tasks}/${project.total_tasks} complétées`;
+          responseMessage += '\n';
+        });
+      }
+
       return {
         success: true,
-        reponse: `Voici les informations sur les projets que vous avez demandées. Table identifiée: ${projectMetadata}`,
+        reponse: responseMessage,
+        data: { projects },
       };
     } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      this.logger.error(
+        `Erreur lors de la récupération des projets: ${errorMessage}`,
+      );
+
       return {
         success: false,
-        reponse: `Désolé, une erreur est survenue lors de la récupération des données des projets: ${error.message}`,
-        error: error.message,
+        reponse: `Désolé, une erreur est survenue lors de la récupération des données des projets: ${errorMessage}`,
+        error: errorMessage,
       };
+    }
+  }
+
+  /**
+   * Convertit le paramètre timeframe en texte descriptif
+   */
+  private getTimeframeText(timeframe: string | null): string {
+    if (!timeframe) return '';
+
+    switch (timeframe) {
+      case 'current_month':
+        return 'du mois actuel';
+      case 'next_month':
+        return 'du mois prochain';
+      case 'current_year':
+        return "de l'année en cours";
+      case 'last_month':
+        return 'du mois dernier';
+      default:
+        return '';
     }
   }
 }

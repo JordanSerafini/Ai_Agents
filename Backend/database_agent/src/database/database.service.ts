@@ -5,20 +5,61 @@ import { DatabaseMetadataService } from './services/database-metadata.service';
 @Injectable()
 export class DatabaseService {
   private readonly logger = new Logger(DatabaseService.name);
+  private queryCache: Map<string, { data: any; timestamp: number }> = new Map();
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes par défaut
 
   constructor(
     @Inject('PG_CONNECTION') private readonly dbPool: Pool,
     private readonly dbMetadataService: DatabaseMetadataService,
   ) {}
 
-  async executeQuery<T = any[]>(query: string, params: any[] = []): Promise<T> {
+  /**
+   * Récupère la connexion à la base de données
+   * @returns Une instance de Pool de la base de données
+   */
+  getDataSource(): Pool {
+    return this.dbPool;
+  }
+
+  /**
+   * Exécute une requête SQL avec gestion de cache optionnelle
+   * @param query Requête SQL à exécuter
+   * @param params Paramètres de la requête
+   * @param useCache Si true, utilise le cache
+   * @param cacheTTL Durée de vie du cache en millisecondes
+   * @returns Résultat de la requête
+   */
+  async executeQuery<T = any[]>(
+    query: string,
+    params: any[] = [],
+    useCache: boolean = false,
+    cacheTTL: number = this.CACHE_TTL_MS,
+  ): Promise<T> {
     try {
+      // Si le cache est activé, essayer de récupérer depuis le cache
+      if (useCache) {
+        const cacheKey = this.getCacheKey(query, params);
+        const cachedResult = this.getFromCache<T>(cacheKey);
+
+        if (cachedResult) {
+          this.logger.log(`Résultat récupéré depuis le cache pour: ${query}`);
+          return cachedResult;
+        }
+      }
+
       this.logger.log(`Exécution de la requête: ${query}`);
       this.logger.debug(`Paramètres: ${JSON.stringify(params)}`);
 
       const client = await this.dbPool.connect();
       try {
         const result = await client.query(query, params);
+
+        // Mettre en cache le résultat si demandé
+        if (useCache) {
+          const cacheKey = this.getCacheKey(query, params);
+          this.saveToCache(cacheKey, result.rows, cacheTTL);
+        }
+
         return result.rows as unknown as T;
       } finally {
         client.release();
@@ -27,6 +68,63 @@ export class DatabaseService {
       this.logger.error(`Erreur d'exécution de requête SQL: ${error}`);
       throw error;
     }
+  }
+
+  /**
+   * Génère une clé de cache unique pour une requête et ses paramètres
+   */
+  private getCacheKey(query: string, params: any[]): string {
+    return `${query}_${JSON.stringify(params)}`;
+  }
+
+  /**
+   * Récupère une valeur du cache si elle existe et n'est pas expirée
+   */
+  private getFromCache<T>(key: string): T | null {
+    const cachedItem = this.queryCache.get(key);
+
+    if (!cachedItem) {
+      return null;
+    }
+
+    // Vérifier si la valeur en cache a expiré
+    const now = Date.now();
+    if (now - cachedItem.timestamp > this.CACHE_TTL_MS) {
+      this.queryCache.delete(key);
+      return null;
+    }
+
+    return cachedItem.data as T;
+  }
+
+  /**
+   * Sauvegarde une valeur dans le cache avec un timestamp
+   */
+  private saveToCache(
+    key: string,
+    data: any,
+    ttl: number = this.CACHE_TTL_MS,
+  ): void {
+    this.queryCache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl,
+    });
+  }
+
+  /**
+   * Invalide une entrée spécifique du cache
+   */
+  invalidateCache(key: string): void {
+    this.queryCache.delete(key);
+  }
+
+  /**
+   * Vide entièrement le cache
+   */
+  clearCache(): void {
+    this.queryCache.clear();
+    this.logger.log('Cache vidé');
   }
 
   async getTableData<T = Record<string, any>>(
