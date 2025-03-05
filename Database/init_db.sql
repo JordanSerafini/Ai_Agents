@@ -525,4 +525,119 @@ $$ LANGUAGE plpgsql;
 -- CREATE EXTENSION IF NOT EXISTS pg_cron;
 -- SELECT cron.schedule('0 1 * * *', 'SELECT refresh_all_materialized_views()');
 
+-- Tables spécifiques pour l'assistant IA chatbot
+
+-- Table de connaissances pour le chatbot
+CREATE TABLE IF NOT EXISTS knowledge_base (
+    id SERIAL PRIMARY KEY,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    category VARCHAR(100),
+    tags TEXT[],
+    search_vector tsvector GENERATED ALWAYS AS (
+        setweight(to_tsvector('french', question), 'A') || 
+        setweight(to_tsvector('french', answer), 'B')
+    ) STORED,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index pour la recherche full-text dans la base de connaissances
+CREATE INDEX IF NOT EXISTS knowledge_base_search_idx ON knowledge_base USING GIN (search_vector);
+
+-- Table pour stocker l'historique des conversations
+CREATE TABLE IF NOT EXISTS chat_history (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(100) NOT NULL,
+    user_id INTEGER,
+    user_message TEXT NOT NULL,
+    bot_response TEXT NOT NULL,
+    intent VARCHAR(100),
+    confidence FLOAT,
+    entities JSONB,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_chat_user FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Index sur session_id pour accéder rapidement à l'historique d'une conversation
+CREATE INDEX IF NOT EXISTS chat_history_session_idx ON chat_history (session_id);
+CREATE INDEX IF NOT EXISTS chat_history_user_idx ON chat_history (user_id);
+
+-- Table pour les témoignages clients (utile pour le chatbot)
+CREATE TABLE IF NOT EXISTS testimonials (
+    id SERIAL PRIMARY KEY,
+    client_id INTEGER NOT NULL,
+    project_id INTEGER NOT NULL,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT,
+    is_published BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_testimonial_client FOREIGN KEY (client_id) REFERENCES clients(id),
+    CONSTRAINT fk_testimonial_project FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+-- Table pour un glossaire technique
+CREATE TABLE IF NOT EXISTS technical_glossary (
+    id SERIAL PRIMARY KEY,
+    term VARCHAR(100) NOT NULL,
+    definition TEXT NOT NULL,
+    category VARCHAR(100),
+    search_vector tsvector GENERATED ALWAYS AS (
+        setweight(to_tsvector('french', term), 'A') || 
+        setweight(to_tsvector('french', definition), 'B')
+    ) STORED,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index pour la recherche full-text dans le glossaire technique
+CREATE INDEX IF NOT EXISTS glossary_search_idx ON technical_glossary USING GIN (search_vector);
+
+-- Table pour des services standards
+CREATE TABLE IF NOT EXISTS standard_services (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(100),
+    avg_price_min DECIMAL(10,2),
+    avg_price_max DECIMAL(10,2),
+    avg_duration_days INTEGER,
+    details JSONB,
+    search_vector tsvector GENERATED ALWAYS AS (
+        setweight(to_tsvector('french', name), 'A') || 
+        setweight(to_tsvector('french', description), 'B') ||
+        setweight(to_tsvector('french', category), 'C')
+    ) STORED,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index pour la recherche full-text dans les services standards
+CREATE INDEX IF NOT EXISTS services_search_idx ON standard_services USING GIN (search_vector);
+
+-- Table pour stocker les intents fréquents des utilisateurs
+CREATE TABLE IF NOT EXISTS user_intents (
+    id SERIAL PRIMARY KEY,
+    intent_name VARCHAR(100) NOT NULL,
+    count INTEGER DEFAULT 1,
+    examples TEXT[],
+    last_detected TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (intent_name)
+);
+
+-- Fonction pour suivre et incrémenter les intents utilisateurs
+CREATE OR REPLACE FUNCTION track_user_intent(p_intent_name VARCHAR, p_example TEXT)
+RETURNS void AS $$
+BEGIN
+    INSERT INTO user_intents (intent_name, examples)
+    VALUES (p_intent_name, ARRAY[p_example])
+    ON CONFLICT (intent_name) 
+    DO UPDATE SET 
+        count = user_intents.count + 1,
+        examples = array_append(user_intents.examples, p_example),
+        last_detected = CURRENT_TIMESTAMP;
+END;
+$$ LANGUAGE plpgsql;
+
 COMMIT;

@@ -1591,261 +1591,235 @@ export class DatabaseController {
       // Nouvelles intentions pour les devis filtrés par période
       case 'ACCEPTED_QUOTATIONS_NEXT_MONTH_TOTAL':
         // Calculer les dates du mois prochain
-        const nextMonthStart = new Date();
-        nextMonthStart.setDate(1);
-        nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+        {
+          const nextMonthStart = new Date();
+          nextMonthStart.setDate(1);
+          nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
 
-        const nextMonthEnd = new Date(nextMonthStart);
-        nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1);
-        nextMonthEnd.setDate(0);
+          const nextMonthEnd = new Date(nextMonthStart);
+          nextMonthEnd.setMonth(nextMonthEnd.getMonth() + 1);
+          nextMonthEnd.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          'accepté',
-          nextMonthStart.toISOString().split('T')[0],
-          nextMonthEnd.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            'accepté',
+            nextMonthStart.toISOString().split('T')[0],
+            nextMonthEnd.toISOString().split('T')[0],
+          ];
+        }
         break;
 
       case 'REJECTED_QUOTATIONS_NEXT_MONTH_TOTAL':
         // Calculer les dates du mois prochain
-        const nextMonthStartRej = new Date();
-        nextMonthStartRej.setDate(1);
-        nextMonthStartRej.setMonth(nextMonthStartRej.getMonth() + 1);
+        {
+          const nextMonthStartRej = new Date();
+          nextMonthStartRej.setDate(1);
+          nextMonthStartRej.setMonth(nextMonthStartRej.getMonth() + 1);
 
-        const nextMonthEndRej = new Date(nextMonthStartRej);
-        nextMonthEndRej.setMonth(nextMonthEndRej.getMonth() + 1);
-        nextMonthEndRej.setDate(0);
+          const nextMonthEndRej = new Date(nextMonthStartRej);
+          nextMonthEndRej.setMonth(nextMonthEndRej.getMonth() + 1);
+          nextMonthEndRej.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          'refusé',
-          nextMonthStartRej.toISOString().split('T')[0],
-          nextMonthEndRej.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            'refusé',
+            nextMonthStartRej.toISOString().split('T')[0],
+            nextMonthEndRej.toISOString().split('T')[0],
+          ];
+        }
         break;
 
       case 'QUOTATIONS_NEXT_MONTH_TOTAL':
         // Calculer les dates du mois prochain
-        const nextMonthStartAll = new Date();
-        nextMonthStartAll.setDate(1);
-        nextMonthStartAll.setMonth(nextMonthStartAll.getMonth() + 1);
+        {
+          const nextMonthStartAll = new Date();
+          nextMonthStartAll.setDate(1);
+          nextMonthStartAll.setMonth(nextMonthStartAll.getMonth() + 1);
 
-        const nextMonthEndAll = new Date(nextMonthStartAll);
-        nextMonthEndAll.setMonth(nextMonthEndAll.getMonth() + 1);
-        nextMonthEndAll.setDate(0);
+          const nextMonthEndAll = new Date(nextMonthStartAll);
+          nextMonthEndAll.setMonth(nextMonthEndAll.getMonth() + 1);
+          nextMonthEndAll.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          null,
-          nextMonthStartAll.toISOString().split('T')[0],
-          nextMonthEndAll.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            null,
+            nextMonthStartAll.toISOString().split('T')[0],
+            nextMonthEndAll.toISOString().split('T')[0],
+          ];
+        }
         break;
 
       case 'ACCEPTED_QUOTATIONS_LAST_MONTH_TOTAL':
         // Calculer les dates du mois dernier
-        const lastMonthStart = new Date();
-        lastMonthStart.setDate(1);
-        lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+        {
+          const lastMonthStart = new Date();
+          lastMonthStart.setDate(1);
+          lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
 
-        const lastMonthEnd = new Date();
-        lastMonthEnd.setDate(0);
+          const lastMonthEnd = new Date();
+          lastMonthEnd.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          'accepté',
-          lastMonthStart.toISOString().split('T')[0],
-          lastMonthEnd.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            'accepté',
+            lastMonthStart.toISOString().split('T')[0],
+            lastMonthEnd.toISOString().split('T')[0],
+          ];
+        }
         break;
 
       case 'REJECTED_QUOTATIONS_LAST_MONTH_TOTAL':
         // Calculer les dates du mois dernier
-        const lastMonthStartRej = new Date();
-        lastMonthStartRej.setDate(1);
-        lastMonthStartRej.setMonth(lastMonthStartRej.getMonth() - 1);
+        {
+          const lastMonthStartRej = new Date();
+          lastMonthStartRej.setDate(1);
+          lastMonthStartRej.setMonth(lastMonthStartRej.getMonth() - 1);
 
-        const lastMonthEndRej = new Date();
-        lastMonthEndRej.setDate(0);
+          const lastMonthEndRej = new Date();
+          lastMonthEndRej.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          'refusé',
-          lastMonthStartRej.toISOString().split('T')[0],
-          lastMonthEndRej.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            'refusé',
+            lastMonthStartRej.toISOString().split('T')[0],
+            lastMonthEndRej.toISOString().split('T')[0],
+          ];
+        }
         break;
 
       case 'QUOTATIONS_LAST_MONTH_TOTAL':
         // Calculer les dates du mois dernier
-        const lastMonthStartAll = new Date();
-        lastMonthStartAll.setDate(1);
-        lastMonthStartAll.setMonth(lastMonthStartAll.getMonth() - 1);
+        {
+          const lastMonthStartAll = new Date();
+          lastMonthStartAll.setDate(1);
+          lastMonthStartAll.setMonth(lastMonthStartAll.getMonth() - 1);
 
-        const lastMonthEndAll = new Date();
-        lastMonthEndAll.setDate(0);
+          const lastMonthEndAll = new Date();
+          lastMonthEndAll.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          null,
-          lastMonthStartAll.toISOString().split('T')[0],
-          lastMonthEndAll.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            null,
+            lastMonthStartAll.toISOString().split('T')[0],
+            lastMonthEndAll.toISOString().split('T')[0],
+          ];
+        }
         break;
 
       case 'ACCEPTED_QUOTATIONS_CURRENT_MONTH_TOTAL':
         // Calculer les dates du mois en cours
-        const currentMonthStart = new Date();
-        currentMonthStart.setDate(1);
+        {
+          const currentMonthStart = new Date();
+          currentMonthStart.setDate(1);
 
-        const currentMonthEnd = new Date();
-        currentMonthEnd.setMonth(currentMonthEnd.getMonth() + 1);
-        currentMonthEnd.setDate(0);
+          const currentMonthEnd = new Date();
+          currentMonthEnd.setMonth(currentMonthEnd.getMonth() + 1);
+          currentMonthEnd.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          'accepté',
-          currentMonthStart.toISOString().split('T')[0],
-          currentMonthEnd.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            'accepté',
+            currentMonthStart.toISOString().split('T')[0],
+            currentMonthEnd.toISOString().split('T')[0],
+          ];
+        }
         break;
 
       case 'REJECTED_QUOTATIONS_CURRENT_MONTH_TOTAL':
         // Calculer les dates du mois en cours
-        const currentMonthStartRej = new Date();
-        currentMonthStartRej.setDate(1);
+        {
+          const currentMonthStartRej = new Date();
+          currentMonthStartRej.setDate(1);
 
-        const currentMonthEndRej = new Date();
-        currentMonthEndRej.setMonth(currentMonthEndRej.getMonth() + 1);
-        currentMonthEndRej.setDate(0);
+          const currentMonthEndRej = new Date();
+          currentMonthEndRej.setMonth(currentMonthEndRej.getMonth() + 1);
+          currentMonthEndRej.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          'refusé',
-          currentMonthStartRej.toISOString().split('T')[0],
-          currentMonthEndRej.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            'refusé',
+            currentMonthStartRej.toISOString().split('T')[0],
+            currentMonthEndRej.toISOString().split('T')[0],
+          ];
+        }
         break;
 
       case 'QUOTATIONS_CURRENT_MONTH_TOTAL':
         // Calculer les dates du mois en cours
-        const currentMonthStartAll = new Date();
-        currentMonthStartAll.setDate(1);
+        {
+          const currentMonthStartAll = new Date();
+          currentMonthStartAll.setDate(1);
 
-        const currentMonthEndAll = new Date();
-        currentMonthEndAll.setMonth(currentMonthEndAll.getMonth() + 1);
-        currentMonthEndAll.setDate(0);
+          const currentMonthEndAll = new Date();
+          currentMonthEndAll.setMonth(currentMonthEndAll.getMonth() + 1);
+          currentMonthEndAll.setDate(0);
 
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
-        sqlParams = [
-          null,
-          currentMonthStartAll.toISOString().split('T')[0],
-          currentMonthEndAll.toISOString().split('T')[0],
-        ];
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL;
+          sqlParams = [
+            null,
+            currentMonthStartAll.toISOString().split('T')[0],
+            currentMonthEndAll.toISOString().split('T')[0],
+          ];
+        }
         break;
 
-      // Intentions pour les listes de devis par période (sans total)
-      case 'ACCEPTED_QUOTATIONS_NEXT_MONTH':
-      case 'REJECTED_QUOTATIONS_NEXT_MONTH':
+      case 'QUOTATIONS_CURRENT_MONTH':
       case 'QUOTATIONS_NEXT_MONTH':
-      case 'ACCEPTED_QUOTATIONS_LAST_MONTH':
-      case 'REJECTED_QUOTATIONS_LAST_MONTH':
       case 'QUOTATIONS_LAST_MONTH':
       case 'ACCEPTED_QUOTATIONS_CURRENT_MONTH':
+      case 'ACCEPTED_QUOTATIONS_NEXT_MONTH':
+      case 'ACCEPTED_QUOTATIONS_LAST_MONTH':
       case 'REJECTED_QUOTATIONS_CURRENT_MONTH':
-      case 'QUOTATIONS_CURRENT_MONTH':
+      case 'REJECTED_QUOTATIONS_NEXT_MONTH':
+      case 'REJECTED_QUOTATIONS_LAST_MONTH':
         // Déterminer la période
-        let startDate: Date, endDate: Date;
+        {
+          let startDate: Date, endDate: Date;
 
-        if (intent.includes('NEXT_MONTH')) {
-          startDate = new Date();
-          startDate.setDate(1);
-          startDate.setMonth(startDate.getMonth() + 1);
+          if (intent.includes('NEXT_MONTH')) {
+            startDate = new Date();
+            startDate.setDate(1);
+            startDate.setMonth(startDate.getMonth() + 1);
 
-          endDate = new Date(startDate);
-          endDate.setMonth(endDate.getMonth() + 1);
-          endDate.setDate(0);
-        } else if (intent.includes('LAST_MONTH')) {
-          startDate = new Date();
-          startDate.setDate(1);
-          startDate.setMonth(startDate.getMonth() - 1);
+            endDate = new Date(startDate);
+            endDate.setMonth(endDate.getMonth() + 1);
+            endDate.setDate(0);
+          } else if (intent.includes('LAST_MONTH')) {
+            startDate = new Date();
+            startDate.setDate(1);
+            startDate.setMonth(startDate.getMonth() - 1);
 
-          endDate = new Date();
-          endDate.setDate(0);
-        } else {
-          // CURRENT_MONTH
-          startDate = new Date();
-          startDate.setDate(1);
+            endDate = new Date();
+            endDate.setDate(0);
+          } else {
+            // Mois en cours par défaut
+            startDate = new Date();
+            startDate.setDate(1);
 
-          endDate = new Date();
-          endDate.setMonth(endDate.getMonth() + 1);
-          endDate.setDate(0);
+            endDate = new Date();
+            endDate.setMonth(endDate.getMonth() + 1);
+            endDate.setDate(0);
+          }
+
+          // Déterminer le statut
+          let status: string | null = null;
+          if (intent.includes('ACCEPTED')) {
+            status = 'accepté';
+          } else if (intent.includes('REJECTED')) {
+            status = 'refusé';
+          }
+
+          sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS;
+          sqlParams = [
+            status,
+            startDate.toISOString().split('T')[0],
+            endDate.toISOString().split('T')[0],
+          ];
         }
-
-        // Déterminer le statut
-        let status: string | null = null;
-        if (intent.includes('ACCEPTED')) {
-          status = 'accepté';
-        } else if (intent.includes('REJECTED')) {
-          status = 'refusé';
-        }
-
-        sqlQuery = this.QUERIES.quotations.GET_FILTERED_QUOTATIONS;
-        sqlParams = [
-          status,
-          startDate.toISOString().split('T')[0],
-          endDate.toISOString().split('T')[0],
-        ];
         break;
 
       case 'QUOTATION_CONVERSION_STATS':
         sqlQuery = this.QUERIES.quotations.CONVERSION_STATS;
-        break;
-
-      case 'SEARCH_QUOTATIONS':
-        const keywordRegex =
-          /(?:cherche|recherche|trouve)\s+["']?([^"']+)["']?/i;
-        const keywordMatch = userQuery.match(keywordRegex);
-
-        if (keywordMatch && keywordMatch[1]) {
-          params.keyword = keywordMatch[1];
-        }
-        break;
-
-      case 'QUOTATIONS_BY_PROJECT':
-        const idRegex = /(?:projet|project|chantier)\s+(\d+)/i;
-        const idMatch =
-          userQuery.match(idRegex) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
-
-        if (idMatch && idMatch[1]) {
-          params.projectId = parseInt(idMatch[1], 10);
-        } else {
-          const nameRegex = /(?:projet|project|chantier)\s+["']?([^"']+)["']?/i;
-          const nameMatch = userQuery.match(nameRegex);
-
-          if (nameMatch && nameMatch[1]) {
-            params.projectName = nameMatch[1];
-          }
-        }
-        break;
-
-      case 'QUOTATIONS_BY_CLIENT':
-        const idRegexClient = /(?:client)\s+(\d+)/i;
-        const idMatchClient =
-          userQuery.match(idRegexClient) ||
-          userQuery.match(/id\s*[=:]\s*(\d+)/i);
-
-        if (idMatchClient && idMatchClient[1]) {
-          params.clientId = parseInt(idMatchClient[1], 10);
-        } else {
-          const nameRegexClient = /(?:client)\s+["']?([^"']+)["']?/i;
-          const nameMatchClient = userQuery.match(nameRegexClient);
-
-          if (nameMatchClient && nameMatchClient[1]) {
-            params.clientName = nameMatchClient[1];
-          }
-        }
         break;
 
       default:
@@ -2049,18 +2023,18 @@ export class DatabaseController {
 
     // Extraction de l'ID du client pour les devis
     if (intent === 'QUOTATIONS_BY_CLIENT') {
-      const idRegex = /(?:client)\s+(\d+)/i;
-      const idMatch =
-        userQuery.match(idRegex) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+      const idRegexClient = /(?:client)\s+(\d+)/i;
+      const idMatchClient =
+        userQuery.match(idRegexClient) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
 
-      if (idMatch && idMatch[1]) {
-        params.clientId = parseInt(idMatch[1], 10);
+      if (idMatchClient && idMatchClient[1]) {
+        params.clientId = parseInt(idMatchClient[1], 10);
       } else {
-        const nameRegex = /(?:client)\s+["']?([^"']+)["']?/i;
-        const nameMatch = userQuery.match(nameRegex);
+        const nameRegexClient = /(?:client)\s+["']?([^"']+)["']?/i;
+        const nameMatchClient = userQuery.match(nameRegexClient);
 
-        if (nameMatch && nameMatch[1]) {
-          params.clientName = nameMatch[1];
+        if (nameMatchClient && nameMatchClient[1]) {
+          params.clientName = nameMatchClient[1];
         }
       }
     }
