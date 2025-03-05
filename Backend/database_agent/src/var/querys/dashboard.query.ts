@@ -219,4 +219,42 @@ export const DASHBOARD_QUERIES = {
     HAVING COUNT(CASE WHEN so.status = 'en_retard' THEN 1 END) > 0
     ORDER BY max_days_late DESC;
   `,
+
+  // Récupérer les statistiques des projets pour le tableau de bord
+  PROJECT_STATS: `
+    SELECT 
+      COUNT(*) as total_projects,
+      COUNT(CASE WHEN status = 'active' THEN 1 END) as active_projects,
+      COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_projects,
+      COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_projects,
+      COUNT(CASE WHEN end_date < CURRENT_DATE AND status != 'completed' THEN 1 END) as overdue_projects
+    FROM projects;
+  `,
+
+  // Résumé global pour le tableau de bord
+  DASHBOARD_SUMMARY: `
+    SELECT 
+      (SELECT COUNT(*) FROM projects WHERE status = 'active') as active_projects,
+      (SELECT COUNT(*) FROM projects WHERE status = 'completed') as completed_projects,
+      (SELECT COUNT(*) FROM projects WHERE end_date < CURRENT_DATE AND status != 'completed') as overdue_projects,
+      (SELECT COUNT(*) FROM tasks WHERE status = 'pending') as pending_tasks,
+      (SELECT COUNT(*) FROM tasks WHERE status = 'in_progress') as in_progress_tasks,
+      (SELECT COUNT(*) FROM tasks WHERE due_date < CURRENT_DATE AND status != 'completed') as overdue_tasks,
+      (SELECT COUNT(*) FROM invoices WHERE status = 'pending') as pending_invoices,
+      (SELECT COUNT(*) FROM invoices WHERE status = 'overdue') as overdue_invoices,
+      (SELECT SUM(total_ht) FROM invoices WHERE status = 'paid') as total_revenue,
+      (SELECT SUM(amount) FROM expenses) as total_expenses,
+      (SELECT COUNT(*) FROM clients) as total_clients,
+      (SELECT COUNT(*) FROM staff) as total_staff
+  `,
+
+  // Récupérer les statistiques des tâches pour le tableau de bord
+  TASK_STATS: `
+    SELECT 
+      COUNT(*) as total_tasks,
+      COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+      COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+      COUNT(CASE WHEN due_date < CURRENT_DATE AND status != 'completed' THEN 1 END) as overdue_tasks
+    FROM tasks;
+  `,
 };

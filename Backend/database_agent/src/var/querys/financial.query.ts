@@ -26,6 +26,19 @@ export const FINANCIAL_QUERIES = {
     WHERE i.id = $1;
   `,
 
+  // Résumé financier global
+  FINANCIAL_SUMMARY: `
+    SELECT 
+      (SELECT COUNT(*) FROM invoices WHERE status = 'paid') as paid_invoices,
+      (SELECT COUNT(*) FROM invoices WHERE status = 'pending') as pending_invoices,
+      (SELECT COUNT(*) FROM invoices WHERE status = 'overdue') as overdue_invoices,
+      (SELECT SUM(total_ht) FROM invoices WHERE status = 'paid') as total_paid,
+      (SELECT SUM(total_ht) FROM invoices WHERE status = 'pending') as total_pending,
+      (SELECT SUM(total_ht) FROM invoices WHERE status = 'overdue') as total_overdue,
+      (SELECT SUM(amount) FROM expenses) as total_expenses,
+      (SELECT SUM(total_ht) FROM invoices WHERE status = 'paid') - (SELECT SUM(amount) FROM expenses) as net_profit
+  `,
+
   // Récupérer les éléments d'une facture
   GET_INVOICE_ITEMS: `
     SELECT * FROM invoice_items

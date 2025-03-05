@@ -13,7 +13,7 @@ import { SearchService } from '../search/search.service';
 import { SyncService } from '../search/sync.service';
 // Importer les variables de prompt et les requêtes SQL
 import * as PROMPTS from '../var/prompt';
-import * as QUERIES from '../var/querys/query_ALL';
+import { QUERIES } from '../var/index.query';
 
 interface SearchResult {
   id: number;
@@ -695,6 +695,27 @@ export class DatabaseController {
     if (lowerQuery.includes('utilisateur') || lowerQuery.includes('user')) {
       if (lowerQuery.includes('charge') || lowerQuery.includes('travail')) {
         return 'USER_WORKLOAD';
+      } else if (
+        lowerQuery.includes('rôle') ||
+        lowerQuery.includes('role') ||
+        lowerQuery.includes('fonction')
+      ) {
+        return 'USERS_BY_ROLE';
+      } else if (
+        lowerQuery.includes('info') ||
+        lowerQuery.includes('détail') ||
+        lowerQuery.includes('information') ||
+        lowerQuery.includes('profil') ||
+        lowerQuery.match(/(?:monsieur|mr|madame|mme|mlle)\s+[a-z]+/i)
+      ) {
+        // Vérifier si la requête contient un ID
+        const idMatch =
+          lowerQuery.match(/id\s*[=:]\s*(\d+)/i) ||
+          lowerQuery.match(/utilisateur\s+(\d+)/i);
+        if (idMatch && idMatch[1]) {
+          return 'USER_BY_ID';
+        }
+        return 'USER_BY_NAME';
       } else {
         return 'LIST_USERS';
       }
@@ -724,6 +745,44 @@ export class DatabaseController {
         lowerQuery.includes('user')
       ) {
         return 'USER_PERFORMANCE';
+      } else if (
+        lowerQuery.includes('client') ||
+        lowerQuery.includes('rentabilité')
+      ) {
+        return 'CLIENT_PROFITABILITY';
+      } else if (
+        lowerQuery.includes('devis') ||
+        lowerQuery.includes('quotation')
+      ) {
+        return 'QUOTATION_PERFORMANCE';
+      } else if (
+        lowerQuery.includes('ia') ||
+        lowerQuery.includes('intelligence artificielle') ||
+        lowerQuery.includes('ai')
+      ) {
+        return 'AI_ACTIVITY';
+      } else if (
+        lowerQuery.includes('finance') ||
+        lowerQuery.includes('financier') ||
+        lowerQuery.includes('trésorerie')
+      ) {
+        return 'FINANCIAL_SUMMARY';
+      } else if (
+        lowerQuery.includes('fournisseur') ||
+        lowerQuery.includes('supplier')
+      ) {
+        return 'SUPPLIER_PERFORMANCE';
+      } else if (
+        lowerQuery.includes('équipement') ||
+        lowerQuery.includes('matériel')
+      ) {
+        return 'EQUIPMENT_STATUS';
+      } else if (
+        lowerQuery.includes('tableau de bord') ||
+        lowerQuery.includes('dashboard') ||
+        lowerQuery.includes('résumé')
+      ) {
+        return 'DASHBOARD_SUMMARY';
       } else {
         return 'GENERAL_REPORT';
       }
@@ -749,32 +808,32 @@ export class DatabaseController {
 
     switch (intent) {
       case 'ALL_PROJECTS':
-        sqlQuery = QUERIES.PROJECT_QUERIES.GET_ALL;
+        sqlQuery = QUERIES.projects.GET_ALL;
         break;
 
       case 'PROJECTS_TOMORROW':
-        sqlQuery = QUERIES.PROJECT_QUERIES.GET_TOMORROW;
+        sqlQuery = QUERIES.projects.GET_TOMORROW;
         break;
 
       case 'PROJECTS_TODAY':
-        sqlQuery = QUERIES.PROJECT_QUERIES.GET_TODAY;
+        sqlQuery = QUERIES.projects.GET_TODAY;
         break;
 
       case 'PROJECTS_BY_CLIENT':
         // Extraction de l'ID du client ou recherche par nom
         if (params.clientId) {
-          sqlQuery = QUERIES.PROJECT_QUERIES.GET_BY_CLIENT;
+          sqlQuery = QUERIES.projects.GET_BY_CLIENT;
           sqlParams = [params.clientId];
         } else if (params.clientName) {
           // Recherche d'abord le client par son nom
-          const clientSearchQuery = QUERIES.CLIENT_QUERIES.SEARCH_BY_NAME;
+          const clientSearchQuery = QUERIES.clients.SEARCH_BY_NAME;
           const clients = await this.databaseService.executeQuery(
             clientSearchQuery,
             [`%${params.clientName}%`],
           );
 
           if (clients && clients.length > 0) {
-            sqlQuery = QUERIES.PROJECT_QUERIES.GET_BY_CLIENT;
+            sqlQuery = QUERIES.projects.GET_BY_CLIENT;
             sqlParams = [clients[0].id];
           } else {
             throw new Error(`Client "${params.clientName}" non trouvé`);
@@ -785,27 +844,27 @@ export class DatabaseController {
         break;
 
       case 'ACTIVE_PROJECTS':
-        sqlQuery = QUERIES.PROJECT_QUERIES.GET_ACTIVE;
+        sqlQuery = QUERIES.projects.GET_ACTIVE;
         break;
 
       case 'COMPLETED_PROJECTS':
-        sqlQuery = QUERIES.PROJECT_QUERIES.GET_COMPLETED;
+        sqlQuery = QUERIES.projects.GET_COMPLETED;
         break;
 
       case 'PROJECT_PROGRESS':
         if (params.projectId) {
-          sqlQuery = QUERIES.PROJECT_QUERIES.CALCULATE_PROGRESS;
+          sqlQuery = QUERIES.projects.CALCULATE_PROGRESS;
           sqlParams = [params.projectId];
         } else if (params.projectName) {
           // Recherche d'abord le projet par son nom
-          const projectSearchQuery = QUERIES.PROJECT_QUERIES.SEARCH_BY_NAME;
+          const projectSearchQuery = QUERIES.projects.SEARCH_BY_NAME;
           const projects = await this.databaseService.executeQuery(
             projectSearchQuery,
             [`%${params.projectName}%`],
           );
 
           if (projects && projects.length > 0) {
-            sqlQuery = QUERIES.PROJECT_QUERIES.CALCULATE_PROGRESS;
+            sqlQuery = QUERIES.projects.CALCULATE_PROGRESS;
             sqlParams = [projects[0].id];
           } else {
             throw new Error(`Projet "${params.projectName}" non trouvé`);
@@ -816,11 +875,11 @@ export class DatabaseController {
         break;
 
       case 'OVERDUE_TASKS':
-        sqlQuery = QUERIES.TASK_QUERIES.GET_OVERDUE;
+        sqlQuery = QUERIES.tasks.GET_OVERDUE;
         break;
 
       case 'TASKS_THIS_MONTH':
-        sqlQuery = QUERIES.TASK_QUERIES.GET_UPCOMING;
+        sqlQuery = QUERIES.tasks.GET_UPCOMING;
         sqlParams = [
           PROMPTS.DATE_UTILS.getFirstDayOfCurrentMonth(),
           PROMPTS.DATE_UTILS.getLastDayOfCurrentMonth(),
@@ -829,18 +888,18 @@ export class DatabaseController {
 
       case 'TASKS_BY_USER':
         if (params.userId) {
-          sqlQuery = QUERIES.TASK_QUERIES.GET_BY_USER;
+          sqlQuery = QUERIES.tasks.GET_BY_USER;
           sqlParams = [params.userId];
         } else if (params.userName) {
           // Recherche d'abord l'utilisateur par son nom
-          const userSearchQuery = QUERIES.USER_QUERIES.SEARCH_BY_NAME;
+          const userSearchQuery = QUERIES.users.SEARCH_BY_NAME;
           const users = await this.databaseService.executeQuery(
             userSearchQuery,
             [`%${params.userName}%`],
           );
 
           if (users && users.length > 0) {
-            sqlQuery = QUERIES.TASK_QUERIES.GET_BY_USER;
+            sqlQuery = QUERIES.tasks.GET_BY_USER;
             sqlParams = [users[0].id];
           } else {
             throw new Error(`Utilisateur "${params.userName}" non trouvé`);
@@ -852,18 +911,18 @@ export class DatabaseController {
 
       case 'USER_WORKLOAD':
         if (params.userId) {
-          sqlQuery = QUERIES.USER_QUERIES.GET_WORKLOAD;
+          sqlQuery = QUERIES.users.GET_WORKLOAD;
           sqlParams = [params.userId];
         } else if (params.userName) {
           // Recherche d'abord l'utilisateur par son nom
-          const userSearchQuery = QUERIES.USER_QUERIES.SEARCH_BY_NAME;
+          const userSearchQuery = QUERIES.users.SEARCH_BY_NAME;
           const users = await this.databaseService.executeQuery(
             userSearchQuery,
             [`%${params.userName}%`],
           );
 
           if (users && users.length > 0) {
-            sqlQuery = QUERIES.USER_QUERIES.GET_WORKLOAD;
+            sqlQuery = QUERIES.users.GET_WORKLOAD;
             sqlParams = [users[0].id];
           } else {
             throw new Error(`Utilisateur "${params.userName}" non trouvé`);
@@ -874,23 +933,107 @@ export class DatabaseController {
         break;
 
       case 'PROJECT_PROGRESS_REPORT':
-        sqlQuery = QUERIES.REPORT_QUERIES.PROJECT_PROGRESS_REPORT;
+        sqlQuery = QUERIES.reports.PROJECT_PROGRESS_REPORT;
         break;
 
       case 'TASKS_BY_STATUS':
-        sqlQuery = QUERIES.REPORT_QUERIES.TASKS_BY_STATUS;
+        sqlQuery = QUERIES.reports.STAFF_WORKLOAD_REPORT;
         break;
 
       case 'USER_PERFORMANCE':
-        sqlQuery = QUERIES.REPORT_QUERIES.USER_PERFORMANCE;
+        sqlQuery = QUERIES.reports.STAFF_PERFORMANCE_REPORT;
+        break;
+
+      case 'CLIENT_PROFITABILITY':
+        sqlQuery = QUERIES.reports.CLIENT_PROFITABILITY_REPORT;
+        break;
+
+      case 'QUOTATION_PERFORMANCE':
+        sqlQuery = QUERIES.reports.QUOTATION_PERFORMANCE_REPORT;
+        break;
+
+      case 'AI_ACTIVITY':
+        sqlQuery = QUERIES.ai.GET_ACTIVITY;
+        break;
+
+      case 'FINANCIAL_SUMMARY':
+        sqlQuery = QUERIES.financial.FINANCIAL_SUMMARY;
+        break;
+
+      case 'SUPPLIER_PERFORMANCE':
+        sqlQuery = QUERIES.suppliers.SUPPLIER_PERFORMANCE_REPORT;
+        break;
+
+      case 'EQUIPMENT_STATUS':
+        sqlQuery = QUERIES.equipment.EQUIPMENT_STATUS_REPORT;
+        break;
+
+      case 'DASHBOARD_SUMMARY':
+        sqlQuery = QUERIES.dashboard.DASHBOARD_SUMMARY;
+        break;
+
+      case 'GENERAL_REPORT':
+        sqlQuery = QUERIES.dashboard.DASHBOARD_SUMMARY;
+        break;
+
+      case 'NOTES_LIST':
+        sqlQuery = QUERIES.notes.GET_ALL;
+        break;
+
+      case 'TAGS_LIST':
+        sqlQuery = QUERIES.tags.GET_ALL;
+        break;
+
+      case 'DOCUMENTS_LIST':
+        sqlQuery = QUERIES.documents.GET_ALL;
+        break;
+
+      case 'ACTIVITY_LOG':
+        sqlQuery = QUERIES.activity.GET_RECENT;
+        break;
+
+      case 'SETTINGS_LIST':
+        sqlQuery = QUERIES.settings.GET_ALL;
+        break;
+
+      case 'LIST_USERS':
+        sqlQuery = QUERIES.users.GET_ALL;
+        break;
+
+      case 'USER_BY_NAME':
+        if (params.userName) {
+          sqlQuery = QUERIES.users.SEARCH_BY_NAME;
+          sqlParams = [`%${params.userName}%`];
+        } else {
+          throw new Error("Nom de l'utilisateur non spécifié");
+        }
+        break;
+
+      case 'USER_BY_ID':
+        if (params.userId) {
+          sqlQuery = QUERIES.users.GET_BY_ID;
+          sqlParams = [params.userId];
+        } else {
+          throw new Error("ID de l'utilisateur non spécifié");
+        }
+        break;
+
+      case 'USERS_BY_ROLE':
+        if (params.role) {
+          sqlQuery = QUERIES.users.GET_BY_ROLE;
+          sqlParams = [params.role];
+        } else {
+          throw new Error('Rôle non spécifié');
+        }
         break;
 
       default:
-        throw new Error(`Intention non reconnue: ${intent}`);
+        throw new Error(`Intention inconnue: ${intent}`);
     }
 
     // Exécution de la requête SQL
-    return await this.databaseService.executeQuery(sqlQuery, sqlParams);
+    const result = await this.databaseService.executeQuery(sqlQuery, sqlParams);
+    return result;
   }
 
   /**
@@ -923,12 +1066,38 @@ export class DatabaseController {
     }
 
     // Extraction du nom de l'utilisateur
-    if (intent === 'TASKS_BY_USER' || intent === 'USER_WORKLOAD') {
-      const userRegex = /(?:utilisateur|user)\s+["']([^"']+)["']/i;
+    if (
+      intent === 'TASKS_BY_USER' ||
+      intent === 'USER_WORKLOAD' ||
+      intent === 'USER_BY_NAME'
+    ) {
+      const userRegex =
+        /(?:utilisateur|user|monsieur|mr|madame|mme|mlle)\s+["']?([^"']+)["']?/i;
       const userMatch = userQuery.match(userRegex);
 
       if (userMatch && userMatch[1]) {
         params.userName = userMatch[1];
+      }
+    }
+
+    // Extraction de l'ID de l'utilisateur
+    if (intent === 'USER_BY_ID') {
+      const idRegex = /id\s*[=:]\s*(\d+)/i;
+      const idMatch =
+        userQuery.match(idRegex) || userQuery.match(/utilisateur\s+(\d+)/i);
+
+      if (idMatch && idMatch[1]) {
+        params.userId = parseInt(idMatch[1], 10);
+      }
+    }
+
+    // Extraction du rôle pour USERS_BY_ROLE
+    if (intent === 'USERS_BY_ROLE') {
+      const roleRegex = /(?:rôle|role)\s+["']([^"']+)["']/i;
+      const roleMatch = userQuery.match(roleRegex);
+
+      if (roleMatch && roleMatch[1]) {
+        params.role = roleMatch[1];
       }
     }
 

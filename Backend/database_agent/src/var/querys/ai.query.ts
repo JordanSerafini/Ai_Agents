@@ -11,6 +11,20 @@ export const AI_QUERIES = {
     RETURNING id;
   `,
 
+  // Récupérer l'activité récente de l'IA
+  GET_ACTIVITY: `
+    SELECT 
+      ai.id,
+      ai.query,
+      ai.response,
+      ai.created_at,
+      CONCAT(s.firstname, ' ', s.lastname) as staff_name
+    FROM ai_interactions ai
+    LEFT JOIN staff s ON ai.staff_id = s.id
+    ORDER BY ai.created_at DESC
+    LIMIT $1;
+  `,
+
   // Mettre à jour le feedback d'une interaction
   UPDATE_FEEDBACK: `
     UPDATE ai_interactions

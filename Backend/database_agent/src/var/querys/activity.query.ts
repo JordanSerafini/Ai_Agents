@@ -13,6 +13,17 @@ export const ACTIVITY_QUERIES = {
     LIMIT $1 OFFSET $2;
   `,
 
+  // Récupérer les logs d'activité récents
+  GET_RECENT: `
+    SELECT 
+      al.*,
+      CONCAT(s.firstname, ' ', s.lastname) as staff_name
+    FROM activity_logs al
+    LEFT JOIN staff s ON al.staff_id = s.id
+    ORDER BY al.created_at DESC
+    LIMIT 20;
+  `,
+
   // Récupérer les logs d'activité d'un utilisateur
   GET_BY_USER: `
     SELECT * FROM activity_logs

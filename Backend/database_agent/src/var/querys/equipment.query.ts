@@ -26,6 +26,28 @@ export const EQUIPMENT_QUERIES = {
     WHERE e.id = $1;
   `,
 
+  // Rapport sur l'état des équipements
+  EQUIPMENT_STATUS_REPORT: `
+    SELECT 
+      e.id,
+      e.name,
+      e.type,
+      e.status,
+      e.location,
+      e.purchase_date,
+      e.last_maintenance_date,
+      e.next_maintenance_date,
+      COUNT(r.id) as total_reservations,
+      COUNT(CASE WHEN r.start_date <= CURRENT_DATE AND r.end_date >= CURRENT_DATE THEN 1 END) as currently_reserved,
+      COUNT(m.id) as maintenance_count,
+      AVG(m.cost) as avg_maintenance_cost
+    FROM equipment e
+    LEFT JOIN equipment_reservations r ON e.id = r.equipment_id
+    LEFT JOIN maintenance_records m ON e.id = m.equipment_id
+    GROUP BY e.id, e.name, e.type, e.status, e.location, e.purchase_date, e.last_maintenance_date, e.next_maintenance_date
+    ORDER BY e.status, e.next_maintenance_date ASC;
+  `,
+
   // Rechercher des équipements par nom ou référence
   SEARCH: `
     SELECT 

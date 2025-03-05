@@ -21,6 +21,27 @@ export const SUPPLIER_QUERIES = {
     ORDER BY name;
   `,
 
+  // Rapport de performance des fournisseurs
+  SUPPLIER_PERFORMANCE_REPORT: `
+    SELECT 
+      s.id,
+      s.name,
+      COUNT(o.id) as total_orders,
+      AVG(o.delivery_time) as avg_delivery_time,
+      AVG(r.rating) as avg_rating,
+      SUM(o.total_amount) as total_spent,
+      COUNT(CASE WHEN o.status = 'delayed' THEN 1 END) as delayed_orders,
+      CASE 
+        WHEN COUNT(o.id) = 0 THEN 0
+        ELSE ROUND((COUNT(CASE WHEN o.status = 'delayed' THEN 1 END)::numeric / COUNT(o.id)) * 100, 2)
+      END as delay_rate
+    FROM suppliers s
+    LEFT JOIN supplier_orders o ON s.id = o.supplier_id
+    LEFT JOIN supplier_ratings r ON s.id = r.supplier_id
+    GROUP BY s.id, s.name
+    ORDER BY avg_rating DESC NULLS LAST;
+  `,
+
   // Créer un nouveau fournisseur
   CREATE: `
     INSERT INTO suppliers (
