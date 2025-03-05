@@ -1084,7 +1084,7 @@ export class DatabaseController {
       }
 
       // -------- GESTION DES REQUÊTES SUR LES RENDEZ-VOUS --------
-      if (enrichedRequest.metadata.primaryTable === 'appointments') {
+      if (enrichedRequest.metadata.primaryTable === 'calendar_events') {
         const response = await this.handleAppointmentsQuery(enrichedRequest);
         this.logger.debug(
           `Réponse finale pour rendez-vous: ${JSON.stringify(response)}`,
@@ -2128,18 +2128,29 @@ export class DatabaseController {
     const entities = enrichedRequest.metadata?.analysis?.entites || [];
 
     try {
+      // Définition d'une interface pour les résultats
+      interface AppointmentResult {
+        id: number;
+        title: string;
+        description?: string;
+        start_date: string;
+        end_date: string;
+        location?: string;
+        client_name?: string;
+      }
+
       // Construction de la requête de base
       let query = `
         SELECT 
-          a.id,
-          a.title,
-          a.description,
-          a.start_date,
-          a.end_date,
-          a.location,
+          ce.id,
+          ce.title,
+          ce.description,
+          ce.start_date,
+          ce.end_date,
+          ce.location,
           c.name as client_name
-        FROM appointments a
-        LEFT JOIN clients c ON a.client_id = c.id
+        FROM calendar_events ce
+        LEFT JOIN clients c ON ce.client_id = c.id
       `;
 
       const whereConditions: string[] = [];
@@ -2149,46 +2160,46 @@ export class DatabaseController {
       if (timeframe) {
         switch (timeframe) {
           case 'today':
-            whereConditions.push('DATE(a.start_date) = CURRENT_DATE');
+            whereConditions.push('DATE(ce.start_date) = CURRENT_DATE');
             break;
           case 'tomorrow':
             whereConditions.push(
-              "DATE(a.start_date) = (CURRENT_DATE + INTERVAL '1 day')",
+              "DATE(ce.start_date) = (CURRENT_DATE + INTERVAL '1 day')",
             );
             break;
           case 'yesterday':
             whereConditions.push(
-              "DATE(a.start_date) = (CURRENT_DATE - INTERVAL '1 day')",
+              "DATE(ce.start_date) = (CURRENT_DATE - INTERVAL '1 day')",
             );
             break;
           case 'this_week':
             whereConditions.push(
-              "DATE_PART('week', a.start_date) = DATE_PART('week', CURRENT_DATE) AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE)",
+              "DATE_PART('week', ce.start_date) = DATE_PART('week', CURRENT_DATE) AND DATE_PART('year', ce.start_date) = DATE_PART('year', CURRENT_DATE)",
             );
             break;
           case 'next_week':
             whereConditions.push(
-              "DATE_PART('week', a.start_date) = DATE_PART('week', CURRENT_DATE + INTERVAL '7 days') AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE + INTERVAL '7 days')",
+              "DATE_PART('week', ce.start_date) = DATE_PART('week', CURRENT_DATE + INTERVAL '7 days') AND DATE_PART('year', ce.start_date) = DATE_PART('year', CURRENT_DATE + INTERVAL '7 days')",
             );
             break;
           case 'last_week':
             whereConditions.push(
-              "DATE_PART('week', a.start_date) = DATE_PART('week', CURRENT_DATE - INTERVAL '7 days') AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE - INTERVAL '7 days')",
+              "DATE_PART('week', ce.start_date) = DATE_PART('week', CURRENT_DATE - INTERVAL '7 days') AND DATE_PART('year', ce.start_date) = DATE_PART('year', CURRENT_DATE - INTERVAL '7 days')",
             );
             break;
           case 'current_month':
             whereConditions.push(
-              "DATE_PART('month', a.start_date) = DATE_PART('month', CURRENT_DATE) AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE)",
+              "DATE_PART('month', ce.start_date) = DATE_PART('month', CURRENT_DATE) AND DATE_PART('year', ce.start_date) = DATE_PART('year', CURRENT_DATE)",
             );
             break;
           case 'next_month':
             whereConditions.push(
-              "(DATE_PART('month', a.start_date) = DATE_PART('month', CURRENT_DATE + INTERVAL '1 month') AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE + INTERVAL '1 month'))",
+              "(DATE_PART('month', ce.start_date) = DATE_PART('month', CURRENT_DATE + INTERVAL '1 month') AND DATE_PART('year', ce.start_date) = DATE_PART('year', CURRENT_DATE + INTERVAL '1 month'))",
             );
             break;
           case 'last_month':
             whereConditions.push(
-              "(DATE_PART('month', a.start_date) = DATE_PART('month', CURRENT_DATE - INTERVAL '1 month') AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE - INTERVAL '1 month'))",
+              "(DATE_PART('month', ce.start_date) = DATE_PART('month', CURRENT_DATE - INTERVAL '1 month') AND DATE_PART('year', ce.start_date) = DATE_PART('year', CURRENT_DATE - INTERVAL '1 month'))",
             );
             break;
           default:
@@ -2212,10 +2223,10 @@ export class DatabaseController {
       }
 
       // Ajout de l'ordre de tri
-      query += ` ORDER BY a.start_date ASC`;
+      query += ` ORDER BY ce.start_date ASC`;
 
       // Exécution de la requête
-      const appointments = await this.databaseService.executeQuery(
+      const appointments = await this.databaseService.executeQuery<AppointmentResult[]>(
         query,
         params,
       );
@@ -2274,15 +2285,13 @@ export class DatabaseController {
         data: appointments,
       };
     } catch (error) {
-      const errorMessage = getErrorMessage(error);
       this.logger.error(
-        `Erreur lors de la récupération des rendez-vous: ${errorMessage}`,
+        `Erreur lors de la récupération des rendez-vous: ${getErrorMessage(error)}`,
       );
       return {
-        reponse:
-          "Désolé, une erreur s'est produite lors de la récupération des rendez-vous.",
+        reponse: "Désolé, une erreur s'est produite lors de la récupération des rendez-vous.",
         success: false,
-        error: errorMessage,
+        error: getErrorMessage(error),
       };
     }
   }

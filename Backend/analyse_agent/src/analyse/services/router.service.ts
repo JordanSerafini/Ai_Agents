@@ -247,13 +247,13 @@ export class RouterService {
       paiements: 'payments',
       chantier: 'projects',
       chantiers: 'projects',
-      rendez: 'appointments',
-      'rendez-vous': 'appointments',
-      'rendez vous': 'appointments',
-      rdv: 'appointments',
-      agenda: 'appointments',
-      calendrier: 'appointments',
-      planning: 'appointments',
+      rendez: 'calendar_events',
+      'rendez-vous': 'calendar_events',
+      'rendez vous': 'calendar_events',
+      rdv: 'calendar_events',
+      agenda: 'calendar_events',
+      calendrier: 'calendar_events',
+      planning: 'calendar_events',
     };
 
     // Déterminer la table principale concernée
