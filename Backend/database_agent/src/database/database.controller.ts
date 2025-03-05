@@ -686,6 +686,35 @@ export class DatabaseController {
         lowerQuery.includes('assigné')
       ) {
         return 'TASKS_BY_USER';
+      } else if (
+        lowerQuery.includes('récent') ||
+        lowerQuery.includes('dernière') ||
+        lowerQuery.includes('dernières') ||
+        lowerQuery.includes('récemment')
+      ) {
+        return 'RECENT_TASKS';
+      } else if (
+        lowerQuery.includes('statut') ||
+        lowerQuery.includes('état') ||
+        lowerQuery.includes('terminé') ||
+        lowerQuery.includes('en cours') ||
+        lowerQuery.includes('à faire')
+      ) {
+        return 'TASKS_BY_STATUS';
+      } else if (
+        lowerQuery.includes('id') ||
+        lowerQuery.match(/tâche\s+(\d+)/) ||
+        lowerQuery.match(/task\s+(\d+)/)
+      ) {
+        return 'TASK_BY_ID';
+      } else if (
+        lowerQuery.includes('cherche') ||
+        lowerQuery.includes('recherche') ||
+        lowerQuery.includes('contenant') ||
+        lowerQuery.includes('mot-clé') ||
+        lowerQuery.includes('mot clé')
+      ) {
+        return 'SEARCH_TASKS';
       } else {
         return 'LIST_TASKS';
       }
@@ -727,6 +756,46 @@ export class DatabaseController {
         return 'CLIENT_PROJECTS';
       } else {
         return 'LIST_CLIENTS';
+      }
+    }
+
+    // Recherche de fournisseurs
+    if (lowerQuery.includes('fournisseur') || lowerQuery.includes('supplier')) {
+      if (
+        lowerQuery.includes('performance') ||
+        lowerQuery.includes('évaluation') ||
+        lowerQuery.includes('rating')
+      ) {
+        return 'SUPPLIER_PERFORMANCE';
+      } else if (
+        lowerQuery.includes('produit') ||
+        lowerQuery.includes('product')
+      ) {
+        return 'SUPPLIER_PRODUCTS';
+      } else if (
+        lowerQuery.includes('commande') ||
+        lowerQuery.includes('order')
+      ) {
+        return 'SUPPLIER_ORDERS';
+      } else if (
+        lowerQuery.includes('top') ||
+        lowerQuery.includes('meilleur')
+      ) {
+        return 'TOP_SUPPLIERS';
+      } else if (
+        lowerQuery.includes('id') ||
+        lowerQuery.match(/fournisseur\s+(\d+)/) ||
+        lowerQuery.match(/supplier\s+(\d+)/)
+      ) {
+        return 'SUPPLIER_BY_ID';
+      } else if (
+        lowerQuery.includes('cherche') ||
+        lowerQuery.includes('recherche') ||
+        lowerQuery.includes('nom')
+      ) {
+        return 'SEARCH_SUPPLIERS';
+      } else {
+        return 'LIST_SUPPLIERS';
       }
     }
 
@@ -785,6 +854,33 @@ export class DatabaseController {
         return 'DASHBOARD_SUMMARY';
       } else {
         return 'GENERAL_REPORT';
+      }
+    }
+
+    // Paramètres système
+    if (
+      lowerQuery.includes('paramètre') ||
+      lowerQuery.includes('parametre') ||
+      lowerQuery.includes('réglage') ||
+      lowerQuery.includes('configuration') ||
+      lowerQuery.includes('setting')
+    ) {
+      if (lowerQuery.includes('entreprise') || lowerQuery.includes('société') || lowerQuery.includes('company')) {
+        return 'COMPANY_SETTINGS';
+      } else if (lowerQuery.includes('ia') || lowerQuery.includes('intelligence artificielle') || lowerQuery.includes('ai')) {
+        return 'AI_SETTINGS';
+      } else if (lowerQuery.includes('facture') || lowerQuery.includes('facturation') || lowerQuery.includes('invoice')) {
+        return 'INVOICE_SETTINGS';
+      } else if (lowerQuery.includes('devis') || lowerQuery.includes('quotation')) {
+        return 'QUOTATION_SETTINGS';
+      } else if (lowerQuery.includes('notification') || lowerQuery.includes('alerte')) {
+        return 'NOTIFICATION_SETTINGS';
+      } else if (lowerQuery.includes('sécurité') || lowerQuery.includes('securite') || lowerQuery.includes('security')) {
+        return 'SECURITY_SETTINGS';
+      } else if (lowerQuery.includes('version') || lowerQuery.includes('système') || lowerQuery.includes('system')) {
+        return 'SYSTEM_VERSION';
+      } else {
+        return 'SETTINGS_LIST';
       }
     }
 
@@ -937,7 +1033,38 @@ export class DatabaseController {
         break;
 
       case 'TASKS_BY_STATUS':
-        sqlQuery = QUERIES.reports.STAFF_WORKLOAD_REPORT;
+        if (params.status) {
+          sqlQuery = QUERIES.tasks.GET_BY_STATUS;
+          sqlParams = [params.status];
+        } else {
+          throw new Error('Statut non spécifié');
+        }
+        break;
+
+      case 'RECENT_TASKS':
+        sqlQuery = QUERIES.tasks.GET_RECENT;
+        break;
+
+      case 'TASK_BY_ID':
+        if (params.taskId) {
+          sqlQuery = QUERIES.tasks.GET_BY_ID;
+          sqlParams = [params.taskId];
+        } else {
+          throw new Error('ID de la tâche non spécifié');
+        }
+        break;
+
+      case 'SEARCH_TASKS':
+        if (params.keyword) {
+          sqlQuery = QUERIES.tasks.SEARCH_BY_KEYWORD;
+          sqlParams = [`%${params.keyword}%`];
+        } else {
+          throw new Error('Mot-clé de recherche non spécifié');
+        }
+        break;
+
+      case 'LIST_TASKS':
+        sqlQuery = QUERIES.tasks.GET_ALL;
         break;
 
       case 'USER_PERFORMANCE':
@@ -962,6 +1089,79 @@ export class DatabaseController {
 
       case 'SUPPLIER_PERFORMANCE':
         sqlQuery = QUERIES.suppliers.SUPPLIER_PERFORMANCE_REPORT;
+        break;
+
+      case 'LIST_SUPPLIERS':
+        sqlQuery = QUERIES.suppliers.GET_ALL;
+        break;
+
+      case 'SUPPLIER_BY_ID':
+        if (params.supplierId) {
+          sqlQuery = QUERIES.suppliers.GET_BY_ID;
+          sqlParams = [params.supplierId];
+        } else {
+          throw new Error('ID du fournisseur non spécifié');
+        }
+        break;
+
+      case 'SEARCH_SUPPLIERS':
+        if (params.supplierName) {
+          sqlQuery = QUERIES.suppliers.SEARCH;
+          sqlParams = [`%${params.supplierName}%`];
+        } else {
+          throw new Error('Nom du fournisseur non spécifié');
+        }
+        break;
+
+      case 'SUPPLIER_PRODUCTS':
+        if (params.supplierId) {
+          sqlQuery = QUERIES.suppliers.GET_SUPPLIER_PRODUCTS;
+          sqlParams = [params.supplierId];
+        } else if (params.supplierName) {
+          // Recherche d'abord le fournisseur par son nom
+          const supplierSearchQuery = QUERIES.suppliers.SEARCH;
+          const suppliers = await this.databaseService.executeQuery(
+            supplierSearchQuery,
+            [`%${params.supplierName}%`],
+          );
+
+          if (suppliers && suppliers.length > 0) {
+            sqlQuery = QUERIES.suppliers.GET_SUPPLIER_PRODUCTS;
+            sqlParams = [suppliers[0].id];
+          } else {
+            throw new Error(`Fournisseur "${params.supplierName}" non trouvé`);
+          }
+        } else {
+          throw new Error('Nom ou ID du fournisseur non spécifié');
+        }
+        break;
+
+      case 'SUPPLIER_ORDERS':
+        if (params.supplierId) {
+          sqlQuery = QUERIES.suppliers.GET_SUPPLIER_ORDERS;
+          sqlParams = [params.supplierId];
+        } else if (params.supplierName) {
+          // Recherche d'abord le fournisseur par son nom
+          const supplierSearchQuery = QUERIES.suppliers.SEARCH;
+          const suppliers = await this.databaseService.executeQuery(
+            supplierSearchQuery,
+            [`%${params.supplierName}%`],
+          );
+
+          if (suppliers && suppliers.length > 0) {
+            sqlQuery = QUERIES.suppliers.GET_SUPPLIER_ORDERS;
+            sqlParams = [suppliers[0].id];
+          } else {
+            throw new Error(`Fournisseur "${params.supplierName}" non trouvé`);
+          }
+        } else {
+          throw new Error('Nom ou ID du fournisseur non spécifié');
+        }
+        break;
+
+      case 'TOP_SUPPLIERS':
+        sqlQuery = QUERIES.suppliers.GET_TOP_SUPPLIERS;
+        sqlParams = [10]; // Récupérer les 10 meilleurs fournisseurs par défaut
         break;
 
       case 'EQUIPMENT_STATUS':
@@ -994,6 +1194,34 @@ export class DatabaseController {
 
       case 'SETTINGS_LIST':
         sqlQuery = QUERIES.settings.GET_ALL;
+        break;
+
+      case 'COMPANY_SETTINGS':
+        sqlQuery = QUERIES.settings.GET_COMPANY_INFO;
+        break;
+
+      case 'AI_SETTINGS':
+        sqlQuery = QUERIES.settings.GET_AI_SETTINGS;
+        break;
+
+      case 'INVOICE_SETTINGS':
+        sqlQuery = QUERIES.settings.GET_INVOICE_SETTINGS;
+        break;
+
+      case 'QUOTATION_SETTINGS':
+        sqlQuery = QUERIES.settings.GET_QUOTATION_SETTINGS;
+        break;
+
+      case 'NOTIFICATION_SETTINGS':
+        sqlQuery = QUERIES.settings.GET_NOTIFICATION_SETTINGS;
+        break;
+
+      case 'SECURITY_SETTINGS':
+        sqlQuery = QUERIES.settings.GET_SECURITY_SETTINGS;
+        break;
+
+      case 'SYSTEM_VERSION':
+        sqlQuery = QUERIES.settings.GET_SYSTEM_VERSION;
         break;
 
       case 'LIST_USERS':
@@ -1098,6 +1326,80 @@ export class DatabaseController {
 
       if (roleMatch && roleMatch[1]) {
         params.role = roleMatch[1];
+      }
+    }
+
+    // Extraction du statut pour TASKS_BY_STATUS
+    if (intent === 'TASKS_BY_STATUS') {
+      const statusRegex = /(?:statut|état|etat)\s+["']?([^"']+)["']?/i;
+      const statusMatch = userQuery.match(statusRegex);
+
+      if (statusMatch && statusMatch[1]) {
+        params.status = statusMatch[1];
+      } else if (userQuery.toLowerCase().includes('terminé')) {
+        params.status = 'termine';
+      } else if (userQuery.toLowerCase().includes('en cours')) {
+        params.status = 'en_cours';
+      } else if (userQuery.toLowerCase().includes('à faire')) {
+        params.status = 'a_faire';
+      }
+    }
+
+    // Extraction de l'ID de la tâche
+    if (intent === 'TASK_BY_ID') {
+      const idRegex = /(?:tâche|task)\s+(\d+)/i;
+      const idMatch =
+        userQuery.match(idRegex) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+
+      if (idMatch && idMatch[1]) {
+        params.taskId = parseInt(idMatch[1], 10);
+      }
+    }
+
+    // Extraction du mot-clé pour la recherche de tâches
+    if (intent === 'SEARCH_TASKS') {
+      const keywordRegex =
+        /(?:cherche|recherche|contenant|mot-clé|mot clé)\s+["']?([^"']+)["']?/i;
+      const keywordMatch = userQuery.match(keywordRegex);
+
+      if (keywordMatch && keywordMatch[1]) {
+        params.keyword = keywordMatch[1];
+      }
+    }
+
+    // Extraction de l'ID du fournisseur
+    if (
+      intent === 'SUPPLIER_BY_ID' ||
+      intent === 'SUPPLIER_PRODUCTS' ||
+      intent === 'SUPPLIER_ORDERS'
+    ) {
+      const idRegex = /(?:fournisseur|supplier)\s+(\d+)/i;
+      const idMatch =
+        userQuery.match(idRegex) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+
+      if (idMatch && idMatch[1]) {
+        params.supplierId = parseInt(idMatch[1], 10);
+      }
+    }
+
+    // Extraction du nom du fournisseur
+    if (
+      intent === 'SEARCH_SUPPLIERS' ||
+      intent === 'SUPPLIER_PRODUCTS' ||
+      intent === 'SUPPLIER_ORDERS'
+    ) {
+      const nameRegex = /(?:fournisseur|supplier)\s+["']?([^"']+)["']?/i;
+      const nameMatch = userQuery.match(nameRegex);
+
+      if (nameMatch && nameMatch[1] && !parseInt(nameMatch[1], 10)) {
+        params.supplierName = nameMatch[1];
+      } else {
+        const searchRegex = /(?:cherche|recherche|nom)\s+["']?([^"']+)["']?/i;
+        const searchMatch = userQuery.match(searchRegex);
+
+        if (searchMatch && searchMatch[1]) {
+          params.supplierName = searchMatch[1];
+        }
       }
     }
 
