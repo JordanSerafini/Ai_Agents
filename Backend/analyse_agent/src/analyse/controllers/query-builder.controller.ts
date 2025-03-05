@@ -280,8 +280,8 @@ export class QueryBuilderController {
         AgentType.DATABASE,
         body.limit || 5
       );
-      
-      return {
+    
+    return {
         success: true,
         results: results.map(result => ({
           question: result.document.question,
