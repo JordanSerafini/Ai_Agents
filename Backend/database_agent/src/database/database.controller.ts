@@ -18,7 +18,6 @@ import {
   TaskResult,
   QuotationResult,
   SearchResponse,
-  SearchResult,
   GenericResponse,
 } from './models/query-types';
 
@@ -1516,12 +1515,8 @@ export class DatabaseController {
     data?: any;
   }> {
     try {
-      // Récupération de la source de données
-      const db = this.databaseService.getDataSource();
-
       // Extraction des métadonnées pour le filtrage
       const intention = enrichedRequest.metadata?.analysis?.intention || '';
-      const timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
 
       // Structure pour stocker les résultats
       interface ClientResult {
@@ -1723,9 +1718,6 @@ export class DatabaseController {
     data?: any;
   }> {
     try {
-      // Récupération de la source de données
-      const db = this.databaseService.getDataSource();
-
       // Extraction des métadonnées pour le filtrage
       const intention = enrichedRequest.metadata?.analysis?.intention || '';
       const status = enrichedRequest.metadata?.filters?.status || null;
@@ -1760,7 +1752,6 @@ export class DatabaseController {
       // Filtrage par période
       if (timeframe) {
         let dateCondition = '';
-        const paramIndex = params.length + 1;
 
         switch (timeframe) {
           case 'current_month':

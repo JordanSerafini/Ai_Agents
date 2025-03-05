@@ -5,7 +5,10 @@ import { DatabaseMetadataService } from './services/database-metadata.service';
 @Injectable()
 export class DatabaseService {
   private readonly logger = new Logger(DatabaseService.name);
-  private queryCache: Map<string, { data: any; timestamp: number }> = new Map();
+  private queryCache: Map<
+    string,
+    { data: any; timestamp: number; ttl?: number }
+  > = new Map();
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes par défaut
 
   constructor(
