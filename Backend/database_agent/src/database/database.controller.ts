@@ -9,9 +9,31 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from './database.service';
 import { DatabaseMetadataService } from './services/database-metadata.service';
+import { SearchService } from '../search/search.service';
+import { SyncService } from '../search/sync.service';
 // Importer les variables de prompt et les requêtes SQL
 import * as PROMPTS from '../var/prompt';
-import * as QUERIES from '../var/query';
+import * as QUERIES from '../var/querys/query_ALL';
+
+interface SearchResult {
+  id: number;
+  title?: string;
+  name?: string;
+  description?: string;
+  score?: number;
+  [key: string]: any;
+}
+
+interface SearchResponse {
+  success: boolean;
+  results?: SearchResult[];
+  count?: number;
+  error?: string;
+  message?: string;
+  type?: string;
+  entity?: string;
+  intent?: string;
+}
 
 @Controller('database')
 export class DatabaseController {
@@ -20,6 +42,8 @@ export class DatabaseController {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly dbMetadataService: DatabaseMetadataService,
+    private readonly searchService: SearchService,
+    private readonly syncService: SyncService,
   ) {}
 
   @Get('health')
@@ -78,7 +102,7 @@ export class DatabaseController {
     try {
       // Importer les variables de prompt et les requêtes SQL
       const PROMPTS = await import('../var/prompt');
-      const QUERIES = await import('../var/query');
+      const QUERIES = await import('../var/querys/query_ALL');
 
       // Récupérer les métadonnées de la base de données
       const dbMetadata = {
@@ -88,22 +112,22 @@ export class DatabaseController {
 
       // Analyser la question pour déterminer quelle table ou données sont nécessaires
       const { question, analysedData } = body;
-      
+
       // Analyser l'intention de la requête
       const intent = this.analyzeQueryIntent(question);
       let response = '';
-      
+
       // Si l'intention est reconnue, utiliser les requêtes prédéfinies
       if (intent !== 'UNKNOWN') {
         try {
           const result = await this.executeQueryByIntent(intent, question);
-          
+
           // Formater la réponse en fonction du type de données
           if (Array.isArray(result) && result.length > 0) {
             response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
             response += `Voici les résultats que j'ai trouvés:\n`;
             response += `${JSON.stringify(result, null, 2)}\n\n`;
-            
+
             // Ajouter des informations supplémentaires en fonction de l'intention
             switch (intent) {
               case 'PROJECT_PROGRESS':
@@ -143,7 +167,7 @@ export class DatabaseController {
       } else {
         // Comportement existant pour les requêtes non reconnues
         response = `J'ai analysé votre question concernant la base de données: "${question}"\n\n`;
-        
+
         // Chercher si la question mentionne une table spécifique
         const mentionedTables = dbMetadata.tables.filter((table) =>
           question.toLowerCase().includes(table.name.toLowerCase()),
@@ -155,7 +179,10 @@ export class DatabaseController {
           // Pour chaque table mentionnée, récupérer quelques données
           for (const table of mentionedTables) {
             try {
-              const data = await this.databaseService.getTableData(table.name, 5);
+              const data = await this.databaseService.getTableData(
+                table.name,
+                5,
+              );
               response += `Voici un aperçu des données de la table ${table.name}:\n`;
               response += `${JSON.stringify(data, null, 2)}\n\n`;
             } catch (error: any) {
@@ -168,7 +195,7 @@ export class DatabaseController {
             .map((t) => `- ${t.name}: ${t.description || 'Pas de description'}`)
             .join('\n');
           response += `\n\nPour obtenir des informations sur une table spécifique, veuillez mentionner son nom dans votre question.`;
-          
+
           // Ajouter des exemples de requêtes
           response += `\n\nVoici quelques exemples de requêtes que vous pouvez essayer:\n`;
           response += PROMPTS.PROMPT_EXAMPLES.FIND_PROJECT + '\n';
@@ -300,32 +327,206 @@ export class DatabaseController {
     }
   }
 
-  @Post('natural-query')
+  @Post('search/projects')
+  async searchProjects(
+    @Body() body: { query: string; filters?: Record<string, any> },
+  ): Promise<SearchResponse> {
+    try {
+      const { query, filters } = body;
+      if (!query) {
+        return { success: false, error: 'Terme de recherche manquant' };
+      }
+
+      const results = await this.searchService.searchProjects(query, filters);
+      return {
+        success: true,
+        results,
+        count: results.length,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la recherche de projets: ${error.message}`,
+      );
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('search/similar-projects/:id')
+  async findSimilarProjects(@Param('id') id: string): Promise<SearchResponse> {
+    try {
+      const projectId = parseInt(id, 10);
+      if (isNaN(projectId)) {
+        return { success: false, error: 'ID de projet invalide' };
+      }
+
+      const results = await this.searchService.findSimilarProjects(projectId);
+      return {
+        success: true,
+        results,
+        count: results.length,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la recherche de projets similaires: ${error.message}`,
+      );
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('search/documents')
+  async searchDocuments(
+    @Body() body: { query: string },
+  ): Promise<SearchResponse> {
+    try {
+      const { query } = body;
+      if (!query) {
+        return { success: false, error: 'Terme de recherche manquant' };
+      }
+
+      const results = await this.searchService.searchDocuments(query);
+      return {
+        success: true,
+        results,
+        count: results.length,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la recherche de documents: ${error.message}`,
+      );
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('search/suppliers')
+  async searchSuppliers(
+    @Body() body: { query: string },
+  ): Promise<SearchResponse> {
+    try {
+      const { query } = body;
+      if (!query) {
+        return { success: false, error: 'Terme de recherche manquant' };
+      }
+
+      const results = await this.searchService.searchSuppliers(query);
+      return {
+        success: true,
+        results,
+        count: results.length,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la recherche de fournisseurs: ${error.message}`,
+      );
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('elasticsearch/sync')
+  async syncElasticsearch(): Promise<SearchResponse> {
+    try {
+      await this.syncService.syncAll();
+      return {
+        success: true,
+        message: 'Synchronisation Elasticsearch terminée avec succès',
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la synchronisation Elasticsearch: ${error.message}`,
+      );
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('elasticsearch/sync/:entity/:id')
+  async syncEntity(
+    @Param('entity') entity: string,
+    @Param('id') id: string,
+  ): Promise<SearchResponse> {
+    try {
+      const entityId = parseInt(id, 10);
+      if (isNaN(entityId)) {
+        return { success: false, error: "ID d'entité invalide" };
+      }
+
+      await this.syncService.syncEntity(entity, entityId);
+      return {
+        success: true,
+        message: `Synchronisation de l'entité ${entity} avec l'ID ${id} terminée avec succès`,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la synchronisation de l'entité: ${error.message}`,
+      );
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('elasticsearch/delete/:entity/:id')
+  async deleteEntity(
+    @Param('entity') entity: string,
+    @Param('id') id: string,
+  ): Promise<SearchResponse> {
+    try {
+      const entityId = parseInt(id, 10);
+      if (isNaN(entityId)) {
+        return { success: false, error: "ID d'entité invalide" };
+      }
+
+      await this.syncService.deleteEntity(entity, entityId);
+      return {
+        success: true,
+        message: `Suppression de l'entité ${entity} avec l'ID ${id} terminée avec succès`,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la suppression de l'entité: ${error.message}`,
+      );
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  @Post('processNaturalLanguageQuery')
   async processNaturalLanguageQuery(@Body() body: { query: string }) {
     try {
-      if (!body.query) {
+      const { query } = body;
+      if (!query) {
         return { error: 'Requête en langage naturel manquante' };
       }
 
-      const userQuery = body.query;
-      this.logger.log(
-        `Traitement de la requête en langage naturel: ${userQuery}`,
-      );
+      // Vérifier si c'est une requête de recherche
+      if (this.isSearchQuery(query)) {
+        return this.handleSearchQuery(query);
+      }
 
-      // Analyse de la requête pour déterminer l'intention
-      const intent = this.analyzeQueryIntent(userQuery);
-
-      // Exécution de la requête SQL appropriée en fonction de l'intention
-      const result = await this.executeQueryByIntent(intent, userQuery);
+      // Continuer avec le traitement existant pour les autres types de requêtes
+      const intent = this.analyzeQueryIntent(query);
+      const result = await this.executeQueryByIntent(intent, query);
 
       return {
         success: true,
-        data: result,
-        metadata: {
-          intent,
-          query: userQuery,
-          timestamp: new Date().toISOString(),
-        },
+        intent,
+        result,
       };
     } catch (error) {
       this.logger.error(
@@ -334,26 +535,86 @@ export class DatabaseController {
       return {
         success: false,
         error: error.message,
-        metadata: {
-          query: body.query,
-          timestamp: new Date().toISOString(),
-        },
       };
     }
   }
 
-  @Get('help')
-  getHelpMessage() {
+  private isSearchQuery(query: string): boolean {
+    const searchTerms = [
+      'cherche',
+      'trouve',
+      'recherche',
+      'similaire',
+      'comme',
+      'ressemble',
+      'contenant',
+      'concernant',
+    ];
+
+    const lowerQuery = query.toLowerCase();
+    return searchTerms.some((term) => lowerQuery.includes(term));
+  }
+
+  private async handleSearchQuery(query: string): Promise<any> {
+    const lowerQuery = query.toLowerCase();
+
+    // Déterminer le type d'entité à rechercher
+    let entityType = 'projects'; // Par défaut, rechercher dans les projets
+
+    if (lowerQuery.includes('document') || lowerQuery.includes('fichier')) {
+      entityType = 'documents';
+    } else if (
+      lowerQuery.includes('fournisseur') ||
+      lowerQuery.includes('supplier')
+    ) {
+      entityType = 'suppliers';
+    } else if (lowerQuery.includes('client')) {
+      entityType = 'clients';
+    }
+
+    // Vérifier si c'est une recherche de similarité
+    if (lowerQuery.includes('similaire') || lowerQuery.includes('comme')) {
+      // Extraire l'ID du projet de référence
+      const idMatch = lowerQuery.match(
+        /projet\s+#?(\d+)|chantier\s+#?(\d+)|#(\d+)/i,
+      );
+      if (idMatch) {
+        const projectId = parseInt(idMatch[1] || idMatch[2] || idMatch[3], 10);
+        if (!isNaN(projectId)) {
+          const results =
+            await this.searchService.findSimilarProjects(projectId);
+          return {
+            success: true,
+            type: 'similarity',
+            entity: 'projects',
+            results,
+            count: results.length,
+          };
+        }
+      }
+    }
+
+    // Recherche standard
+    let results;
+    switch (entityType) {
+      case 'documents':
+        results = await this.searchService.searchDocuments(query);
+        break;
+      case 'suppliers':
+        results = await this.searchService.searchSuppliers(query);
+        break;
+      case 'projects':
+      default:
+        results = await this.searchService.searchProjects(query);
+        break;
+    }
+
     return {
-      help: PROMPTS.HELP_MESSAGES.GENERAL,
-      syntax: PROMPTS.HELP_MESSAGES.SEARCH_SYNTAX,
-      examples: [
-        PROMPTS.PROMPT_EXAMPLES.FIND_PROJECT,
-        PROMPTS.PROMPT_EXAMPLES.TASKS_THIS_MONTH,
-        PROMPTS.PROMPT_EXAMPLES.OVERDUE_TASKS,
-        PROMPTS.PROMPT_EXAMPLES.USER_ASSIGNMENTS,
-        PROMPTS.PROMPT_EXAMPLES.PROJECT_PROGRESS,
-      ],
+      success: true,
+      type: 'search',
+      entity: entityType,
+      results,
+      count: results.length,
     };
   }
 
@@ -372,13 +633,10 @@ export class DatabaseController {
       lowerQuery.includes('travaux')
     ) {
       // Projets de demain
-      if (
-        lowerQuery.includes('demain') ||
-        lowerQuery.includes('lendemain')
-      ) {
+      if (lowerQuery.includes('demain') || lowerQuery.includes('lendemain')) {
         return 'PROJECTS_TOMORROW';
       }
-      
+
       // Projets d'aujourd'hui
       if (
         lowerQuery.includes('aujourd') ||

@@ -3,20 +3,20 @@
  */
 
 // Import des différents modules de requêtes
-import { REPORT_QUERIES } from './reports.query';
-import { FINANCIAL_QUERIES } from './financial.query';
-import { SUPPLIER_QUERIES } from './suppliers.query';
-import { EQUIPMENT_QUERIES } from './equipment.query';
-import { DASHBOARD_QUERIES } from './dashboard.query';
-import { SETTINGS_QUERIES } from './settings.query';
-import { AI_QUERIES } from './ai.query';
-import { PROJECTS_QUERIES } from './projects.query';
-import { CLIENTS_QUERIES } from './clients.query';
-import { USERS_QUERIES } from './users.query';
-import { TASKS_QUERIES } from './tasks.query';
-import { ACTIVITY_QUERIES } from './activity.query';
-import { NOTES_QUERIES, TAGS_QUERIES } from './notes.query';
-import { DOCUMENTS_QUERIES } from './documents.query';
+import { REPORT_QUERIES } from './querys/reports.query';
+import { FINANCIAL_QUERIES } from './querys/financial.query';
+import { SUPPLIER_QUERIES } from './querys/suppliers.query';
+import { EQUIPMENT_QUERIES } from './querys/equipment.query';
+import { DASHBOARD_QUERIES } from './querys/dashboard.query';
+import { SETTINGS_QUERIES } from './querys/settings.query';
+import { AI_QUERIES } from './querys/ai.query';
+import { PROJECTS_QUERIES } from './querys/projects.query';
+import { CLIENTS_QUERIES } from './querys/clients.query';
+import { USERS_QUERIES } from './querys/users.query';
+import { TASKS_QUERIES } from './querys/tasks.query';
+import { ACTIVITY_QUERIES } from './querys/activity.query';
+import { NOTES_QUERIES, TAGS_QUERIES } from './querys/notes.query';
+import { DOCUMENTS_QUERIES } from './querys/documents.query';
 
 // Export de toutes les requêtes
 export {

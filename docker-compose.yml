@@ -16,10 +16,14 @@ services:
       - PG_PASSWORD=postgres
       - PG_DATABASE=ai_db
       - DATABASE_URL=postgresql://postgres:postgres@ai_db:5432/ai_db
+      - ELASTICSEARCH_NODE=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=changeme
     networks:
       - ai_network
     depends_on:
       - ai_db
+      - elasticsearch
 
   analyse_agent:
     build:
@@ -97,10 +101,42 @@ services:
     networks:
       - ai_network
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=changeme
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=changeme
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - ai_network
+    restart: unless-stopped
+
 volumes:
   # ollama_data:
   mongodb_data:
   postgres_data:
+  elasticsearch_data:
 
 networks:
   ai_network:
