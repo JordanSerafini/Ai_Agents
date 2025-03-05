@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ElasticsearchModule } from '@nestjs/elasticsearch';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SearchService } from './search.service';
@@ -10,11 +10,11 @@ import { redisStore } from 'cache-manager-redis-store';
 
 @Module({
   imports: [
-    DatabaseModule,
+    forwardRef(() => DatabaseModule),
     ScheduleModule.forRoot(),
     ElasticsearchModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         node:
           configService.get('ELASTICSEARCH_NODE') || 'http://localhost:9200',
         auth: {
@@ -28,7 +28,7 @@ import { redisStore } from 'cache-manager-redis-store';
     }),
     CacheModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         store: redisStore,
         host: configService.get('REDIS_HOST') || 'localhost',
         port: configService.get('REDIS_PORT') || 6379,

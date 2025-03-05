@@ -46,25 +46,6 @@ services:
       - mongodb
       - database_agent
 
-
-  # analyse_router:
-  #   build:
-  #     context: ./analyse_router
-  #     dockerfile: Dockerfile
-  #   container_name: analyse_router
-  #   environment:
-  #     - PORT=${ANALYSE_ROUTER_PORT}
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - NODE_ENV=${NODE_ENV}
-  #     - LOG_LEVEL=${LOG_LEVEL}
-  #     - JWT_SECRET=${JWT_SECRET}
-  #     - JWT_EXPIRATION=${JWT_EXPIRATION}
-  #   expose:
-  #     - "${ANALYSE_ROUTER_PORT}"
-  #   restart: always
-  #   networks:
-  #     - ai_network
-
   mongodb:
     image: mongo:latest
     container_name: mongodb

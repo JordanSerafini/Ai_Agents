@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseService } from './database.service';
 import { DatabaseMetadataService } from './services/database-metadata.service';
 import { PgConnectionModule } from 'pool_package';
 import { DatabaseController } from './database.controller';
+import { SearchModule } from '../search/search.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { DatabaseController } from './database.controller';
       isGlobal: true,
     }),
     PgConnectionModule,
+    forwardRef(() => SearchModule),
   ],
   controllers: [DatabaseController],
   providers: [DatabaseMetadataService, DatabaseService],

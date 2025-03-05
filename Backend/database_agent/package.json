@@ -32,6 +32,7 @@
     "axios": "^1.8.1",
     "cache-manager": "^6.4.1",
     "cache-manager-redis-store": "^3.0.1",
+    "crypto": "^1.0.1",
     "date-fns": "^4.1.0",
     "pg": "^8.13.3",
     "pool_package": "^1.0.5",

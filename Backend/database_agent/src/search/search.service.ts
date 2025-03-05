@@ -26,14 +26,14 @@ export class SearchService {
 
   // Synonymes pour le domaine de la construction
   private readonly constructionSynonyms = [
-    "chantier, projet, construction",
-    "bâtiment, immeuble, édifice, construction",
-    "rénovation, réhabilitation, restauration",
+    'chantier, projet, construction',
+    'bâtiment, immeuble, édifice, construction',
+    'rénovation, réhabilitation, restauration',
     "client, maître d'ouvrage, donneur d'ordre",
-    "fournisseur, prestataire, sous-traitant",
-    "devis, estimation, proposition, offre",
-    "facture, note, mémoire",
-    "délai, échéance, date limite",
+    'fournisseur, prestataire, sous-traitant',
+    'devis, estimation, proposition, offre',
+    'facture, note, mémoire',
+    'délai, échéance, date limite',
   ];
 
   constructor(
@@ -84,7 +84,7 @@ export class SearchService {
       });
 
       this.logger.log(`Index ${index} créé avec succès`);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Erreur lors de la création de l'index ${index}: ${error.message}`,
       );
@@ -306,14 +306,16 @@ export class SearchService {
     try {
       // Générer une clé de cache unique basée sur la requête et les filtres
       const cacheKey = this.generateCacheKey('projects', query, filters);
-      
+
       // Vérifier si les résultats sont en cache
       const cachedResults = await this.cacheManager.get(cacheKey);
       if (cachedResults) {
-        this.logger.log(`Résultats récupérés du cache pour la requête: ${query}`);
+        this.logger.log(
+          `Résultats récupérés du cache pour la requête: ${query}`,
+        );
         return cachedResults;
       }
-      
+
       await this.checkIndex(this.indices.projects);
 
       const searchResponse = await this.elasticsearchService.search({
@@ -383,14 +385,14 @@ export class SearchService {
       });
 
       const results = this.formatSearchResults(searchResponse);
-      
+
       // Mettre en cache les résultats
-      const ttl = this.isFrequentSearch(query) 
-        ? this.FREQUENT_SEARCH_CACHE_TTL 
+      const ttl = this.isFrequentSearch(query)
+        ? this.FREQUENT_SEARCH_CACHE_TTL
         : this.DEFAULT_CACHE_TTL;
-      
+
       await this.cacheManager.set(cacheKey, results, ttl);
-      
+
       return results;
     } catch (error: any) {
       this.logger.error(
@@ -409,14 +411,16 @@ export class SearchService {
     try {
       // Générer une clé de cache unique
       const cacheKey = `similar_projects:${projectId}`;
-      
+
       // Vérifier si les résultats sont en cache
       const cachedResults = await this.cacheManager.get(cacheKey);
       if (cachedResults) {
-        this.logger.log(`Résultats similaires récupérés du cache pour le projet: ${projectId}`);
+        this.logger.log(
+          `Résultats similaires récupérés du cache pour le projet: ${projectId}`,
+        );
         return cachedResults;
       }
-      
+
       await this.checkIndex(this.indices.projects);
 
       const project = await this.databaseService.executeQuery(
@@ -459,10 +463,10 @@ export class SearchService {
       });
 
       const results = this.formatSearchResults(searchResponse);
-      
+
       // Mettre en cache les résultats
       await this.cacheManager.set(cacheKey, results, this.DEFAULT_CACHE_TTL);
-      
+
       return results;
     } catch (error: any) {
       this.logger.error(
@@ -480,14 +484,16 @@ export class SearchService {
     try {
       // Générer une clé de cache unique
       const cacheKey = this.generateCacheKey('documents', query);
-      
+
       // Vérifier si les résultats sont en cache
       const cachedResults = await this.cacheManager.get(cacheKey);
       if (cachedResults) {
-        this.logger.log(`Résultats récupérés du cache pour la requête: ${query}`);
+        this.logger.log(
+          `Résultats récupérés du cache pour la requête: ${query}`,
+        );
         return cachedResults;
       }
-      
+
       await this.checkIndex(this.indices.documents);
 
       const searchResponse = await this.elasticsearchService.search({
@@ -512,10 +518,10 @@ export class SearchService {
       });
 
       const results = this.formatSearchResults(searchResponse);
-      
+
       // Mettre en cache les résultats
       await this.cacheManager.set(cacheKey, results, this.DEFAULT_CACHE_TTL);
-      
+
       return results;
     } catch (error: any) {
       this.logger.error(
@@ -533,14 +539,16 @@ export class SearchService {
     try {
       // Générer une clé de cache unique
       const cacheKey = this.generateCacheKey('suppliers', query);
-      
+
       // Vérifier si les résultats sont en cache
       const cachedResults = await this.cacheManager.get(cacheKey);
       if (cachedResults) {
-        this.logger.log(`Résultats récupérés du cache pour la requête: ${query}`);
+        this.logger.log(
+          `Résultats récupérés du cache pour la requête: ${query}`,
+        );
         return cachedResults;
       }
-      
+
       await this.checkIndex(this.indices.suppliers);
 
       const searchResponse = await this.elasticsearchService.search({
@@ -569,10 +577,10 @@ export class SearchService {
       });
 
       const results = this.formatSearchResults(searchResponse);
-      
+
       // Mettre en cache les résultats
       await this.cacheManager.set(cacheKey, results, this.DEFAULT_CACHE_TTL);
-      
+
       return results;
     } catch (error: any) {
       this.logger.error(
@@ -625,7 +633,11 @@ export class SearchService {
     }
 
     // Filtre par tags
-    if (filters.tags && Array.isArray(filters.tags) && filters.tags.length > 0) {
+    if (
+      filters.tags &&
+      Array.isArray(filters.tags) &&
+      filters.tags.length > 0
+    ) {
       filterClauses.push({
         terms: { 'tags.keyword': filters.tags },
       });
@@ -652,7 +664,7 @@ export class SearchService {
    */
   private formatSearchResults(response: any) {
     const hits = response.hits?.hits || [];
-    
+
     return hits.map((hit: any) => ({
       id: hit._id,
       ...hit._source,
@@ -668,11 +680,11 @@ export class SearchService {
   private async fallbackToPostgres(entity: string, query: string) {
     try {
       this.logger.log(`Fallback à PostgreSQL pour la recherche de ${entity}`);
-      
+
       const searchTerm = `%${query}%`;
       let sqlQuery = '';
-      let params = [searchTerm, searchTerm];
-      
+      const params = [searchTerm, searchTerm];
+
       switch (entity) {
         case 'projects':
           sqlQuery = `
@@ -703,7 +715,7 @@ export class SearchService {
         default:
           return [];
       }
-      
+
       const results = await this.databaseService.executeQuery(sqlQuery, params);
       return results;
     } catch (error: any) {
@@ -720,7 +732,11 @@ export class SearchService {
    * @param query Terme de recherche
    * @param filters Filtres optionnels
    */
-  private generateCacheKey(entity: string, query: string, filters?: Record<string, any>): string {
+  private generateCacheKey(
+    entity: string,
+    query: string,
+    filters?: Record<string, any>,
+  ): string {
     const queryKey = query.toLowerCase().trim();
     const filtersKey = filters ? JSON.stringify(filters) : '';
     return `search:${entity}:${queryKey}:${filtersKey}`;
@@ -741,9 +757,9 @@ export class SearchService {
       'urgent',
       'retard',
     ];
-    
+
     const lowerQuery = query.toLowerCase();
-    return frequentTerms.some(term => lowerQuery.includes(term));
+    return frequentTerms.some((term) => lowerQuery.includes(term));
   }
 
   /**
@@ -756,7 +772,7 @@ export class SearchService {
       if (id) {
         // Invalider le cache pour une entité spécifique
         await this.cacheManager.del(`${entity}:${id}`);
-        
+
         // Invalider aussi le cache des projets similaires si c'est un projet
         if (entity === 'projects') {
           await this.cacheManager.del(`similar_projects:${id}`);
@@ -765,13 +781,18 @@ export class SearchService {
         // Invalider tout le cache pour ce type d'entité
         // Note: ceci est une simplification, dans un système réel,
         // vous voudriez utiliser un mécanisme plus sophistiqué pour gérer les clés de cache
-        const keys = await (this.cacheManager as any).store?.keys(`search:${entity}:*`) || [];
+        const keys =
+          (await (this.cacheManager as any).store?.keys(
+            `search:${entity}:*`,
+          )) || [];
         for (const key of keys) {
           await this.cacheManager.del(key);
         }
       }
-      
-      this.logger.log(`Cache invalidé pour ${entity}${id ? ` avec l'ID ${id}` : ''}`);
+
+      this.logger.log(
+        `Cache invalidé pour ${entity}${id ? ` avec l'ID ${id}` : ''}`,
+      );
     } catch (error: any) {
       this.logger.error(
         `Erreur lors de l'invalidation du cache: ${error.message}`,
