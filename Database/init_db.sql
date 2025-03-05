@@ -102,21 +102,45 @@ DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_method') THEN
         CREATE TYPE payment_method AS ENUM (
-            'virement',
-            'cheque',
             'carte',
+            'cheque',
+            'virement',
             'especes',
             'prelevement'
         );
     END IF;
 END $$;
 
--- Création de la table des rôles
+-- Table des rôles utilisateurs
 CREATE TABLE IF NOT EXISTS roles (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(50) NOT NULL,
+    description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insertion des rôles par défaut si la table est vide
+INSERT INTO roles (name, description)
+SELECT 'admin', 'Administrateur avec tous les droits'
+WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'admin');
+
+INSERT INTO roles (name, description)
+SELECT 'user', 'Utilisateur standard'
+WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'user');
+
+-- Table des utilisateurs
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    firstname VARCHAR(50) NOT NULL,
+    lastname VARCHAR(50) NOT NULL,
+    age INTEGER,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
 -- Création de la table des utilisateurs (staff)
@@ -277,12 +301,6 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     CONSTRAINT fk_event_staff FOREIGN KEY (staff_id) REFERENCES staff(id),
     CONSTRAINT fk_event_client FOREIGN KEY (client_id) REFERENCES clients(id)
 );
-
--- Insertion des rôles par défaut
-INSERT INTO roles (name) VALUES 
-    ('ADMIN'),
-    ('USER')
-ON CONFLICT (name) DO NOTHING;
 
 -- Table pour stocker les embeddings vectoriels des documents
 CREATE TABLE IF NOT EXISTS document_embeddings (
