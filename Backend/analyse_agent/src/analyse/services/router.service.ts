@@ -300,7 +300,10 @@ export class RouterService {
     if (primaryTable) {
       // Déterminer la période concernée
       let timeframe: string | null = null;
-      if (questionLower.includes('mois prochain')) {
+      if (
+        questionLower.includes('mois prochain') ||
+        questionLower.includes('mois proch')
+      ) {
         timeframe = 'next_month';
       } else if (
         questionLower.includes('mois actuel') ||

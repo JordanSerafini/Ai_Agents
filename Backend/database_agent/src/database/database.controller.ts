@@ -1044,7 +1044,12 @@ export class DatabaseController {
         enrichedRequest.metadata.primaryTable === 'quotations' &&
         enrichedRequest.metadata.isFinancialQuery
       ) {
-        return await this.handleQuotationsFinancialQuery(enrichedRequest);
+        const response =
+          await this.handleQuotationsFinancialQuery(enrichedRequest);
+        this.logger.debug(
+          `Réponse finale pour devis: ${JSON.stringify(response)}`,
+        );
+        return response;
       }
 
       // -------- GESTION DES REQUÊTES FINANCIÈRES SUR LES FACTURES --------
@@ -1052,17 +1057,30 @@ export class DatabaseController {
         enrichedRequest.metadata.primaryTable === 'invoices' &&
         enrichedRequest.metadata.isFinancialQuery
       ) {
-        return await this.handleInvoicesFinancialQuery(enrichedRequest);
+        const response =
+          await this.handleInvoicesFinancialQuery(enrichedRequest);
+        this.logger.debug(
+          `Réponse finale pour factures: ${JSON.stringify(response)}`,
+        );
+        return response;
       }
 
       // -------- GESTION DES REQUÊTES SUR LES CLIENTS --------
       if (enrichedRequest.metadata.primaryTable === 'clients') {
-        return await this.handleClientsQuery(enrichedRequest);
+        const response = await this.handleClientsQuery(enrichedRequest);
+        this.logger.debug(
+          `Réponse finale pour clients: ${JSON.stringify(response)}`,
+        );
+        return response;
       }
 
       // -------- GESTION DES REQUÊTES SUR LES PROJETS --------
       if (enrichedRequest.metadata.primaryTable === 'projects') {
-        return await this.handleProjectsQuery(enrichedRequest);
+        const response = await this.handleProjectsQuery(enrichedRequest);
+        this.logger.debug(
+          `Réponse finale pour projets: ${JSON.stringify(response)}`,
+        );
+        return response;
       }
 
       // -------- GESTION DES REQUÊTES SANS TABLE IDENTIFIÉE --------
@@ -1694,6 +1712,10 @@ export class DatabaseController {
         });
       }
 
+      // Ajouter un log pour déboguer la réponse
+      this.logger.debug(`Réponse générée pour les clients: ${responseMessage}`);
+      this.logger.debug(`Nombre de clients trouvés: ${clients.length}`);
+
       return {
         success: true,
         reponse: responseMessage,
@@ -1785,7 +1807,8 @@ export class DatabaseController {
             dateCondition = `DATE_TRUNC('month', p.start_date) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')`;
             break;
           case 'tomorrow':
-            dateCondition = `DATE(p.start_date) = CURRENT_DATE + INTERVAL '1 day'`;
+            // Utiliser une condition qui vérifie si la date de début est demain
+            dateCondition = `DATE(p.start_date) = (CURRENT_DATE + INTERVAL '1 day')::date`;
             break;
           case 'today':
             dateCondition = `DATE(p.start_date) = CURRENT_DATE`;
@@ -1851,6 +1874,11 @@ export class DatabaseController {
 
         // Utiliser le cache si aucun filtre spécifique n'est appliqué
         const useCache = whereConditions.length === 0;
+
+        // Ajouter un log pour déboguer la requête SQL
+        this.logger.debug(`Requête SQL pour projets: ${query}`);
+        this.logger.debug(`Paramètres: ${JSON.stringify(params)}`);
+
         projects = await this.databaseService.executeQuery<ProjectResult[]>(
           query,
           params,
@@ -1926,6 +1954,10 @@ export class DatabaseController {
           responseMessage += '\n';
         });
       }
+
+      // Ajouter un log pour déboguer la réponse
+      this.logger.debug(`Réponse générée pour les projets: ${responseMessage}`);
+      this.logger.debug(`Nombre de projets trouvés: ${projects.length}`);
 
       return {
         success: true,
