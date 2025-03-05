@@ -6,13 +6,23 @@ import {
   Param,
   Query,
   Logger,
+  Delete,
 } from '@nestjs/common';
 import { DatabaseService } from './database.service';
 import { DatabaseMetadataService } from './services/database-metadata.service';
-import { SearchService } from '../search/search.service';
-import { SyncService } from '../search/sync.service';
+import { SearchService } from './services/search.service';
+import { SyncService } from './services/sync.service';
 // Importer les variables de prompt et les requêtes SQL
 import * as PROMPTS from '../var/prompt';
+import { 
+  DatabaseQueries, 
+  QueryParams, 
+  ProjectResult, 
+  TaskResult, 
+  QuotationResult, 
+  SearchResponse,
+  SearchResult
+} from './models/query-types';
 
 interface SearchResult {
   id: number;
@@ -37,7 +47,7 @@ interface SearchResponse {
 @Controller('database')
 export class DatabaseController {
   private readonly logger = new Logger(DatabaseController.name);
-  private QUERIES: any;
+  private QUERIES: DatabaseQueries;
 
   constructor(
     private readonly databaseService: DatabaseService,
@@ -354,9 +364,14 @@ export class DatabaseController {
     @Body() body: { query: string; filters?: Record<string, any> },
   ): Promise<SearchResponse> {
     try {
-      const { query, filters } = body;
-      if (!query) {
-        return { success: false, error: 'Terme de recherche manquant' };
+      const { query, filters = {} } = body;
+
+      if (!query || query.trim() === '') {
+        return {
+          success: false,
+          error: 'Requête de recherche invalide',
+          message: 'Veuillez fournir une requête de recherche valide',
+        };
       }
 
       const results = await this.searchService.searchProjects(query, filters);
@@ -364,6 +379,8 @@ export class DatabaseController {
         success: true,
         results,
         count: results.length,
+        type: 'search',
+        entity: 'projects'
       };
     } catch (error: any) {
       this.logger.error(
@@ -381,7 +398,10 @@ export class DatabaseController {
     try {
       const projectId = parseInt(id, 10);
       if (isNaN(projectId)) {
-        return { success: false, error: 'ID de projet invalide' };
+        return {
+          success: false,
+          error: 'ID de projet invalide',
+        };
       }
 
       const results = await this.searchService.findSimilarProjects(projectId);
@@ -389,6 +409,8 @@ export class DatabaseController {
         success: true,
         results,
         count: results.length,
+        type: 'similarity',
+        entity: 'projects'
       };
     } catch (error: any) {
       this.logger.error(
@@ -399,7 +421,6 @@ export class DatabaseController {
         error: error.message,
       };
     }
-  }
 
   @Post('search/documents')
   async searchDocuments(
@@ -1155,7 +1176,7 @@ export class DatabaseController {
   private async executeQueryByIntent(
     intent: string,
     userQuery: string,
-  ): Promise<any> {
+  ): Promise<ProjectResult[] | TaskResult[] | QuotationResult[] | any> {
     // Vérifier si les requêtes sont initialisées
     if (!this.QUERIES || !this.QUERIES.projects || !this.QUERIES.tasks) {
       await this.initializeQueries();
@@ -1837,8 +1858,8 @@ export class DatabaseController {
    * @param userQuery Requête utilisateur
    * @returns Paramètres extraits
    */
-  private extractQueryParams(intent: string, userQuery: string): any {
-    const params: any = {};
+  private extractQueryParams(intent: string, userQuery: string): QueryParams {
+    const params: QueryParams = {};
 
     // Extraction du nom du client
     if (intent === 'PROJECTS_BY_CLIENT' || intent === 'CLIENT_PROJECTS') {
@@ -2076,5 +2097,59 @@ export class DatabaseController {
     }
 
     return params;
+  }
+
+  /**
+   * Récupère le montant total des devis acceptés pour le mois prochain
+   * @returns Le montant total des devis acceptés pour le mois prochain
+   */
+  @Get('quotations/accepted/next-month/total')
+  async getAcceptedQuotationsNextMonthTotal(): Promise<{
+    success: boolean;
+    total_amount: number;
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      // Vérifier que les requêtes sont initialisées
+      if (!this.QUERIES || !this.QUERIES.quotations) {
+        await this.initializeQueries();
+      }
+
+      // Définir les dates pour le mois prochain
+      const today = new Date();
+      const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      const nextMonthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+      
+      // Utiliser une interface pour le résultat
+      interface QuotationTotal {
+        total_amount: number;
+      }
+      
+      // Exécuter la requête avec le type approprié
+      const result = await this.databaseService.executeQuery<QuotationTotal[]>(
+        this.QUERIES.quotations.GET_FILTERED_QUOTATIONS_TOTAL,
+        [
+          'accepté',
+          nextMonthStart.toISOString().split('T')[0],
+          nextMonthEnd.toISOString().split('T')[0]
+        ]
+      );
+      
+      return {
+        success: true,
+        total_amount: result[0]?.total_amount || 0,
+        message: 'Montant total des devis acceptés pour le mois prochain récupéré avec succès'
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la récupération du montant total des devis acceptés pour le mois prochain: ${error.message}`,
+      );
+      return {
+        success: false,
+        total_amount: 0,
+        error: error.message,
+      };
+    }
   }
 }
