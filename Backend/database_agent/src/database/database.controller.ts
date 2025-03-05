@@ -1804,7 +1804,8 @@ export class DatabaseController {
         break;
 
       case 'SEARCH_QUOTATIONS':
-        const keywordRegex = /(?:cherche|recherche|trouve)\s+["']?([^"']+)["']?/i;
+        const keywordRegex =
+          /(?:cherche|recherche|trouve)\s+["']?([^"']+)["']?/i;
         const keywordMatch = userQuery.match(keywordRegex);
 
         if (keywordMatch && keywordMatch[1]) {
@@ -1832,7 +1833,8 @@ export class DatabaseController {
       case 'QUOTATIONS_BY_CLIENT':
         const idRegexClient = /(?:client)\s+(\d+)/i;
         const idMatchClient =
-          userQuery.match(idRegexClient) || userQuery.match(/id\s*[=:]\s*(\d+)/i);
+          userQuery.match(idRegexClient) ||
+          userQuery.match(/id\s*[=:]\s*(\d+)/i);
 
         if (idMatchClient && idMatchClient[1]) {
           params.clientId = parseInt(idMatchClient[1], 10);
@@ -2060,6 +2062,42 @@ export class DatabaseController {
         if (nameMatch && nameMatch[1]) {
           params.clientName = nameMatch[1];
         }
+      }
+    }
+
+    // Extraction de la période pour les devis
+    if (
+      intent === 'QUOTATIONS_NEXT_MONTH' ||
+      intent === 'QUOTATIONS_LAST_MONTH' ||
+      intent === 'QUOTATIONS_CURRENT_MONTH' ||
+      intent === 'QUOTATIONS_TOTAL'
+    ) {
+      const periodRegex = /(?:mois|month)\s+["']?([^"']+)["']?/i;
+      const periodMatch = userQuery.match(periodRegex);
+
+      if (periodMatch && periodMatch[1]) {
+        params.period = periodMatch[1];
+      }
+    }
+
+    // Extraction du statut pour les devis
+    if (
+      intent === 'QUOTATIONS_NEXT_MONTH' ||
+      intent === 'QUOTATIONS_LAST_MONTH' ||
+      intent === 'QUOTATIONS_CURRENT_MONTH' ||
+      intent === 'QUOTATIONS_TOTAL'
+    ) {
+      const statusRegex = /(?:statut|état|etat)\s+["']?([^"']+)["']?/i;
+      const statusMatch = userQuery.match(statusRegex);
+
+      if (statusMatch && statusMatch[1]) {
+        params.status = statusMatch[1];
+      } else if (userQuery.toLowerCase().includes('accepté')) {
+        params.status = 'accepté';
+      } else if (userQuery.toLowerCase().includes('refusé')) {
+        params.status = 'refusé';
+      } else if (userQuery.toLowerCase().includes('en attente')) {
+        params.status = 'en attente';
       }
     }
 
