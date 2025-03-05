@@ -1,7 +1,7 @@
 /**
  * Requêtes liées aux tâches
  */
-export const TASK_QUERIES = {
+export const TASKS_QUERIES = {
   // Récupérer toutes les tâches d'un projet
   GET_BY_PROJECT: `
       SELECT s.*, p.name as project_name

@@ -1,7 +1,7 @@
 /**
  * Requêtes liées aux projets (chantiers)
  */
-export const PROJECT_QUERIES = {
+export const PROJECTS_QUERIES = {
   // Récupérer tous les projets
   GET_ALL: `
       SELECT p.*, CONCAT(c.firstname, ' ', c.lastname) as client_name 
@@ -97,4 +97,16 @@ export const PROJECT_QUERIES = {
       AND p.status = 'en_cours'
       ORDER BY p.name;
     `,
+
+  // Récupérer les projets en cours avec des retards
+  GET_PROJECTS_WITH_DELAYS: `
+    SELECT 
+      p.*,
+      CONCAT(c.firstname, ' ', c.lastname) as client_name
+    FROM projects p
+    JOIN clients c ON p.client_id = c.id
+    WHERE p.status = 'en_cours'
+    AND p.end_date < CURRENT_DATE
+    ORDER BY p.end_date;
+  `,
 };

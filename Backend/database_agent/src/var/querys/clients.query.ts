@@ -1,7 +1,7 @@
 /**
  * Requêtes liées aux clients
  */
-export const CLIENT_QUERIES = {
+export const CLIENTS_QUERIES = {
   // Récupérer tous les clients
   GET_ALL: `
       SELECT * FROM clients

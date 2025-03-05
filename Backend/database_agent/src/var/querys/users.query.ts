@@ -1,7 +1,7 @@
 /**
  * Requêtes liées aux utilisateurs
  */
-export const USER_QUERIES = {
+export const USERS_QUERIES = {
   // Récupérer tous les utilisateurs
   GET_ALL: `
       SELECT id, firstname, lastname, email, role, created_at
