@@ -1052,6 +1052,76 @@ export class DatabaseController {
         };
       }
 
+      // -------- DÉTECTION DES REQUÊTES COMBINÉES (CHANTIERS ET DEVIS) --------
+      const isProjectsQuery = 
+        enrichedRequest.metadata.primaryTable === 'projects' || 
+        questionToProcess.toLowerCase().includes('chantier') || 
+        questionToProcess.toLowerCase().includes('projet');
+      
+      const isQuotationsQuery = 
+        enrichedRequest.metadata.primaryTable === 'quotations' || 
+        questionToProcess.toLowerCase().includes('devis') || 
+        questionToProcess.toLowerCase().includes('montant');
+      
+      // Si la requête concerne à la fois les projets et les devis
+      if (isProjectsQuery && isQuotationsQuery) {
+        this.logger.log("Traitement d'une requête combinée sur les chantiers et les devis");
+        
+        // Créer une copie de la requête pour les projets
+        const projectsRequest = {
+          ...enrichedRequest,
+          metadata: {
+            ...enrichedRequest.metadata,
+            primaryTable: 'projects',
+            isFinancialQuery: false
+          }
+        };
+        
+        // Créer une copie de la requête pour les devis
+        const quotationsRequest = {
+          ...enrichedRequest,
+          metadata: {
+            ...enrichedRequest.metadata,
+            primaryTable: 'quotations',
+            isFinancialQuery: true
+          }
+        };
+        
+        // Traiter les deux requêtes en parallèle
+        const [projectsResponse, quotationsResponse] = await Promise.all([
+          this.handleProjectsQuery(projectsRequest),
+          this.handleQuotationsFinancialQuery(quotationsRequest)
+        ]);
+        
+        // Combiner les réponses
+        let combinedResponseText = '';
+        
+        // Ajouter la réponse des projets si elle existe
+        if (projectsResponse.reponse) {
+          combinedResponseText += projectsResponse.reponse;
+        }
+        
+        // Ajouter la réponse des devis si elle existe
+        if (quotationsResponse.reponse) {
+          if (combinedResponseText) {
+            combinedResponseText += '\n\n';
+          }
+          combinedResponseText += quotationsResponse.reponse;
+        }
+        
+        const combinedResponse = {
+          reponse: combinedResponseText,
+          success: projectsResponse.success && quotationsResponse.success,
+          error: projectsResponse.error || quotationsResponse.error
+        };
+        
+        this.logger.debug(
+          `Réponse finale pour requête combinée: ${JSON.stringify(combinedResponse)}`,
+        );
+        
+        return combinedResponse;
+      }
+
       // -------- GESTION DES REQUÊTES FINANCIÈRES SUR LES DEVIS --------
       if (
         enrichedRequest.metadata.primaryTable === 'quotations' && 
@@ -2106,6 +2176,10 @@ export class DatabaseController {
         }
       }
 
+      // Ajouter un log pour déboguer la réponse
+      this.logger.debug(`Réponse générée pour les projets: ${responseMessage}`);
+      this.logger.debug(`Nombre de projets trouvés: ${projects.length}`);
+
       // Formater la réponse avec les résultats
       if (projects.length > 0) {
         responseMessage += '\n\nVoici les détails :\n';
@@ -2124,10 +2198,6 @@ export class DatabaseController {
         });
       }
 
-      // Ajouter un log pour déboguer la réponse
-      this.logger.debug(`Réponse générée pour les projets: ${responseMessage}`);
-      this.logger.debug(`Nombre de projets trouvés: ${projects.length}`);
-
       // Génération de la réponse
       if (projects.length === 0) {
         if (timeframe === 'current_month') {
@@ -2142,8 +2212,32 @@ export class DatabaseController {
           responseMessage = "Aucun projet ne correspond à votre recherche.";
         }
       } else {
-        responseMessage = `Voici la liste des ${projects.length} projets ${statusFilter} ${timeFrameText} ${searchFilter}.`;
+        // Si nous avons déjà généré les détails des projets, ne pas écraser la réponse
+        // Vérifier si la réponse contient déjà les détails des projets
+        if (!responseMessage.includes('Voici les détails')) {
+          // Construire l'en-tête de la réponse
+          responseMessage = `Voici la liste des ${projects.length} projets ${statusFilter} ${timeFrameText} ${searchFilter}.`;
+          
+          // Ajouter les détails des projets
+          responseMessage += '\n\nVoici les détails :\n';
+          projects.forEach((project, index) => {
+            responseMessage += `\n${index + 1}. ${project.name} (${project.status})`;
+            responseMessage += `\n   Client: ${project.client_name}`;
+            if (project.start_date)
+              responseMessage += `\n   Date de début: ${new Date(project.start_date).toLocaleDateString('fr-FR')}`;
+            if (project.end_date)
+              responseMessage += `\n   Date de fin: ${new Date(project.end_date).toLocaleDateString('fr-FR')}`;
+            if (project.progress !== undefined)
+              responseMessage += `\n   Progression: ${project.progress}%`;
+            if (project.total_events)
+              responseMessage += `\n   Événements: ${project.completed_events}/${project.total_events} complétés`;
+            responseMessage += '\n';
+          });
+        }
       }
+
+      // Ajouter un log pour la réponse finale
+      this.logger.debug(`Réponse finale pour projets: ${responseMessage}`);
 
       return {
         success: true,
