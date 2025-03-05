@@ -6,6 +6,7 @@ import {
   ValidateNestedObject,
   ValidateNestedArray,
   TransformType,
+  ValidateNumber
 } from './decorators';
 import { PrioriteType } from '../interfaces/analyse.interface';
 
@@ -16,7 +17,7 @@ class IntentionConfigDto {
   @ValidateString()
   description!: string;
 
-  @ValidateString()
+  @ValidateNumber()
   confiance!: number;
 }
 
@@ -24,7 +25,7 @@ class IntentionPrincipaleDto {
   @ValidateString()
   nom!: string;
 
-  @ValidateString()
+  @ValidateNumber()
   confiance!: number;
 
   @ValidateString()

@@ -3,6 +3,7 @@ import {
   IsArray,
   IsObject,
   IsDate,
+  IsNumber,
   ValidationOptions,
   ValidateNested as ClassValidatorNested
 } from 'class-validator';
@@ -24,6 +25,10 @@ export function ValidateObject(validationOptions?: ValidationOptions) {
 
 export function ValidateDate(validationOptions?: ValidationOptions) {
   return IsDate({ ...validationOptions });
+}
+
+export function ValidateNumber(validationOptions?: ValidationOptions) {
+  return IsNumber({}, { ...validationOptions });
 }
 
 export function ValidateNested(validationOptions?: ValidationOptions) {
