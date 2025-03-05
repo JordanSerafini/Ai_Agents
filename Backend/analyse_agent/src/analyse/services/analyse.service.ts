@@ -58,6 +58,8 @@ export interface AnalyseResult {
   priorite: PrioriteType;
   entites: string[];
   contexte: string;
+  informationsManquantes?: string[];
+  questionsComplementaires?: string[];
 }
 
 @Injectable()
@@ -416,19 +418,23 @@ La question concerne un processus ou une étape de projet. Réponds en français
             },
           ],
           temperature: 0.1,
-          max_tokens: 500,
+          max_tokens: 800,
         },
         {
           headers: {
             Authorization: `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: 10000,
+          timeout: 15000,
         },
       );
 
+      this.logger.debug(
+        `Réponse brute de l'API: ${response.data.choices[0].message.content}`,
+      );
+
       const jsonResponse = response.data.choices[0].message.content.trim();
-      const parsedResponse = JSON.parse(jsonResponse) as {
+      let parsedResponse: {
         questionCorrigee: string;
         intention: string;
         categorie: string;
@@ -436,7 +442,18 @@ La question concerne un processus ou une étape de projet. Réponds en français
         priorite: string;
         entites: string[];
         contexte: string;
+        informationsManquantes?: string[];
+        questionsComplementaires?: string[];
       };
+
+      try {
+        parsedResponse = JSON.parse(jsonResponse);
+      } catch (error) {
+        this.logger.error(
+          `Erreur lors du parsing de la réponse JSON: ${error}`,
+        );
+        throw new Error("Format de réponse invalide de l'API");
+      }
 
       // Vérification supplémentaire pour les questions liées aux plannings et chantiers
       const questionLower = question.toLowerCase();
@@ -461,19 +478,55 @@ La question concerne un processus ou une étape de projet. Réponds en français
         'planifié',
       ];
 
+      // Ajouter des mots-clés financiers et de devis
+      const financialKeywords = [
+        'montant',
+        'total',
+        'devis',
+        'facture',
+        'factures',
+        'accepté',
+        'acceptés',
+        'validé',
+        'validés',
+        'mois prochain',
+        'mois actuel',
+        'mois courant',
+        'somme',
+        'budget',
+        'coût',
+        'prix',
+        'euro',
+        'euros',
+        '€',
+        'ttc',
+        'ht',
+        'paiement',
+        'payer',
+        'régler',
+        'chiffre d\'affaires',
+        'ca',
+        'trésorerie',
+      ];
+
       // Vérifier si la question contient des mots-clés liés aux plannings
       const containsPlanningKeywords = planningKeywords.some((keyword) =>
         questionLower.includes(keyword),
       );
 
-      // Si la question contient des mots-clés de planning mais n'a pas été classifiée comme API,
+      // Vérifier si la question contient des mots-clés financiers
+      const containsFinancialKeywords = financialKeywords.some((keyword) =>
+        questionLower.includes(keyword),
+      );
+
+      // Si la question contient des mots-clés de planning ou financiers mais n'a pas été classifiée comme API,
       // forcer la classification vers l'agent API
       if (
-        containsPlanningKeywords &&
+        (containsPlanningKeywords || containsFinancialKeywords) &&
         parsedResponse.agentCible !== 'agent_api'
       ) {
         this.logger.log(
-          `Reclassification: Question contenant des mots-clés de planning "${question}" redirigée vers agent_api`,
+          `Reclassification: Question contenant des mots-clés de données "${question}" redirigée vers agent_api`,
         );
         parsedResponse.agentCible = 'agent_api';
         parsedResponse.categorie = 'API';
@@ -511,7 +564,7 @@ La question concerne un processus ou une étape de projet. Réponds en français
           categorie = QuestionCategory.AUTRE;
       }
 
-      return {
+      const result: AnalyseResult = {
         questionCorrigee: parsedResponse.questionCorrigee,
         intention: parsedResponse.intention,
         categorie,
@@ -520,6 +573,21 @@ La question concerne un processus ou une étape de projet. Réponds en français
         entites: parsedResponse.entites,
         contexte: parsedResponse.contexte,
       };
+
+      // Ajouter les nouvelles propriétés si elles existent
+      if (parsedResponse.informationsManquantes) {
+        result.informationsManquantes = parsedResponse.informationsManquantes;
+      }
+
+      if (parsedResponse.questionsComplementaires) {
+        result.questionsComplementaires =
+          parsedResponse.questionsComplementaires;
+      }
+
+      this.logger.log(
+        `Analyse terminée pour "${question}": ${JSON.stringify(result)}`,
+      );
+      return result;
     } catch (error) {
       this.logger.error(
         `Erreur lors de l'analyse de la question: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,

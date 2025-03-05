@@ -47,12 +47,21 @@ export class RouterService {
     this.logger.log(`Routage de la requête vers l'agent: ${agentType}`);
 
     try {
+      // Enrichir la requête avant de la transmettre à l'agent de base de données
+      let enrichedRequest = request;
+      if (agentType === AgentType.API) {
+        enrichedRequest = await this.enrichRequestForDatabaseAgent(
+          request,
+          analysedData,
+        );
+      }
+
       switch (agentType) {
         case AgentType.API:
-          return await this.routeToDatabaseAgent(request, analysedData);
+          return await this.routeToDatabaseAgent(enrichedRequest, analysedData);
 
         case AgentType.WORKFLOW:
-          return await this.routeToWorkflowAgent(request, analysedData);
+          return await this.routeToWorkflowAgent(enrichedRequest, analysedData);
 
         case AgentType.AUTRE:
           // Pour l'instant, on renvoie un message indiquant que cet agent n'est pas encore implémenté
@@ -203,5 +212,100 @@ export class RouterService {
           "Désolé, une erreur est survenue lors de la communication avec l'agent de workflow. Veuillez réessayer plus tard.",
       };
     }
+  }
+
+  private async enrichRequestForDatabaseAgent(
+    request: AnalyseRequestDto,
+    analyseResult: Record<string, unknown>,
+  ): Promise<AnalyseRequestDto> {
+    // Copier la requête originale
+    const enrichedRequest = { ...request };
+
+    // Extraire la question originale
+    const questionLower = request.question.toLowerCase();
+
+    // Définir des mappings explicites entre termes courants et tables
+    const tablesMappings = {
+      devis: 'quotations',
+      facture: 'invoices',
+      factures: 'invoices',
+      client: 'clients',
+      clients: 'clients',
+      projet: 'projects',
+      projets: 'projects',
+      matériau: 'materials',
+      matériaux: 'materials',
+      fournisseur: 'suppliers',
+      fournisseurs: 'suppliers',
+      paiement: 'payments',
+      paiements: 'payments',
+      chantier: 'projects',
+      chantiers: 'projects',
+    };
+
+    // Déterminer la table principale concernée
+    let primaryTable = '';
+
+    // Cas spécial pour les requêtes financières sur les devis
+    if (
+      (questionLower.includes('montant') || questionLower.includes('total')) &&
+      (questionLower.includes('devis') || questionLower.includes('accepté'))
+    ) {
+      primaryTable = 'quotations';
+    }
+    // Sinon, utiliser le mapping standard
+    else {
+      for (const [term, table] of Object.entries(tablesMappings)) {
+        if (questionLower.includes(term)) {
+          primaryTable = table;
+          break;
+        }
+      }
+    }
+
+    // Si aucune table n'a été identifiée mais qu'il s'agit d'une requête financière,
+    // essayer de déterminer la table la plus probable
+    if (
+      !primaryTable &&
+      (questionLower.includes('montant') || questionLower.includes('total'))
+    ) {
+      if (
+        questionLower.includes('accepté') ||
+        questionLower.includes('validé')
+      ) {
+        primaryTable = 'quotations'; // Par défaut pour les requêtes de devis acceptés/validés
+      } else if (
+        questionLower.includes('facture') ||
+        questionLower.includes('payé')
+      ) {
+        primaryTable = 'invoices';
+      }
+    }
+
+    // Si une table principale a été identifiée, enrichir la requête
+    if (primaryTable) {
+      // Ajouter des informations supplémentaires pour l'agent de base de données
+      enrichedRequest.metadata = {
+        ...enrichedRequest.metadata,
+        primaryTable,
+        isFinancialQuery:
+          questionLower.includes('montant') || questionLower.includes('total'),
+        filters: {
+          status: questionLower.includes('accepté')
+            ? 'accepté'
+            : questionLower.includes('validé')
+              ? 'validé'
+              : null,
+          timeframe: questionLower.includes('mois prochain')
+            ? 'next_month'
+            : questionLower.includes('mois actuel') ||
+                questionLower.includes('mois courant')
+              ? 'current_month'
+              : null,
+        },
+      };
+    }
+
+    return enrichedRequest;
   }
 }

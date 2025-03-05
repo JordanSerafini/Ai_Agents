@@ -22,67 +22,115 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
+# Analyse Agent
+
 ## Description
+Un agent NestJS qui analyse et reformule les questions des utilisateurs pour améliorer leur interprétation et les rediriger vers les bonnes ressources ou agents.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Fonctionnalités principales
 
-## Project setup
+- **Analyse sémantique** des questions utilisateurs pour en extraire l'intention et le contexte
+- **Reformulation intelligente** des questions pour clarifier l'intention
+- **Classification** des questions par catégorie et priorité
+- **Routage intelligent** vers les agents spécialisés les plus appropriés
+- **Détection d'entités** importantes dans les questions
+- **Réorientation de questions** avec analyse approfondie et reformulation
 
-```bash
-$ npm install
-```
+## Nouveautés (Juin 2024)
 
-## Compile and run the project
+- Refonte complète du prompt d'analyse pour une détection plus précise de l'intention
+- Ajout d'un service de réorientation spécialisé pour retraiter les questions
+- Amélioration de la reformulation des questions avec une analyse contextuelle
+- Détection des informations manquantes dans les questions
+- Suggestion de questions complémentaires pour clarifier la demande
+- Analyse approfondie du contexte implicite des questions
 
-```bash
-# development
-$ npm run start
+## Endpoints
 
-# watch mode
-$ npm run start:dev
+- `POST /analyse` - Analyse une question et fournit une réponse
+- `POST /analyse/reorienter` - Analyse en profondeur, reformule et réoriente une question
+- `GET /analyse/health` - Vérification de l'état de l'agent
+- `GET /analyse/database-metadata` - Récupère les métadonnées de la base de données
 
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Installation
 
 ```bash
-$ npm install -g mau
-$ mau deploy
+npm install
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Exécution en développement
 
-## Resources
+```bash
+npm run start:dev
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Construction pour la production
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+npm run build
+```
+
+## Démarrage en production
+
+```bash
+npm run start:prod
+```
+
+## Variables d'environnement
+
+Créez un fichier `.env` à la racine du projet avec les variables suivantes:
+
+```
+PORT=4001
+OPENAI_API_KEY=your_openai_api_key
+```
+
+## Docker
+
+Un Dockerfile est inclus pour faciliter le déploiement:
+
+```bash
+docker build -t analyse-agent .
+docker run -p 4001:4001 -d analyse-agent
+```
+
+## API de réorientation
+
+L'API de réorientation permet de:
+1. Analyser en profondeur une question utilisateur
+2. Extraire l'intention réelle derrière la formulation
+3. Reformuler la question pour plus de clarté
+4. Identifier les informations manquantes
+5. Suggérer des questions complémentaires
+
+### Exemple de requête
+
+```json
+{
+  "question": "Quand est prévu la livraison du chantier?",
+  "userId": "user123",
+  "contexteOriginal": "Discussion concernant le projet de rénovation à Paris"
+}
+```
+
+### Exemple de réponse
+
+```json
+{
+  "reponse": "Analyse et réorientation de la question:\n{
+    \"questionOriginale\": \"Quand est prévu la livraison du chantier?\",
+    \"questionReformulée\": \"Quelle est la date prévue pour la livraison du chantier de rénovation à Paris?\",
+    \"intention\": \"Obtenir la date de fin des travaux du projet de rénovation\",
+    \"catégorie\": \"API\",
+    \"agentCible\": \"agent_api\",
+    \"priorité\": \"MEDIUM\",
+    \"entités\": [\"chantier\", \"livraison\", \"Paris\", \"rénovation\"],
+    \"contexte\": \"Phase de suivi de projet, information sur planning\",
+    \"informationsManquantes\": [\"Identifiant spécifique du chantier\"],
+    \"questionsComplémentaires\": [\"De quel chantier spécifique parlez-vous?\", \"Avez-vous besoin d'informations sur des étapes intermédiaires avant la livraison finale?\" ]
+  }"
+}
+```
 
 ## Support
 
@@ -90,7 +138,7 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 
 ## Stay in touch
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
+- Author - [Jordan Serafini](https://github.com/JordanSerafini))
 - Website - [https://nestjs.com](https://nestjs.com/)
 - Twitter - [@nestframework](https://twitter.com/nestframework)
 

@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsObject } from 'class-validator';
 
 export class AnalyseRequestDto {
   @IsString()
@@ -11,4 +11,8 @@ export class AnalyseRequestDto {
   @IsBoolean()
   @IsOptional()
   useHistory?: boolean;
+
+  @IsObject()
+  @IsOptional()
+  metadata?: Record<string, any>;
 }

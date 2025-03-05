@@ -7,6 +7,7 @@ import { RagService } from './services/rag.service';
 import { RouterService } from './services/router.service';
 import { DatabaseMetadataService } from './services/database-metadata.service';
 import { AnalyseValidationPipe } from './pipes/analyse-validation.pipe';
+import { ReorientationService } from './services/reorientation.service';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AnalyseValidationPipe } from './pipes/analyse-validation.pipe';
     RouterService,
     DatabaseMetadataService,
     AnalyseValidationPipe,
+    ReorientationService,
   ],
 })
 export class AnalyseModule {}

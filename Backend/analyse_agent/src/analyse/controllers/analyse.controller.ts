@@ -2,6 +2,8 @@ import { Controller, Post, Body, Logger, Get } from '@nestjs/common';
 import { AnalyseService } from '../services/analyse.service';
 import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 import { DatabaseMetadataService } from '../services/database-metadata.service';
+import { ReorientationRequestDto } from '../dto/reorientation-request.dto';
+import { ReorientationService } from '../services/reorientation.service';
 
 @Controller('analyse')
 export class AnalyseController {
@@ -10,6 +12,7 @@ export class AnalyseController {
   constructor(
     private readonly analyseService: AnalyseService,
     private readonly dbMetadataService: DatabaseMetadataService,
+    private readonly reorientationService: ReorientationService,
   ) {}
 
   @Post()
@@ -18,6 +21,14 @@ export class AnalyseController {
       `Requête reçue: userId=${request.userId}, useHistory=${request.useHistory}, question="${request.question}"`,
     );
     return this.analyseService.analyser(request);
+  }
+
+  @Post('reorienter')
+  async reorienterQuestion(@Body() request: ReorientationRequestDto) {
+    this.logger.log(
+      `Requête de réorientation reçue: userId=${request.userId}, question="${request.question}"`,
+    );
+    return this.reorientationService.reorienterQuestion(request);
   }
 
   @Get('health')
