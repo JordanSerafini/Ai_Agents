@@ -9,6 +9,16 @@ interface RouterResponse {
   reponse: string;
 }
 
+/**
+ * Interface pour typer correctement la réponse de l'agent de base de données
+ */
+interface DatabaseResponse {
+  reponse: string;
+  success?: boolean;
+  error?: string;
+  data?: Record<string, unknown>;
+}
+
 @Injectable()
 export class RouterService {
   private readonly logger = new Logger(RouterService.name);
@@ -87,24 +97,24 @@ export class RouterService {
     analysedData: Record<string, unknown>,
   ): Promise<RouterResponse> {
     try {
-      this.logger.log(
-        "Tentative de routage vers l'agent de base de données: " +
-          this.databaseAgentUrl,
-      );
+      this.logger.log("Routage vers l'agent de base de données");
 
-      // Enrichir la requête avec des métadonnées pour l'agent de base de données
+      // Créer une requête enrichie avec les métadonnées
       const enrichedRequest = this.enrichRequestForDatabaseAgent(
         request,
         analysedData,
       );
 
-      // Log des métadonnées pour debug
-      this.logger.log(
-        `Métadonnées transmises à l'agent de base de données: ${JSON.stringify(enrichedRequest.metadata || {})}`,
+      this.logger.debug(
+        `Requête enrichie envoyée à l'agent de base de données: ${JSON.stringify(
+          enrichedRequest,
+        )}`,
       );
 
-      const response = await axios.post(
-        `${this.databaseAgentUrl}/database/query`,
+      const endpointUrl = `${this.databaseAgentUrl}/database/query`;
+
+      const response = await this.httpService.axiosRef.post<DatabaseResponse>(
+        endpointUrl,
         enrichedRequest,
         {
           headers: {
@@ -114,10 +124,17 @@ export class RouterService {
         },
       );
 
-      // Vérification de type pour éviter l'erreur de linter
+      // Si le service retourne une réponse valide
       if (response.data && typeof response.data.reponse === 'string') {
         return {
           reponse: response.data.reponse,
+        };
+      }
+
+      // Si une erreur est remontée par le service
+      if (response.data && response.data.error) {
+        return {
+          reponse: `Désolé, l'agent de base de données a rencontré un problème: ${response.data.error}`,
         };
       }
 
