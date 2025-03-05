@@ -222,7 +222,7 @@ export class RouterService {
 
   private enrichRequestForDatabaseAgent(
     request: AnalyseRequestDto,
-    analyseResult: Record<string, unknown>,
+    analysedData: Record<string, unknown>,
   ): AnalyseRequestDto {
     // Copier la requête originale
     const enrichedRequest = { ...request };
@@ -247,6 +247,13 @@ export class RouterService {
       paiements: 'payments',
       chantier: 'projects',
       chantiers: 'projects',
+      rendez: 'appointments',
+      'rendez-vous': 'appointments',
+      'rendez vous': 'appointments',
+      rdv: 'appointments',
+      agenda: 'appointments',
+      calendrier: 'appointments',
+      planning: 'appointments',
     };
 
     // Déterminer la table principale concernée
@@ -308,17 +315,38 @@ export class RouterService {
       } else if (
         questionLower.includes('mois actuel') ||
         questionLower.includes('mois courant') ||
-        questionLower.includes('ce mois')
+        questionLower.includes('ce mois') ||
+        questionLower.includes('mois en cours')
       ) {
         timeframe = 'current_month';
-      } else if (questionLower.includes('semaine prochaine')) {
+      } else if (
+        questionLower.includes('mois dernier') ||
+        questionLower.includes('mois passé') ||
+        questionLower.includes('mois précédent') ||
+        questionLower.includes('dernier mois')
+      ) {
+        timeframe = 'last_month';
+      } else if (
+        questionLower.includes('semaine prochaine') ||
+        questionLower.includes('semaine à venir')
+      ) {
         timeframe = 'next_week';
       } else if (
         questionLower.includes('cette semaine') ||
-        questionLower.includes('semaine actuelle')
+        questionLower.includes('semaine actuelle') ||
+        questionLower.includes('semaine en cours')
       ) {
         timeframe = 'current_week';
-      } else if (questionLower.includes('demain')) {
+      } else if (
+        questionLower.includes('semaine dernière') ||
+        questionLower.includes('semaine passée') ||
+        questionLower.includes('dernière semaine')
+      ) {
+        timeframe = 'last_week';
+      } else if (
+        questionLower.includes('demain') ||
+        questionLower.includes('jour suivant')
+      ) {
         timeframe = 'tomorrow';
       } else if (
         questionLower.includes("aujourd'hui") ||
@@ -328,16 +356,46 @@ export class RouterService {
       ) {
         timeframe = 'today';
       } else if (
+        questionLower.includes('hier') ||
+        questionLower.includes('jour précédent')
+      ) {
+        timeframe = 'yesterday';
+      } else if (
         questionLower.includes('année') ||
         questionLower.includes('an')
       ) {
         if (
           questionLower.includes('prochain') ||
-          questionLower.includes('prochaine')
+          questionLower.includes('prochaine') ||
+          questionLower.includes('à venir')
         ) {
           timeframe = 'next_year';
+        } else if (
+          questionLower.includes('dernier') ||
+          questionLower.includes('dernière') ||
+          questionLower.includes('passé') ||
+          questionLower.includes('précédent')
+        ) {
+          timeframe = 'last_year';
         } else {
           timeframe = 'current_year';
+        }
+      } else if (
+        questionLower.includes('trimestre') ||
+        questionLower.includes('3 mois')
+      ) {
+        if (
+          questionLower.includes('prochain') ||
+          questionLower.includes('à venir')
+        ) {
+          timeframe = 'next_quarter';
+        } else if (
+          questionLower.includes('dernier') ||
+          questionLower.includes('passé')
+        ) {
+          timeframe = 'last_quarter';
+        } else {
+          timeframe = 'current_quarter';
         }
       }
 
@@ -374,9 +432,9 @@ export class RouterService {
         },
         // Ajouter l'analyse complète dans les métadonnées pour donner plus de contexte
         analysis: {
-          intention: analyseResult.intention,
-          entites: analyseResult.entites,
-          contexte: analyseResult.contexte,
+          intention: analysedData.intention,
+          entites: analysedData.entites,
+          contexte: analysedData.contexte,
         },
       };
 

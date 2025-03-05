@@ -1083,6 +1083,15 @@ export class DatabaseController {
         return response;
       }
 
+      // -------- GESTION DES REQUÊTES SUR LES RENDEZ-VOUS --------
+      if (enrichedRequest.metadata.primaryTable === 'appointments') {
+        const response = await this.handleAppointmentsQuery(enrichedRequest);
+        this.logger.debug(
+          `Réponse finale pour rendez-vous: ${JSON.stringify(response)}`,
+        );
+        return response;
+      }
+
       // -------- GESTION DES REQUÊTES SANS TABLE IDENTIFIÉE --------
       if (
         enrichedRequest.metadata.noTableIdentified &&
@@ -1199,11 +1208,63 @@ export class DatabaseController {
       startDate = new Date(startDate.getFullYear() + 1, 0, 1);
       endDate = new Date(startDate.getFullYear(), 11, 31);
     } else if (timeframe === 'tomorrow') {
+      // Demain
       startDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
       endDate = new Date(startDate);
     } else if (timeframe === 'today') {
+      // Aujourd'hui
       startDate = new Date();
       endDate = new Date(startDate);
+    } else if (timeframe === 'yesterday') {
+      // Hier
+      startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      endDate = new Date(startDate);
+    } else if (timeframe === 'last_month') {
+      // Mois dernier
+      startDate = new Date(
+        startDate.getFullYear(),
+        startDate.getMonth() - 1,
+        1,
+      );
+      endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+    } else if (timeframe === 'last_week') {
+      // Semaine dernière
+      const day = startDate.getDay();
+      const diff = startDate.getDate() - day + (day === 0 ? -6 : 1) - 7; // -7 pour la semaine dernière
+      startDate = new Date(startDate.setDate(diff));
+      endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 6);
+    } else if (timeframe === 'last_year') {
+      // Année dernière
+      startDate = new Date(startDate.getFullYear() - 1, 0, 1);
+      endDate = new Date(startDate.getFullYear(), 11, 31);
+    } else if (timeframe === 'current_quarter') {
+      // Trimestre actuel
+      const currentQuarter = Math.floor(startDate.getMonth() / 3);
+      startDate = new Date(startDate.getFullYear(), currentQuarter * 3, 1);
+      endDate = new Date(startDate.getFullYear(), (currentQuarter + 1) * 3, 0);
+    } else if (timeframe === 'next_quarter') {
+      // Trimestre prochain
+      const currentQuarter = Math.floor(startDate.getMonth() / 3);
+      const nextQuarter = (currentQuarter + 1) % 4;
+      const yearOffset = nextQuarter === 0 ? 1 : 0;
+      startDate = new Date(
+        startDate.getFullYear() + yearOffset,
+        nextQuarter * 3,
+        1,
+      );
+      endDate = new Date(startDate.getFullYear(), (nextQuarter + 1) * 3, 0);
+    } else if (timeframe === 'last_quarter') {
+      // Trimestre dernier
+      const currentQuarter = Math.floor(startDate.getMonth() / 3);
+      const lastQuarter = (currentQuarter + 3) % 4;
+      const yearOffset = currentQuarter === 0 ? -1 : 0;
+      startDate = new Date(
+        startDate.getFullYear() + yearOffset,
+        lastQuarter * 3,
+        1,
+      );
+      endDate = new Date(startDate.getFullYear(), (lastQuarter + 1) * 3, 0);
     } else {
       // Par défaut, utiliser le mois actuel
       startDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
@@ -1299,6 +1360,20 @@ export class DatabaseController {
       else if (timeframe === 'next_year') periodDesc = "de l'année prochaine";
       else if (timeframe === 'tomorrow') periodDesc = 'de demain';
       else if (timeframe === 'today') periodDesc = "d'aujourd'hui";
+      else if (timeframe === 'yesterday') periodDesc = "d'hier";
+      else if (timeframe === 'current_week')
+        periodDesc = 'de la semaine actuelle';
+      else if (timeframe === 'next_week')
+        periodDesc = 'de la semaine prochaine';
+      else if (timeframe === 'last_week') periodDesc = 'de la semaine dernière';
+      else if (timeframe === 'last_year') periodDesc = "de l'année dernière";
+      else if (timeframe === 'next_year') periodDesc = "de l'année prochaine";
+      else if (timeframe === 'current_quarter')
+        periodDesc = 'du trimestre actuel';
+      else if (timeframe === 'next_quarter')
+        periodDesc = 'du trimestre prochain';
+      else if (timeframe === 'last_quarter')
+        periodDesc = 'du trimestre dernier';
       else periodDesc = 'de la période spécifiée';
 
       let statusDesc = '';
@@ -1997,8 +2072,218 @@ export class DatabaseController {
         return 'de demain';
       case 'today':
         return "d'aujourd'hui";
+      case 'yesterday':
+        return "d'hier";
+      case 'current_week':
+        return 'de la semaine actuelle';
+      case 'next_week':
+        return 'de la semaine prochaine';
+      case 'last_week':
+        return 'de la semaine dernière';
+      case 'last_year':
+        return "de l'année dernière";
+      case 'next_year':
+        return "de l'année prochaine";
+      case 'current_quarter':
+        return 'du trimestre actuel';
+      case 'next_quarter':
+        return 'du trimestre prochain';
+      case 'last_quarter':
+        return 'du trimestre dernier';
       default:
         return '';
+    }
+  }
+
+  /**
+   * Gère les requêtes concernant les rendez-vous
+   * @param enrichedRequest La requête enrichie
+   * @returns La réponse formatée
+   */
+  private async handleAppointmentsQuery(enrichedRequest: {
+    question: string;
+    metadata?: {
+      primaryTable?: string;
+      filters?: {
+        status?: string | null;
+        timeframe?: string | null;
+      };
+      analysis?: {
+        intention?: string;
+        entites?: string[];
+      };
+    };
+  }): Promise<{
+    reponse: string;
+    success: boolean;
+    error?: string;
+    data?: any;
+  }> {
+    this.logger.debug(
+      `Traitement de la requête sur les rendez-vous: ${JSON.stringify(enrichedRequest)}`,
+    );
+
+    // Extraction des métadonnées pour le filtrage
+    const timeframe = enrichedRequest.metadata?.filters?.timeframe || null;
+    const entities = enrichedRequest.metadata?.analysis?.entites || [];
+
+    try {
+      // Construction de la requête de base
+      let query = `
+        SELECT 
+          a.id,
+          a.title,
+          a.description,
+          a.start_date,
+          a.end_date,
+          a.location,
+          c.name as client_name
+        FROM appointments a
+        LEFT JOIN clients c ON a.client_id = c.id
+      `;
+
+      const whereConditions: string[] = [];
+      const params: any[] = [];
+
+      // Ajout des conditions de filtrage basées sur la période
+      if (timeframe) {
+        switch (timeframe) {
+          case 'today':
+            whereConditions.push('DATE(a.start_date) = CURRENT_DATE');
+            break;
+          case 'tomorrow':
+            whereConditions.push(
+              "DATE(a.start_date) = (CURRENT_DATE + INTERVAL '1 day')",
+            );
+            break;
+          case 'yesterday':
+            whereConditions.push(
+              "DATE(a.start_date) = (CURRENT_DATE - INTERVAL '1 day')",
+            );
+            break;
+          case 'this_week':
+            whereConditions.push(
+              "DATE_PART('week', a.start_date) = DATE_PART('week', CURRENT_DATE) AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE)",
+            );
+            break;
+          case 'next_week':
+            whereConditions.push(
+              "DATE_PART('week', a.start_date) = DATE_PART('week', CURRENT_DATE + INTERVAL '7 days') AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE + INTERVAL '7 days')",
+            );
+            break;
+          case 'last_week':
+            whereConditions.push(
+              "DATE_PART('week', a.start_date) = DATE_PART('week', CURRENT_DATE - INTERVAL '7 days') AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE - INTERVAL '7 days')",
+            );
+            break;
+          case 'current_month':
+            whereConditions.push(
+              "DATE_PART('month', a.start_date) = DATE_PART('month', CURRENT_DATE) AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE)",
+            );
+            break;
+          case 'next_month':
+            whereConditions.push(
+              "(DATE_PART('month', a.start_date) = DATE_PART('month', CURRENT_DATE + INTERVAL '1 month') AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE + INTERVAL '1 month'))",
+            );
+            break;
+          case 'last_month':
+            whereConditions.push(
+              "(DATE_PART('month', a.start_date) = DATE_PART('month', CURRENT_DATE - INTERVAL '1 month') AND DATE_PART('year', a.start_date) = DATE_PART('year', CURRENT_DATE - INTERVAL '1 month'))",
+            );
+            break;
+          default:
+            // Pas de filtrage par défaut
+            break;
+        }
+      }
+
+      // Filtrage par client si spécifié
+      if (entities.length > 0) {
+        const clientNames = entities.map((entity) => entity.toLowerCase());
+        whereConditions.push(
+          `LOWER(c.name) IN (${clientNames.map((_, i) => `$${i + 1}`).join(', ')})`,
+        );
+        clientNames.forEach((name) => params.push(name));
+      }
+
+      // Ajout des conditions WHERE à la requête
+      if (whereConditions.length > 0) {
+        query += ` WHERE ${whereConditions.join(' AND ')}`;
+      }
+
+      // Ajout de l'ordre de tri
+      query += ` ORDER BY a.start_date ASC`;
+
+      // Exécution de la requête
+      const appointments = await this.databaseService.executeQuery(
+        query,
+        params,
+      );
+
+      // Formatage de la réponse
+      let responseText = '';
+      if (appointments.length === 0) {
+        responseText = `Aucun rendez-vous trouvé ${this.getTimeframeText(timeframe)}.`;
+      } else {
+        responseText = `Voici les rendez-vous ${this.getTimeframeText(timeframe)} :\n\n`;
+
+        appointments.forEach((appointment, index) => {
+          const startDate = new Date(appointment.start_date);
+          const endDate = new Date(appointment.end_date);
+
+          const formattedStartDate = startDate.toLocaleDateString('fr-FR', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          });
+
+          const formattedStartTime = startDate.toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+
+          const formattedEndTime = endDate.toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+
+          responseText += `${index + 1}. ${appointment.title}\n`;
+          responseText += `   Date: ${formattedStartDate}\n`;
+          responseText += `   Horaire: ${formattedStartTime} - ${formattedEndTime}\n`;
+
+          if (appointment.location) {
+            responseText += `   Lieu: ${appointment.location}\n`;
+          }
+
+          if (appointment.client_name) {
+            responseText += `   Client: ${appointment.client_name}\n`;
+          }
+
+          if (appointment.description) {
+            responseText += `   Description: ${appointment.description}\n`;
+          }
+
+          responseText += '\n';
+        });
+      }
+
+      return {
+        reponse: responseText,
+        success: true,
+        data: appointments,
+      };
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      this.logger.error(
+        `Erreur lors de la récupération des rendez-vous: ${errorMessage}`,
+      );
+      return {
+        reponse:
+          "Désolé, une erreur s'est produite lors de la récupération des rendez-vous.",
+        success: false,
+        error: errorMessage,
+      };
     }
   }
 }
