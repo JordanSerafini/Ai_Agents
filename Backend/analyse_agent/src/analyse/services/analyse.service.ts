@@ -47,6 +47,10 @@ export enum AgentType {
   API = 'agent_api',
   WORKFLOW = 'agent_workflow',
   AUTRE = 'agent_autre',
+  DATABASE = 'database',
+  SEARCH = 'search',
+  ANALYSE = 'analyse',
+  DOCUMENT = 'document'
 }
 
 // Interface pour la réponse d'analyse
