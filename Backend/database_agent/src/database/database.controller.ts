@@ -885,6 +885,157 @@ export class DatabaseController {
       lowerQuery.includes('quotation') ||
       lowerQuery.includes('proposition commerciale')
     ) {
+      // Devis du mois prochain
+      if (
+        lowerQuery.includes('mois prochain') ||
+        lowerQuery.includes('prochain mois')
+      ) {
+        if (
+          lowerQuery.includes('accepté') ||
+          lowerQuery.includes('accepte') ||
+          lowerQuery.includes('accepted')
+        ) {
+          return 'ACCEPTED_QUOTATIONS_NEXT_MONTH';
+        } else if (
+          lowerQuery.includes('refusé') ||
+          lowerQuery.includes('refuse') ||
+          lowerQuery.includes('rejected') ||
+          lowerQuery.includes('non accepté') ||
+          lowerQuery.includes('non accepte')
+        ) {
+          return 'REJECTED_QUOTATIONS_NEXT_MONTH';
+        } else {
+          return 'QUOTATIONS_NEXT_MONTH';
+        }
+      }
+
+      // Devis du mois dernier
+      if (
+        lowerQuery.includes('mois dernier') ||
+        lowerQuery.includes('dernier mois') ||
+        lowerQuery.includes('mois précédent') ||
+        lowerQuery.includes('mois precedent')
+      ) {
+        if (
+          lowerQuery.includes('accepté') ||
+          lowerQuery.includes('accepte') ||
+          lowerQuery.includes('accepted')
+        ) {
+          return 'ACCEPTED_QUOTATIONS_LAST_MONTH';
+        } else if (
+          lowerQuery.includes('refusé') ||
+          lowerQuery.includes('refuse') ||
+          lowerQuery.includes('rejected') ||
+          lowerQuery.includes('non accepté') ||
+          lowerQuery.includes('non accepte')
+        ) {
+          return 'REJECTED_QUOTATIONS_LAST_MONTH';
+        } else {
+          return 'QUOTATIONS_LAST_MONTH';
+        }
+      }
+      
+      // Devis du mois en cours
+      if (
+        lowerQuery.includes('ce mois') ||
+        lowerQuery.includes('mois en cours') ||
+        lowerQuery.includes('mois actuel')
+      ) {
+        if (
+          lowerQuery.includes('accepté') ||
+          lowerQuery.includes('accepte') ||
+          lowerQuery.includes('accepted')
+        ) {
+          return 'ACCEPTED_QUOTATIONS_CURRENT_MONTH';
+        } else if (
+          lowerQuery.includes('refusé') ||
+          lowerQuery.includes('refuse') ||
+          lowerQuery.includes('rejected') ||
+          lowerQuery.includes('non accepté') ||
+          lowerQuery.includes('non accepte')
+        ) {
+          return 'REJECTED_QUOTATIONS_CURRENT_MONTH';
+        } else {
+          return 'QUOTATIONS_CURRENT_MONTH';
+        }
+      }
+
+      // Montant total des devis
+      if (
+        lowerQuery.includes('montant total') ||
+        lowerQuery.includes('total') ||
+        lowerQuery.includes('somme')
+      ) {
+        if (
+          lowerQuery.includes('mois prochain') ||
+          lowerQuery.includes('prochain mois')
+        ) {
+          if (
+            lowerQuery.includes('accepté') ||
+            lowerQuery.includes('accepte') ||
+            lowerQuery.includes('accepted')
+          ) {
+            return 'ACCEPTED_QUOTATIONS_NEXT_MONTH_TOTAL';
+          } else if (
+            lowerQuery.includes('refusé') ||
+            lowerQuery.includes('refuse') ||
+            lowerQuery.includes('rejected') ||
+            lowerQuery.includes('non accepté') ||
+            lowerQuery.includes('non accepte')
+          ) {
+            return 'REJECTED_QUOTATIONS_NEXT_MONTH_TOTAL';
+          } else {
+            return 'QUOTATIONS_NEXT_MONTH_TOTAL';
+          }
+        } else if (
+          lowerQuery.includes('mois dernier') ||
+          lowerQuery.includes('dernier mois') ||
+          lowerQuery.includes('mois précédent') ||
+          lowerQuery.includes('mois precedent')
+        ) {
+          if (
+            lowerQuery.includes('accepté') ||
+            lowerQuery.includes('accepte') ||
+            lowerQuery.includes('accepted')
+          ) {
+            return 'ACCEPTED_QUOTATIONS_LAST_MONTH_TOTAL';
+          } else if (
+            lowerQuery.includes('refusé') ||
+            lowerQuery.includes('refuse') ||
+            lowerQuery.includes('rejected') ||
+            lowerQuery.includes('non accepté') ||
+            lowerQuery.includes('non accepte')
+          ) {
+            return 'REJECTED_QUOTATIONS_LAST_MONTH_TOTAL';
+          } else {
+            return 'QUOTATIONS_LAST_MONTH_TOTAL';
+          }
+        } else if (
+          lowerQuery.includes('ce mois') ||
+          lowerQuery.includes('mois en cours') ||
+          lowerQuery.includes('mois actuel')
+        ) {
+          if (
+            lowerQuery.includes('accepté') ||
+            lowerQuery.includes('accepte') ||
+            lowerQuery.includes('accepted')
+          ) {
+            return 'ACCEPTED_QUOTATIONS_CURRENT_MONTH_TOTAL';
+          } else if (
+            lowerQuery.includes('refusé') ||
+            lowerQuery.includes('refuse') ||
+            lowerQuery.includes('rejected') ||
+            lowerQuery.includes('non accepté') ||
+            lowerQuery.includes('non accepte')
+          ) {
+            return 'REJECTED_QUOTATIONS_CURRENT_MONTH_TOTAL';
+          } else {
+            return 'QUOTATIONS_CURRENT_MONTH_TOTAL';
+          }
+        }
+      }
+
+      // Autres intentions existantes pour les devis
       if (lowerQuery.includes('projet') || lowerQuery.includes('chantier')) {
         return 'QUOTATIONS_BY_PROJECT';
       } else if (lowerQuery.includes('client')) {
