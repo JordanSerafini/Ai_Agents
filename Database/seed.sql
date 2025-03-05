@@ -153,40 +153,40 @@ INSERT INTO quotation_products (quotation_id, product_name, description, quantit
     (4, 'Plinthes', 'Fourniture et pose plinthes', 18, 12.00, 'ml', 'matériaux');
 
 -- Insertion des matériaux utilisés par projet
-INSERT INTO project_materials (project_id, material_id, quantity_used) VALUES 
+INSERT INTO project_materials (project_id, material_id, quantity, unit_price) VALUES 
     -- Projet 1: Rénovation salle de bain
-    (1, 1, 8),  -- Carrelage sol sdb
-    (1, 3, 24), -- Carrelage mural sdb
-    (1, 5, 4),  -- Mortier colle
-    (1, 8, 2),  -- Croisillons
-    (1, 9, 3),  -- Joint
+    (1, 1, 8, 35.00),  -- Carrelage sol sdb
+    (1, 3, 24, 28.00), -- Carrelage mural sdb
+    (1, 5, 4, 25.00),  -- Mortier colle
+    (1, 8, 2, 12.00),  -- Croisillons
+    (1, 9, 3, 22.00),  -- Joint
     
     -- Projet 2: Chape et carrelage appartements
-    (2, 4, 300),  -- Chape fluide
-    (2, 6, 4),    -- Primaire
-    (2, 7, 10),   -- Bande périphérique
-    (2, 1, 250),  -- Carrelage 60x60
-    (2, 5, 50),   -- Mortier colle
+    (2, 4, 300, 32.00),  -- Chape fluide
+    (2, 6, 4, 25.00),    -- Primaire
+    (2, 7, 10, 15.00),   -- Bande périphérique
+    (2, 1, 250, 35.00),  -- Carrelage 60x60
+    (2, 5, 50, 25.00),   -- Mortier colle
     
     -- Projet 3: Carrelage espaces communs
-    (3, 2, 300),  -- Carrelage 80x80
-    (3, 5, 60),   -- Mortier colle
-    (3, 9, 30),   -- Joint
-    (3, 10, 40),  -- Profilés
+    (3, 2, 300, 45.00),  -- Carrelage 80x80
+    (3, 5, 60, 25.00),   -- Mortier colle
+    (3, 9, 30, 22.00),   -- Joint
+    (3, 10, 40, 8.50),   -- Profilés
 
     -- Projet 4: Rénovation cuisine
-    (4, 1, 20),   -- Carrelage 60x60
-    (4, 5, 6),    -- Mortier colle
-    (4, 9, 4),    -- Joint
+    (4, 1, 20, 35.00),   -- Carrelage 60x60
+    (4, 5, 6, 25.00),    -- Mortier colle
+    (4, 9, 4, 22.00),    -- Joint
     
     -- Projet 5: Programme neuf Les Clarines
-    (5, 4, 900),   -- Chape fluide
-    (5, 6, 15),    -- Primaire
-    (5, 7, 30),    -- Bande périphérique
-    (5, 16, 800),  -- Carrelage 120x120
-    (5, 5, 160),   -- Mortier colle
-    (5, 17, 15),   -- Sous-couche acoustique
-    (5, 18, 20);   -- Profilé de dilatation
+    (5, 4, 900, 32.00),   -- Chape fluide
+    (5, 6, 15, 25.00),    -- Primaire
+    (5, 7, 30, 15.00),    -- Bande périphérique
+    (5, 16, 800, 65.00),  -- Carrelage 120x120
+    (5, 5, 160, 25.00),   -- Mortier colle
+    (5, 17, 15, 120.00),   -- Sous-couche acoustique
+    (5, 18, 20, 22.00);   -- Profilé de dilatation
 
 -- Insertion des affectations personnel-projet
 INSERT INTO project_staff (project_id, staff_id) VALUES 
@@ -443,91 +443,40 @@ INSERT INTO quotation_products (quotation_id, product_name, description, quantit
     (20, 'Main d''œuvre', 'Pose complète', 300, 48.00, 'm²', 'main_doeuvre');
 
 -- Ajout des matériaux utilisés pour les nouveaux projets
-INSERT INTO project_materials (project_id, material_id, quantity_used) VALUES 
+INSERT INTO project_materials (project_id, material_id, quantity, unit_price) VALUES 
     -- Salle de bain moderne
-    (9, 1, 6),    -- Carrelage sol
-    (9, 3, 18),   -- Carrelage mural
-    (9, 5, 3),    -- Mortier colle
-    (9, 8, 2),    -- Croisillons
-    (9, 9, 2),    -- Joint
+    (9, 1, 6, 35.00),    -- Carrelage sol
+    (9, 3, 18, 28.00),   -- Carrelage mural
+    (9, 5, 3, 25.00),    -- Mortier colle
+    (9, 8, 2, 12.00),    -- Croisillons
+    (9, 9, 1, 22.00),    -- Joint
     
     -- Cuisine contemporaine
-    (10, 1, 15),   -- Carrelage sol
-    (10, 3, 6),    -- Carrelage mural crédence
-    (10, 5, 5),    -- Mortier colle
-    (10, 9, 3),    -- Joint
+    (10, 1, 15, 35.00),  -- Carrelage sol
+    (10, 3, 6, 28.00),   -- Carrelage mural
+    (10, 5, 4, 25.00),   -- Mortier colle
+    (10, 9, 2, 22.00),   -- Joint
     
-    -- Studio location
-    (12, 4, 25),   -- Chape fluide
-    (12, 1, 25),   -- Carrelage
-    (12, 5, 8),    -- Mortier colle
-    (12, 7, 2),    -- Bande périphérique
+    -- Entrée appartement
+    (11, 2, 12, 45.00),  -- Carrelage 80x80
+    (11, 5, 3, 25.00),   -- Mortier colle
+    (11, 9, 1, 22.00),   -- Joint
     
     -- Local commercial
-    (13, 2, 80),   -- Carrelage 80x80
-    (13, 5, 20),   -- Mortier colle
-    (13, 9, 8),    -- Joint
-    (13, 18, 4),   -- Profilé de dilatation
-    
-    -- Douche italienne
-    (14, 11, 1),   -- Natte d'étanchéité
-    (14, 14, 4),   -- Carrelage antidérapant
-    (14, 3, 12),   -- Carrelage mural
-    (14, 15, 1),   -- Colle époxy
-    
-    -- Hall immeuble
-    (15, 2, 40),   -- Carrelage 80x80
-    (15, 5, 10),   -- Mortier colle
-    (15, 9, 4),    -- Joint
-    (15, 10, 15),  -- Profilés
-    
-    -- Terrasse couverte
-    (16, 14, 35),  -- Carrelage antidérapant
-    (16, 11, 2),   -- Natte d'étanchéité
-    (16, 5, 9),    -- Mortier colle
-    (16, 9, 4),    -- Joint
-    
-    -- WC suspendus
-    (17, 1, 4),    -- Carrelage sol
-    (17, 3, 12),   -- Carrelage mural
-    (17, 5, 3),    -- Mortier colle
-    (17, 9, 2),    -- Joint
-    
-    -- Appartement T2
-    (18, 4, 45),   -- Chape fluide
-    (18, 16, 45),  -- Carrelage 120x120
-    (18, 5, 15),   -- Mortier colle
-    (18, 17, 3),   -- Sous-couche acoustique
-    
-    -- Buanderie
-    (19, 14, 8),   -- Carrelage antidérapant
-    (19, 11, 1),   -- Natte d'étanchéité
-    (19, 15, 1),   -- Colle époxy
-    (19, 9, 1),    -- Joint
+    (13, 14, 80, 32.00), -- Carrelage antidérapant
+    (13, 5, 20, 25.00),  -- Mortier colle
+    (13, 9, 8, 22.00),   -- Joint
     
     -- SPA Hotel
-    (20, 11, 4),   -- Natte d'étanchéité
-    (20, 14, 120), -- Carrelage antidérapant
-    (20, 15, 5),   -- Colle époxy
-    (20, 9, 12),   -- Joint
+    (20, 11, 120, 180.00), -- Natte d'étanchéité
+    (20, 14, 120, 32.00),  -- Carrelage antidérapant
+    (20, 5, 30, 25.00),    -- Mortier colle
+    (20, 9, 12, 22.00),    -- Joint
     
     -- Restaurant
-    (21, 14, 60),  -- Carrelage antidérapant
-    (21, 15, 3),   -- Colle époxy
-    (21, 9, 6),    -- Joint
-    (21, 10, 25),  -- Profilés
-    
-    -- Cave à vin
-    (22, 1, 25),   -- Carrelage sol
-    (22, 3, 45),   -- Carrelage mural
-    (22, 5, 12),   -- Mortier colle
-    (22, 9, 5),    -- Joint
-    
-    -- Balcons résidence
-    (23, 11, 5),   -- Natte d'étanchéité
-    (23, 14, 75),  -- Carrelage antidérapant
-    (23, 15, 4),   -- Colle époxy
-    (23, 18, 8);   -- Profilé de dilatation
+    (21, 14, 60, 32.00),  -- Carrelage antidérapant
+    (21, 5, 15, 25.00),   -- Mortier colle
+    (21, 9, 6, 22.00);    -- Joint
 
 -- Modification des événements du calendrier
 INSERT INTO calendar_events (
