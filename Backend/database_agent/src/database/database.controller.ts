@@ -1784,7 +1784,7 @@ export class DatabaseController {
         const limit = intention.includes('récent') ? 10 : 100;
 
         query = `
-          SELECT c.id, c.name, c.email, c.phone, c.contact_person, c.created_at,
+          SELECT c.id, CONCAT(c.firstname, ' ', c.lastname) as name, c.email, c.phone, c.contact_person, c.created_at,
             COUNT(DISTINCT p.id) as total_projects,
             COUNT(DISTINCT q.id) as total_quotations,
             COUNT(DISTINCT i.id) as total_invoices
@@ -1792,7 +1792,7 @@ export class DatabaseController {
           LEFT JOIN projects p ON c.id = p.client_id
           LEFT JOIN quotations q ON c.id = q.client_id
           LEFT JOIN invoices i ON c.id = i.client_id
-          GROUP BY c.id
+          GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone, c.contact_person, c.created_at
           ORDER BY c.created_at DESC
           LIMIT $1
         `;
@@ -1875,9 +1875,9 @@ export class DatabaseController {
           LEFT JOIN projects p ON c.id = p.client_id
           LEFT JOIN quotations q ON c.id = q.client_id
           LEFT JOIN invoices i ON c.id = i.client_id
-          WHERE c.name ILIKE $1 OR c.email ILIKE $1 OR c.contact_person ILIKE $1
-          GROUP BY c.id
-          ORDER BY c.name
+          WHERE CONCAT(c.firstname, ' ', c.lastname) ILIKE $1 OR c.email ILIKE $1 OR c.contact_person ILIKE $1
+          GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone, c.contact_person, c.created_at
+          ORDER BY CONCAT(c.firstname, ' ', c.lastname)
           LIMIT 10
         `;
 
@@ -2059,7 +2059,7 @@ export class DatabaseController {
 
       if (searchTerm) {
         whereConditions.push(
-          `(p.name ILIKE $${params.length + 1} OR c.name ILIKE $${params.length + 1})`,
+          `(p.name ILIKE $${params.length + 1} OR CONCAT(c.firstname, ' ', c.lastname) ILIKE $${params.length + 1})`,
         );
         params.push(`%${searchTerm}%`);
         searchFilter = `correspondant à "${searchTerm}"`;

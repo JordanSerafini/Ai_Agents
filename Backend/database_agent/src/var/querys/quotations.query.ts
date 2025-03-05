@@ -4,7 +4,7 @@
 export const QUOTATIONS_QUERIES = {
   // Récupérer tous les devis
   GET_ALL: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -13,7 +13,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Récupérer un devis par son ID
   GET_BY_ID: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -31,7 +31,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Récupérer les devis d'un client
   GET_BY_CLIENT: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -41,7 +41,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Récupérer les devis par statut
   GET_BY_STATUS: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -51,7 +51,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Récupérer les devis en attente
   GET_PENDING: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -61,7 +61,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Récupérer les devis acceptés
   GET_ACCEPTED: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -71,7 +71,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Récupérer les devis refusés
   GET_REJECTED: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -81,7 +81,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Récupérer les devis expirés
   GET_EXPIRED: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -135,7 +135,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Rechercher des devis par référence ou notes
   SEARCH: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id
@@ -175,7 +175,7 @@ export const QUOTATIONS_QUERIES = {
 
   // Requête modulable pour filtrer les devis par statut et période
   GET_FILTERED_QUOTATIONS: `
-    SELECT q.*, p.name as project_name, c.name as client_name
+    SELECT q.*, p.name as project_name, CONCAT(c.firstname, ' ', c.lastname) as client_name
     FROM quotations q
     JOIN projects p ON q.project_id = p.id
     JOIN clients c ON p.client_id = c.id

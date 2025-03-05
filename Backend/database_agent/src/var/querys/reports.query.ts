@@ -10,7 +10,7 @@ export const REPORT_QUERIES = {
       p.start_date,
       p.end_date,
       p.status,
-      c.name as client_name,
+      CONCAT(c.firstname, ' ', c.lastname) as client_name,
       COUNT(t.id) as total_tasks,
       SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
       CASE 
@@ -20,7 +20,7 @@ export const REPORT_QUERIES = {
     FROM projects p
     JOIN clients c ON p.client_id = c.id
     LEFT JOIN tasks t ON p.id = t.project_id
-    GROUP BY p.id, p.name, p.start_date, p.end_date, p.status, c.name
+    GROUP BY p.id, p.name, p.start_date, p.end_date, p.status, c.firstname, c.lastname
     ORDER BY p.end_date ASC;
   `,
 
@@ -91,7 +91,7 @@ export const REPORT_QUERIES = {
       p.start_date,
       p.end_date,
       p.status,
-      c.name as client_name,
+      CONCAT(c.firstname, ' ', c.lastname) as client_name,
       CASE 
         WHEN p.end_date < CURRENT_DATE AND p.status != 'termine' THEN 'En retard'
         WHEN p.end_date >= CURRENT_DATE THEN 'Dans les délais'
@@ -115,7 +115,7 @@ export const REPORT_QUERIES = {
     LEFT JOIN project_budgets pb ON p.id = pb.project_id
     LEFT JOIN expenses e ON p.id = e.project_id
     LEFT JOIN invoices i ON p.id = i.project_id
-    GROUP BY p.id, p.name, p.start_date, p.end_date, p.status, c.name, pb.total_budget
+    GROUP BY p.id, p.name, p.start_date, p.end_date, p.status, c.firstname, c.lastname, pb.total_budget
     ORDER BY p.end_date DESC;
   `,
 
@@ -147,7 +147,7 @@ export const REPORT_QUERIES = {
   CLIENT_PROFITABILITY_REPORT: `
     SELECT 
       c.id,
-      c.name as client_name,
+      CONCAT(c.firstname, ' ', c.lastname) as client_name,
       COUNT(DISTINCT p.id) as total_projects,
       COUNT(DISTINCT CASE WHEN p.status = 'termine' THEN p.id END) as completed_projects,
       COALESCE(SUM(i.total_ht), 0) as total_invoiced,
@@ -161,7 +161,7 @@ export const REPORT_QUERIES = {
     LEFT JOIN projects p ON c.id = p.client_id
     LEFT JOIN invoices i ON p.id = i.project_id
     LEFT JOIN expenses e ON p.id = e.project_id
-    GROUP BY c.id, c.name
+    GROUP BY c.id, c.firstname, c.lastname
     ORDER BY total_profit DESC;
   `,
 
@@ -175,7 +175,7 @@ export const REPORT_QUERIES = {
       q.total_ht,
       q.status,
       p.name as project_name,
-      c.name as client_name,
+      CONCAT(c.firstname, ' ', c.lastname) as client_name,
       CASE 
         WHEN q.status = 'accepté' THEN 'Gagné'
         WHEN q.status = 'refusé' THEN 'Perdu'
