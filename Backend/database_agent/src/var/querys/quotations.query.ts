@@ -161,4 +161,4 @@ export const QUOTATIONS_QUERIES = {
     FROM quotations
     WHERE created_date >= CURRENT_DATE - INTERVAL '1 year';
   `,
-}; 
+};
