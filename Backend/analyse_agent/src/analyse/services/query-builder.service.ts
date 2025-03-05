@@ -146,21 +146,29 @@ export class QueryBuilderService {
     const tables: string[] = [];
     const allTables = this.dbMetadataService.getAllTables().map(t => t.name.toLowerCase());
     
+    // Première passe : identifier les tables explicitement mentionnées
     for (const entite of entites) {
-      const entiteLower = entite.toLowerCase();
-      // Vérifier si l'entité correspond à une table
-      if (allTables.includes(entiteLower)) {
-        tables.push(entiteLower);
+      // Vérifier si l'entité contient un point (format table.colonne)
+      if (entite.includes('.')) {
+        const tableName = entite.split('.')[0].toLowerCase();
+        if (allTables.includes(tableName) && !tables.includes(tableName)) {
+          tables.push(tableName);
+        }
+      } 
+      // Vérifier si l'entité correspond directement à une table
+      else if (allTables.includes(entite.toLowerCase())) {
+        tables.push(entite.toLowerCase());
       }
     }
     
-    // Si aucune table n'est identifiée, utiliser une table par défaut
+    // Si aucune table n'est identifiée, utiliser une approche par correspondance partielle
     if (tables.length === 0) {
-      // Essayer de déduire la table à partir des entités
-      // Pour l'instant, on utilise une approche simple
       for (const table of allTables) {
         for (const entite of entites) {
-          if (entite.toLowerCase().includes(table) || table.includes(entite.toLowerCase())) {
+          const entiteLower = entite.toLowerCase();
+          // Éviter de considérer les tables pour les entités qui sont clairement des attributs
+          if (!this.isColumnNameOnly(entiteLower) && 
+              (entiteLower.includes(table) || table.includes(entiteLower))) {
             tables.push(table);
             break;
           }
@@ -191,26 +199,61 @@ export class QueryBuilderService {
       }
     }
     
-    // Identifier les colonnes mentionnées
+    // Traiter les entités qui spécifient explicitement des colonnes (table.colonne)
     for (const entite of entites) {
-      const entiteLower = entite.toLowerCase();
-      
-      for (const table of tables) {
-        if (allColumns[table]) {
-          for (const column of allColumns[table]) {
-            if (column === entiteLower || 
-                entiteLower.includes(column) || 
-                column.includes(entiteLower)) {
-              columns.push(`${table}.${column}`);
-            }
+      if (entite.includes('.')) {
+        const [tableName, columnName] = entite.toLowerCase().split('.');
+        
+        // Vérifier si la table existe dans nos tables sélectionnées
+        if (tables.includes(tableName)) {
+          // Vérifier si la colonne existe dans cette table
+          if (allColumns[tableName] && allColumns[tableName].includes(columnName)) {
+            columns.push(`${tableName}.${columnName}`);
+          }
+        }
+      } else {
+        // Pour les entités sans préfixe de table, chercher dans toutes les tables
+        const entiteLower = entite.toLowerCase();
+        
+        // Vérifier si c'est une colonne courante (comme id, name, etc.)
+        for (const table of tables) {
+          if (allColumns[table] && allColumns[table].includes(entiteLower)) {
+            columns.push(`${table}.${entiteLower}`);
           }
         }
       }
     }
     
-    // Si aucune colonne n'est identifiée, sélectionner toutes les colonnes
+    // Si la demande concerne un total ou une somme, ajouter une agrégation
+    const entitesText = entites.join(' ').toLowerCase();
+    if (entitesText.includes('total') || entitesText.includes('sum') || entitesText.includes('somme')) {
+      // Chercher une colonne numérique appropriée pour l'agrégation
+      for (const table of tables) {
+        if (table === 'orders' && allColumns[table] && allColumns[table].includes('total')) {
+          columns.push('SUM(orders.total) as total_amount');
+          break;
+        }
+      }
+    }
+    
+    // Si aucune colonne n'est identifiée, sélectionner les colonnes principales de chaque table
     if (columns.length === 0) {
-      return tables.map(t => `${t}.*`);
+      for (const table of tables) {
+        if (allColumns[table]) {
+          // Prendre id, name, et quelques colonnes courantes
+          const commonColumns = ['id', 'name', 'firstname', 'lastname', 'email', 'created_at'];
+          for (const col of commonColumns) {
+            if (allColumns[table].includes(col)) {
+              columns.push(`${table}.${col}`);
+            }
+          }
+        }
+      }
+      
+      // Si toujours rien, prendre toutes les colonnes
+      if (columns.length === 0) {
+        return tables.map(t => `${t}.*`);
+      }
     }
     
     return [...new Set(columns)]; // Éliminer les doublons
@@ -260,15 +303,60 @@ export class QueryBuilderService {
    * Construit une requête SELECT
    */
   private construireRequeteSelect(tables: string[], columns: string[], conditions: string[]): string {
+    // Si aucune table n'est spécifiée, utiliser une table par défaut
     if (tables.length === 0) {
       return '';
     }
     
-    const columnsStr = columns.length > 0 ? columns.join(', ') : '*';
-    const tablesStr = tables.join(', ');
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    // Construire la clause SELECT
+    const selectClause = columns.length > 0 ? columns.join(', ') : '*';
     
-    return `SELECT ${columnsStr} FROM ${tablesStr} ${whereClause}`;
+    // Construire la clause FROM avec la première table
+    let fromClause = tables[0];
+    
+    // Ajouter les jointures si plusieurs tables sont spécifiées
+    if (tables.length > 1) {
+      // Pour chaque table supplémentaire, ajouter une jointure
+      for (let i = 1; i < tables.length; i++) {
+        // Déterminer la relation entre les tables et ajouter la jointure
+        const joinInfo = this.determineJoinRelation(tables[0], tables[i], 'INNER');
+        if (joinInfo) {
+          fromClause += ` INNER JOIN ${joinInfo.rightTable} ON ${joinInfo.leftTable}.${joinInfo.leftColumn} = ${joinInfo.rightTable}.${joinInfo.rightColumn}`;
+        } else {
+          // Si aucune relation n'est trouvée, utiliser une jointure par défaut sur id
+          fromClause += ` INNER JOIN ${tables[i]} ON ${tables[0]}.id = ${tables[i]}.${tables[0].slice(0, -1)}_id`;
+        }
+      }
+    }
+    
+    // Construire la clause WHERE si des conditions sont spécifiées
+    const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+    
+    // Vérifier si une agrégation est nécessaire
+    const hasAggregation = columns.some(col => col.toLowerCase().includes('sum(') || col.toLowerCase().includes('count(') || col.toLowerCase().includes('avg('));
+    
+    // Ajouter GROUP BY si une agrégation est présente
+    let groupByClause = '';
+    if (hasAggregation) {
+      // Identifier les colonnes non agrégées pour le GROUP BY
+      const nonAggColumns = columns.filter(col => 
+        !col.toLowerCase().includes('sum(') && 
+        !col.toLowerCase().includes('count(') && 
+        !col.toLowerCase().includes('avg(') &&
+        !col.toLowerCase().includes('max(') &&
+        !col.toLowerCase().includes('min(')
+      );
+      
+      if (nonAggColumns.length > 0) {
+        groupByClause = ` GROUP BY ${nonAggColumns.join(', ')}`;
+      }
+    }
+    
+    // Ajouter LIMIT par défaut
+    const limitClause = ` LIMIT ${this.DEFAULT_LIMIT}`;
+    
+    // Construire la requête complète
+    return `SELECT ${selectClause} FROM ${fromClause}${whereClause}${groupByClause}${limitClause}`;
   }
 
   /**
@@ -280,27 +368,92 @@ export class QueryBuilderService {
     conditions: string[],
     intention: string
   ): string {
+    // Si aucune table n'est spécifiée, retourner une chaîne vide
     if (tables.length === 0) {
       return '';
     }
     
-    let aggregation = 'COUNT(*)';
-    
-    // Déterminer la fonction d'agrégation en fonction de l'intention
-    if (intention.toLowerCase().includes('somme') || intention.toLowerCase().includes('total')) {
-      aggregation = columns.length > 0 ? `SUM(${columns[0]})` : 'SUM(*)';
-    } else if (intention.toLowerCase().includes('moyenne')) {
-      aggregation = columns.length > 0 ? `AVG(${columns[0]})` : 'AVG(*)';
-    } else if (intention.toLowerCase().includes('maximum') || intention.toLowerCase().includes('max')) {
-      aggregation = columns.length > 0 ? `MAX(${columns[0]})` : 'MAX(*)';
-    } else if (intention.toLowerCase().includes('minimum') || intention.toLowerCase().includes('min')) {
-      aggregation = columns.length > 0 ? `MIN(${columns[0]})` : 'MIN(*)';
+    // Déterminer le type d'agrégation en fonction de l'intention
+    let aggregateFunction = 'SUM';
+    if (intention.includes('moyenne') || intention.includes('avg')) {
+      aggregateFunction = 'AVG';
+    } else if (intention.includes('maximum') || intention.includes('max')) {
+      aggregateFunction = 'MAX';
+    } else if (intention.includes('minimum') || intention.includes('min')) {
+      aggregateFunction = 'MIN';
+    } else if (intention.includes('compter') || intention.includes('count')) {
+      aggregateFunction = 'COUNT';
     }
     
-    const tablesStr = tables.join(', ');
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    // Identifier la colonne à agréger
+    let aggregateColumn = '';
+    for (const column of columns) {
+      if (column.includes('total') || column.includes('montant') || column.includes('prix')) {
+        aggregateColumn = column;
+        break;
+      }
+    }
     
-    return `SELECT ${aggregation} FROM ${tablesStr} ${whereClause}`;
+    // Si aucune colonne spécifique n'est trouvée, utiliser la colonne la plus probable
+    if (!aggregateColumn) {
+      if (tables.includes('orders') && this.columnExistsInTable('orders', 'total')) {
+        aggregateColumn = 'orders.total';
+      } else if (tables.includes('commandes') && this.columnExistsInTable('commandes', 'montant')) {
+        aggregateColumn = 'commandes.montant';
+      } else {
+        // Par défaut, utiliser id pour COUNT ou la première colonne pour d'autres agrégations
+        aggregateColumn = aggregateFunction === 'COUNT' ? `${tables[0]}.id` : columns[0];
+      }
+    }
+    
+    // Construire la clause SELECT avec l'agrégation
+    const selectClause = `${aggregateFunction}(${aggregateColumn}) as ${aggregateColumn.replace('.', '_')}_${aggregateFunction.toLowerCase()}`;
+    
+    // Ajouter les colonnes de regroupement (GROUP BY)
+    const groupByColumns = columns.filter(col => 
+      col !== aggregateColumn && !col.includes('(') && col.includes('.')
+    );
+    
+    // Construire la clause SELECT complète
+    const fullSelectClause = groupByColumns.length > 0 
+      ? `${groupByColumns.join(', ')}, ${selectClause}`
+      : selectClause;
+    
+    // Construire la clause FROM avec jointures si nécessaire
+    let fromClause = tables[0];
+    if (tables.length > 1) {
+      // Pour chaque table supplémentaire, ajouter une jointure
+      for (let i = 1; i < tables.length; i++) {
+        // Déterminer la relation entre les tables et ajouter la jointure
+        const joinInfo = this.determineJoinRelation(tables[0], tables[i], 'INNER');
+        if (joinInfo) {
+          fromClause += ` INNER JOIN ${joinInfo.rightTable} ON ${joinInfo.leftTable}.${joinInfo.leftColumn} = ${joinInfo.rightTable}.${joinInfo.rightColumn}`;
+        } else {
+          // Si aucune relation n'est trouvée, utiliser une jointure par défaut sur id
+          fromClause += ` INNER JOIN ${tables[i]} ON ${tables[0]}.id = ${tables[i]}.${tables[0].slice(0, -1)}_id`;
+        }
+      }
+    }
+    
+    // Construire la clause WHERE
+    const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+    
+    // Construire la clause GROUP BY
+    const groupByClause = groupByColumns.length > 0 ? ` GROUP BY ${groupByColumns.join(', ')}` : '';
+    
+    // Ajouter LIMIT par défaut
+    const limitClause = ` LIMIT ${this.DEFAULT_LIMIT}`;
+    
+    // Construire la requête complète
+    return `SELECT ${fullSelectClause} FROM ${fromClause}${whereClause}${groupByClause}${limitClause}`;
+  }
+  
+  // Méthode utilitaire pour vérifier l'existence d'une colonne dans une table
+  private columnExistsInTable(tableName: string, columnName: string): boolean {
+    const tableMetadata = this.dbMetadataService.getTable(tableName);
+    if (!tableMetadata) return false;
+    
+    return tableMetadata.columns.some(col => col.name.toLowerCase() === columnName.toLowerCase());
   }
 
   /**
