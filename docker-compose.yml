@@ -1,9 +1,9 @@
 services:
-  database_agent:
+  querybuilder_agent:
     build:
-      context: ./Backend/database_agent
+      context: ./Backend/querybuilder_agent
       dockerfile: Dockerfile
-    container_name: database_agent
+    container_name: querybuilder_agent
     restart: always
     ports:
       - "3002:3002"
@@ -12,10 +12,10 @@ services:
       - PORT=3002
       - PG_HOST=ai_db
       - PG_PORT=5432
-      - PG_USER=postgres
+      - PG_USERNAME=postgres
       - PG_PASSWORD=postgres
       - PG_DATABASE=ai_db
-      - DATABASE_URL=postgresql://postgres:postgres@ai_db:5432/ai_db
+      - USE_STATIC_METADATA=false
       - ELASTICSEARCH_NODE=http://elasticsearch:9200
       - ELASTICSEARCH_USERNAME=elastic
       - ELASTICSEARCH_PASSWORD=changeme
@@ -23,6 +23,45 @@ services:
       - ai_network
     depends_on:
       - ai_db
+      - elasticsearch
+
+  elasticsearch_agent:
+    build:
+      context: ./Backend/elasticsearch_agent
+      dockerfile: Dockerfile
+    container_name: elasticsearch_agent
+    restart: always
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - ELASTICSEARCH_NODE=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=changeme
+    networks:
+      - ai_network
+    depends_on:
+      - elasticsearch
+
+  rag_agent:
+    build:
+      context: ./Backend/rag_agent
+      dockerfile: Dockerfile
+    container_name: rag_agent
+    restart: always
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=development
+      - PORT=3004
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELASTICSEARCH_NODE=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=changeme
+    networks:
+      - ai_network
+    depends_on:
       - elasticsearch
 
   analyse_agent:
@@ -37,25 +76,28 @@ services:
       - NODE_ENV=development
       - PORT=3001
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - DATABASE_AGENT_URL=http://database_agent:3002
-      - WORKFLOW_AGENT_URL=http://workflow_agent:3003
-      - MONGODB_URI=mongodb://mongodb:27017/analyse_agent
+      - QUERYBUILDER_AGENT_URL=http://querybuilder_agent:3002
+      - ELASTICSEARCH_AGENT_URL=http://elasticsearch_agent:3003
+      - RAG_AGENT_URL=http://rag_agent:3004
+      - WORKFLOW_AGENT_URL=http://workflow_agent:3005
+      - API_AGENT_URL=http://api_agent:3006
     networks:
       - ai_network
     depends_on:
-      - mongodb
-      - database_agent
+      - querybuilder_agent
+      - elasticsearch_agent
+      - rag_agent
 
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
-    restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    networks:
-      - ai_network
+  # mongodb:
+  #   image: mongo:latest
+  #   container_name: mongodb
+  #   restart: always
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #   networks:
+  #     - ai_network
       
   redis:
     image: "redis:alpine"
