@@ -113,63 +113,57 @@ export class RouterService {
         metadonnees: {
           tablesIdentifiees: {
             principales: [
-              'staff',
-              'timesheet_entries',
-              'calendar_events',
               'projects',
-              'project_staff',
+              'project_details',
               'clients',
-              'quotations',
               'invoices',
-              'equipment_reservations',
-              'materials',
+              'quotations',
+              'project_staff',
+              'staff',
               'project_materials',
+              'materials'
             ],
             jointures: [
               'project_staff',
-              'calendar_events',
-              'timesheet_entries',
+              'project_materials',
+              'invoices',
+              'quotations'
             ],
             conditions: [],
           },
           champsRequis: {
             selection: [
-              'staff.firstname',
-              'staff.lastname',
-              'staff.role',
-              'staff.is_available',
-              'timesheet_entries.date',
-              'timesheet_entries.hours',
-              'calendar_events.start_date',
-              'calendar_events.end_date',
-              'calendar_events.event_type',
               'projects.name AS project_name',
               'projects.status AS project_status',
+              'projects.start_date',
+              'projects.end_date',
+              'projects.total_amount',
               'clients.firstname AS client_firstname',
               'clients.lastname AS client_lastname',
+              'invoices.amount AS invoice_amount',
+              'quotations.amount AS quotation_amount'
             ],
             filtres: [],
-            groupement: ['staff.id', 'staff.firstname', 'staff.lastname'],
+            groupement: ['projects.id', 'projects.name'],
           },
           filtres: {
             temporels: [
-              'timesheet_entries.date >= CURRENT_DATE',
-              'timesheet_entries.date < CURRENT_DATE + 7',
-              'calendar_events.start_date >= CURRENT_DATE',
-              'calendar_events.end_date <= CURRENT_DATE + 7',
+              'projects.start_date <= CURRENT_DATE',
+              'projects.end_date >= CURRENT_DATE',
+              'EXTRACT(MONTH FROM projects.start_date) = EXTRACT(MONTH FROM CURRENT_DATE)',
+              'EXTRACT(YEAR FROM projects.start_date) = EXTRACT(YEAR FROM CURRENT_DATE)'
             ],
-            logiques: ['staff.is_available = true'],
+            logiques: ['projects.status != \'COMPLETED\''],
           },
           periodeTemporelle: {
-            debut: 'CURRENT_DATE',
-            fin: 'CURRENT_DATE + 7',
-            precision: 'JOUR',
+            debut: 'CURRENT_DATE - INTERVAL \'1 MONTH\'',
+            fin: 'CURRENT_DATE',
+            precision: 'MOIS',
           },
           parametresRequete: {
             tri: [
-              'staff.lastname ASC',
-              'staff.firstname ASC',
-              'timesheet_entries.date ASC',
+              'projects.start_date DESC',
+              'projects.total_amount DESC'
             ],
             limite: 100,
           },

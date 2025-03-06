@@ -47,26 +47,19 @@ interface ConversationHistory {
 // Types de classification des questions
 export enum QuestionCategory {
   GENERAL = 'GENERAL',
-  API = 'API',
-  WORKFLOW = 'WORKFLOW',
-  AUTRE = 'AUTRE',
   DATABASE = 'DATABASE',
   SEARCH = 'SEARCH',
+  KNOWLEDGE = 'KNOWLEDGE',
+  WORKFLOW = 'WORKFLOW',
 }
 
 // Types d'agents disponibles
 export enum AgentType {
-  GENERAL = 'agent_general',
-  API = 'agent_api',
-  WORKFLOW = 'agent_workflow',
-  AUTRE = 'agent_autre',
-  DATABASE = 'database',
-  SEARCH = 'search',
-  ANALYSE = 'analyse',
-  DOCUMENT = 'document',
+  GENERAL = 'general',
   QUERYBUILDER = 'querybuilder',
   ELASTICSEARCH = 'elasticsearch',
   RAG = 'rag',
+  WORKFLOW = 'workflow',
 }
 
 // Interface pour la réponse d'analyse
@@ -421,47 +414,65 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
   }
 
   private determinerCategorie(intention: string): QuestionCategory {
-    if (intention.includes('database') || intention.includes('sql')) {
+    if (intention.toLowerCase().includes('base') || intention.toLowerCase().includes('sql') || intention.toLowerCase().includes('données')) {
       return QuestionCategory.DATABASE;
     }
-    if (intention.includes('search') || intention.includes('find')) {
+    if (intention.toLowerCase().includes('recherche') || intention.toLowerCase().includes('trouver')) {
       return QuestionCategory.SEARCH;
     }
-    if (intention.includes('api')) {
-      return QuestionCategory.API;
-    }
-    if (intention.includes('workflow')) {
+    if (intention.toLowerCase().includes('workflow') || intention.toLowerCase().includes('processus')) {
       return QuestionCategory.WORKFLOW;
     }
     return QuestionCategory.GENERAL;
   }
 
   private determinerAgent(intention: string): AgentType {
-    // Questions liées au personnel et planning
+    // Questions liées aux données structurées (chantiers, montants, personnel)
     if (
+      intention.toLowerCase().includes('chantier') ||
+      intention.toLowerCase().includes('montant') ||
+      intention.toLowerCase().includes('projet') ||
+      intention.toLowerCase().includes('coût') ||
+      intention.toLowerCase().includes('facture') ||
       intention.toLowerCase().includes('personnel') ||
       intention.toLowerCase().includes('planning') ||
       intention.toLowerCase().includes('disponibilite') ||
       intention.toLowerCase().includes('horaire') ||
-      intention.toLowerCase().includes('travail')
+      intention.toLowerCase().includes('travail') ||
+      intention.toLowerCase().includes('base') ||
+      intention.toLowerCase().includes('sql') ||
+      intention.toLowerCase().includes('données')
     ) {
       return AgentType.QUERYBUILDER;
     }
 
-    // Questions liées à la base de données
-    if (intention.includes('database') || intention.includes('sql')) {
-      return AgentType.QUERYBUILDER;
+    // Questions de recherche
+    if (
+      intention.toLowerCase().includes('recherche') ||
+      intention.toLowerCase().includes('trouver') ||
+      intention.toLowerCase().includes('chercher')
+    ) {
+      return AgentType.ELASTICSEARCH;
     }
 
-    if (intention.includes('search') || intention.includes('find')) {
-      return AgentType.SEARCH;
+    // Questions nécessitant des connaissances
+    if (
+      intention.toLowerCase().includes('comment') ||
+      intention.toLowerCase().includes('pourquoi') ||
+      intention.toLowerCase().includes('expliquer')
+    ) {
+      return AgentType.RAG;
     }
-    if (intention.includes('api')) {
-      return AgentType.API;
-    }
-    if (intention.includes('workflow')) {
+
+    // Questions liées aux processus
+    if (
+      intention.toLowerCase().includes('workflow') ||
+      intention.toLowerCase().includes('processus') ||
+      intention.toLowerCase().includes('étape')
+    ) {
       return AgentType.WORKFLOW;
     }
+
     return AgentType.GENERAL;
   }
 
