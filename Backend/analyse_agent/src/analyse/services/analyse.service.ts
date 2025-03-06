@@ -12,6 +12,11 @@ import {
   ElasticsearchClientService,
   RagClientService,
 } from './clients';
+import {
+  QueryBuilderResponse,
+  SearchResponse,
+  KnowledgeResponse,
+} from '../interfaces/client-responses.interface';
 
 interface OpenAICompletionResponse {
   choices: {
@@ -137,15 +142,15 @@ export class AnalyseService {
   }
 
   private getConversationHistory(userId: string): ConversationHistory {
-    if (!this.conversationHistories.has(userId)) {
-      this.conversationHistories.set(userId, {
+    let history = this.conversationHistories.get(userId);
+    if (!history) {
+      history = {
         messages: [],
         lastInteraction: Date.now(),
-      });
+      };
+      this.conversationHistories.set(userId, history);
     }
-
-    const history = this.conversationHistories.get(userId);
-    history.lastInteraction = Date.now(); // Mettre à jour le timestamp
+    history.lastInteraction = Date.now();
     return history;
   }
 
@@ -153,27 +158,18 @@ export class AnalyseService {
     userId: string,
     role: 'user' | 'assistant' | 'system',
     content: string,
-  ): void {
+  ): ConversationHistory {
     const history = this.getConversationHistory(userId);
-
-    // Ajouter le nouveau message
     history.messages.push({
       role,
       content,
       timestamp: Date.now(),
     });
-
-    // Limiter la taille de l'historique
     if (history.messages.length > this.maxHistoryLength) {
-      // Garder les messages les plus récents
-      history.messages = history.messages.slice(
-        history.messages.length - this.maxHistoryLength,
-      );
+      history.messages.shift();
     }
-
-    this.logger.log(
-      `Message ajouté à l'historique de l'utilisateur ${userId}. Taille de l'historique: ${history.messages.length}`,
-    );
+    history.lastInteraction = Date.now();
+    return history;
   }
 
   private cleanupExpiredHistories(): void {
@@ -196,11 +192,10 @@ export class AnalyseService {
 
   async analyser(request: AnalyseRequestDto): Promise<{ reponse: string }> {
     const { question, userId, useHistory = false } = request;
+    const cacheKey = this.getCacheKey(question);
+    const cachedResponse = this.getFromCache(cacheKey);
 
-    // Vérifier si la réponse est dans le cache
-    const cachedResponse = this.getFromCache(question);
     if (cachedResponse) {
-      // Si l'historique est activé, ajouter la question et la réponse à l'historique
       if (useHistory && userId) {
         this.addToConversationHistory(userId, 'user', question);
         this.addToConversationHistory(userId, 'assistant', cachedResponse);
@@ -209,119 +204,88 @@ export class AnalyseService {
     }
 
     try {
-      // Analyser la question pour déterminer l'intention et l'agent cible
       const analyse = await this.analyserQuestion(question);
-
-      // Déterminer quels agents solliciter
-      const needsStructuredData = this.requiresStructuredData(analyse);
-      const needsTextSearch = this.requiresTextSearch(analyse);
-      const needsKnowledge = this.requiresKnowledge(analyse);
-
-      // Résultats de chaque agent
-      let structuredResults = null;
-      let searchResults = null;
-      let knowledgeResults = null;
-
-      // Appels parallèles aux différents agents
-      const promises = [];
-
-      if (needsStructuredData) {
-        promises.push(
-          this.queryBuilderClient
-            .buildQuery(question)
-            .then((result) => {
-              structuredResults = result;
-            })
-            .catch((error) => {
-              this.logger.error(
-                `Erreur lors de l'appel à l'agent QueryBuilder: ${error.message}`,
-              );
-            }),
-        );
-      }
-
-      if (needsTextSearch) {
-        promises.push(
-          this.elasticsearchClient
-            .search(question)
-            .then((result) => {
-              searchResults = result;
-            })
-            .catch((error) => {
-              this.logger.error(
-                `Erreur lors de l'appel à l'agent Elasticsearch: ${error.message}`,
-              );
-            }),
-        );
-      }
-
-      if (needsKnowledge) {
-        promises.push(
-          this.ragClient
-            .getKnowledge(question)
-            .then((result) => {
-              knowledgeResults = result;
-            })
-            .catch((error) => {
-              this.logger.error(
-                `Erreur lors de l'appel à l'agent RAG: ${error.message}`,
-              );
-            }),
-        );
-      }
-
-      // Attendre tous les résultats
-      await Promise.all(promises);
-
-      // Combiner les résultats
       let reponse = '';
 
-      if (structuredResults && structuredResults.success) {
-        reponse += `Données structurées: ${structuredResults.explanation}\n\n`;
-        if (structuredResults.sql) {
-          reponse += `Requête SQL: ${structuredResults.sql}\n\n`;
-        }
-      }
-
-      if (
-        searchResults &&
-        searchResults.hits &&
-        searchResults.hits.length > 0
-      ) {
-        reponse += `Résultats de recherche:\n`;
-        searchResults.hits.forEach((hit, index) => {
-          reponse += `${index + 1}. ${hit.title || hit._source.title || 'Document sans titre'}\n`;
-        });
-        reponse += '\n';
-      }
-
-      if (knowledgeResults && knowledgeResults.answer) {
-        reponse += `Réponse basée sur la connaissance: ${knowledgeResults.answer}\n\n`;
-      }
-
-      // Si aucun résultat n'a été obtenu, router vers l'agent approprié
-      if (!reponse) {
-        const routerResponse = await this.routerService.routeRequest(
+      // Si l'agent cible n'est pas GENERAL, router la requête vers l'agent approprié
+      if (analyse.agentCible !== AgentType.GENERAL) {
+        this.logger.log(
+          `Routage de la requête vers l'agent: ${analyse.agentCible}`,
+        );
+        const routedResponse = await this.routerService.routeRequest(
           request,
           analyse.agentCible,
+          analyse as unknown as Record<string, unknown>,
         );
-        reponse = routerResponse.reponse;
+
+        // Ajouter la réponse routée à l'historique
+        if (useHistory && userId) {
+          this.addToConversationHistory(userId, 'user', question);
+          this.addToConversationHistory(
+            userId,
+            'assistant',
+            routedResponse.reponse,
+          );
+        }
+
+        return routedResponse;
       }
 
-      // Sauvegarder la réponse dans le cache
-      this.saveToCache(question, reponse);
+      // Continuer avec le traitement normal pour l'agent GENERAL
+      const messages = [
+        {
+          role: 'system',
+          content: `Tu es un assistant IA expert pour Technidalle, une entreprise de bâtiment. 
+La question a été classifiée comme "${analyse.categorie}" avec l'intention principale: "${analyse.intention}".
+Fournis une réponse détaillée et informative en français (3-5 phrases) qui répond précisément à la question.
+Si la question concerne des informations générales sur le bâtiment, les matériaux ou les services, donne des explications complètes.
+Utilise un ton professionnel et adapté au secteur du bâtiment.`,
+        },
+      ];
 
-      // Si l'historique est activé, ajouter la question et la réponse à l'historique
+      // Ajouter la question actuelle
+      messages.push({
+        role: 'user',
+        content: analyse.questionCorrigee,
+      });
+
+      // Générer une réponse basée sur l'analyse
+      const response = await axios.post<OpenAICompletionResponse>(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: 'gpt-3.5-turbo',
+          messages,
+          temperature: 0.7,
+          max_tokens: 500,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.openaiApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 15000,
+        },
+      );
+
+      reponse = response.data.choices[0].message.content.trim();
+
+      // Ajouter la réponse à l'historique
       if (useHistory && userId) {
         this.addToConversationHistory(userId, 'user', question);
         this.addToConversationHistory(userId, 'assistant', reponse);
       }
 
+      // Mettre en cache
+      this.saveToCache(cacheKey, reponse);
+
       return { reponse };
     } catch (error) {
-      this.logger.error(`Erreur lors de l'analyse: ${error.message}`);
+      this.logger.error(
+        `Erreur lors de l'analyse: ${(error as Error).message}`,
+      );
       return {
-        reponse: `Désolé, une erreur s'est produite lors de l'analyse de votre question. Veuillez réessayer.`,
+        reponse:
+          "Désolé, une erreur s'est produite lors de l'analyse de votre question.",
       };
     }
   }
@@ -395,205 +359,15 @@ export class AnalyseService {
   async analyserQuestion(question: string): Promise<AnalyseResult> {
     this.logger.log(`Analyse de la question: ${question}`);
 
-    // Mots-clés pour la détection de catégories
-    const keywordsDatabase = [
-      'base de données',
-      'sql',
-      'requête',
-      'table',
-      'données',
-      'client',
-      'projet',
-      'facture',
-      'paiement',
-      "chiffre d'affaires",
-      'ca',
-      'trésorerie',
-    ];
-
-    const keywordsAPI = [
-      'api',
-      'endpoint',
-      'service web',
-      'rest',
-      'json',
-      'xml',
-      'http',
-      'post',
-      'get',
-      'authentification',
-    ];
-
-    const keywordsWorkflow = [
-      'workflow',
-      'processus',
-      'étape',
-      'validation',
-      'approbation',
-      'statut',
-      'notification',
-      'tâche',
-      'assignation',
-    ];
-
-    const keywordsSearch = [
-      'recherche',
-      'chercher',
-      'trouver',
-      'document',
-      'article',
-      'texte',
-      'contenu',
-    ];
-
-    // Détection simple basée sur les mots-clés
-    let categorie = QuestionCategory.GENERAL;
-    let agentCible = AgentType.GENERAL;
-
-    // Vérifier les mots-clés pour la catégorie DATABASE
-    if (
-      keywordsDatabase.some((keyword) =>
-        question.toLowerCase().includes(keyword.toLowerCase()),
-      )
-    ) {
-      categorie = QuestionCategory.DATABASE;
-      agentCible = AgentType.QUERYBUILDER;
-    }
-    // Vérifier les mots-clés pour la catégorie API
-    else if (
-      keywordsAPI.some((keyword) =>
-        question.toLowerCase().includes(keyword.toLowerCase()),
-      )
-    ) {
-      categorie = QuestionCategory.API;
-      agentCible = AgentType.API;
-    }
-    // Vérifier les mots-clés pour la catégorie WORKFLOW
-    else if (
-      keywordsWorkflow.some((keyword) =>
-        question.toLowerCase().includes(keyword.toLowerCase()),
-      )
-    ) {
-      categorie = QuestionCategory.WORKFLOW;
-      agentCible = AgentType.WORKFLOW;
-    }
-    // Vérifier les mots-clés pour la catégorie SEARCH
-    else if (
-      keywordsSearch.some((keyword) =>
-        question.toLowerCase().includes(keyword.toLowerCase()),
-      )
-    ) {
-      categorie = QuestionCategory.SEARCH;
-      agentCible = AgentType.ELASTICSEARCH;
-    }
-
-    // Extraction simple des entités (à améliorer avec NLP)
-    const entites = this.extraireEntites(question);
-
-    // Déterminer la priorité (par défaut NORMAL)
-    const priorite = this.determinerPriorite(question);
-
-    return {
-      questionCorrigee: question, // Pour l'instant, pas de correction
-      intention: 'obtenir_information', // Intention par défaut
-      categorie,
-      agentCible,
-      priorite,
-      entites,
-      contexte: '',
-    };
-  }
-
-  private extraireEntites(question: string): string[] {
-    // Implémentation simple pour extraire des entités
-    // À améliorer avec des techniques NLP plus avancées
-    const entites: string[] = [];
-
-    // Liste de mots-clés potentiels à rechercher
-    const entitiesPotentielles = [
-      'client',
-      'projet',
-      'facture',
-      'paiement',
-      'utilisateur',
-      'document',
-      'tâche',
-      'statut',
-      'date',
-      'montant',
-    ];
-
-    // Rechercher les entités potentielles dans la question
-    entitiesPotentielles.forEach((entite) => {
-      if (question.toLowerCase().includes(entite.toLowerCase())) {
-        entites.push(entite);
-      }
-    });
-
-    return entites;
-  }
-
-  private determinerPriorite(question: string): PrioriteType {
-    // Mots-clés indiquant une urgence
-    const keywordsUrgent = [
-      'urgent',
-      'immédiatement',
-      'critique',
-      'rapidement',
-      'dès que possible',
-      'important',
-      'prioritaire',
-    ];
-
-    // Mots-clés indiquant une priorité basse
-    const keywordsBasse = [
-      'quand vous aurez le temps',
-      'pas urgent',
-      'basse priorité',
-      'secondaire',
-      'plus tard',
-      'éventuellement',
-    ];
-
-    // Vérifier si la question contient des mots-clés d'urgence
-    if (
-      keywordsUrgent.some((keyword) =>
-        question.toLowerCase().includes(keyword.toLowerCase()),
-      )
-    ) {
-      return PrioriteType.URGENT;
-    }
-
-    // Vérifier si la question contient des mots-clés de priorité basse
-    if (
-      keywordsBasse.some((keyword) =>
-        question.toLowerCase().includes(keyword.toLowerCase()),
-      )
-    ) {
-      return PrioriteType.BASSE;
-    }
-
-    // Par défaut, priorité normale
-    return PrioriteType.NORMAL;
-  }
-
-  async analyseDemande(
-    request: AnalyseRequestDto,
-  ): Promise<AnalyseResponseDto> {
-    const { question } = request;
-
     try {
-      // Construire le prompt pour l'API OpenAI
-      const prompt = this.construirePrompt(request);
-
-      // Appeler l'API OpenAI
+      const prompt = this.construirePrompt({ question });
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
           model: 'gpt-3.5-turbo',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
-          max_tokens: 1000,
+          max_tokens: 1500,
         },
         {
           headers: {
@@ -604,48 +378,98 @@ export class AnalyseService {
       );
 
       const openaiResponse = response.data as OpenAICompletionResponse;
-      const jsonResponse = openaiResponse.choices[0].message.content;
+      const analysedResponse = this.parserReponse(
+        openaiResponse.choices[0].message.content,
+      );
 
-      // Parser la réponse JSON
-      return this.parserReponse(jsonResponse);
-    } catch (error) {
-      this.logger.error(`Erreur lors de l'analyse de la demande: ${error}`);
-      // Retourner une réponse par défaut en cas d'erreur
       return {
-        demandeId: Date.now().toString(),
-        intentionPrincipale: {
-          nom: 'erreur_analyse',
-          confiance: 1.0,
-          description: "Erreur lors de l'analyse de la demande",
-        },
-        sousIntentions: [],
-        entites: [],
-        niveauUrgence: PrioriteType.NORMAL,
-        contraintes: [],
-        contexte: '',
-        timestamp: new Date(),
+        questionCorrigee: analysedResponse.questionCorrigee || question,
+        intention: analysedResponse.intentionPrincipale.nom,
+        categorie: this.determinerCategorie(
+          analysedResponse.intentionPrincipale.nom,
+        ),
+        agentCible: this.determinerAgent(
+          analysedResponse.intentionPrincipale.nom,
+        ),
+        priorite: analysedResponse.niveauUrgence,
+        entites: analysedResponse.entites,
+        contexte: analysedResponse.contexte,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'analyse de la question: ${(error as Error).message}`,
+      );
+      return {
         questionCorrigee: question,
+        intention: 'obtenir_information',
+        categorie: QuestionCategory.GENERAL,
+        agentCible: AgentType.GENERAL,
+        priorite: PrioriteType.NORMAL,
+        entites: [],
+        contexte: '',
       };
     }
   }
 
+  private determinerCategorie(intention: string): QuestionCategory {
+    if (intention.includes('database') || intention.includes('sql')) {
+      return QuestionCategory.DATABASE;
+    }
+    if (intention.includes('search') || intention.includes('find')) {
+      return QuestionCategory.SEARCH;
+    }
+    if (intention.includes('api')) {
+      return QuestionCategory.API;
+    }
+    if (intention.includes('workflow')) {
+      return QuestionCategory.WORKFLOW;
+    }
+    return QuestionCategory.GENERAL;
+  }
+
+  private determinerAgent(intention: string): AgentType {
+    if (intention.includes('database') || intention.includes('sql')) {
+      return AgentType.DATABASE;
+    }
+    if (intention.includes('search') || intention.includes('find')) {
+      return AgentType.SEARCH;
+    }
+    if (intention.includes('api')) {
+      return AgentType.API;
+    }
+    if (intention.includes('workflow')) {
+      return AgentType.WORKFLOW;
+    }
+    return AgentType.GENERAL;
+  }
+
   private construirePrompt(request: AnalyseRequestDto): string {
-    const { question, context = '' } = request;
-
-    // Utiliser le prompt prédéfini et remplacer les variables
-    const prompt = analysePrompt
-      .replace('{{QUESTION}}', question)
-      .replace('{{CONTEXT}}', context || 'Aucun contexte fourni');
-
-    return prompt;
+    const { question } = request;
+    return analysePrompt(question);
   }
 
   private parserReponse(reponse: string): AnalyseResponseDto {
     try {
-      // Essayer de parser la réponse JSON
-      const parsedResponse = JSON.parse(reponse);
+      const parsedResponse = JSON.parse(reponse) as {
+        demandeId?: string;
+        intentionPrincipale?: {
+          nom?: string;
+          confiance?: number;
+          description?: string;
+        };
+        sousIntentions?: Array<{
+          nom?: string;
+          description?: string;
+          confiance?: number;
+        }>;
+        entites?: string[];
+        niveauUrgence?: PrioriteType;
+        contraintes?: string[];
+        contexte?: string;
+        questionCorrigee?: string;
+        question?: string;
+      };
 
-      // Valider et transformer la réponse
       return {
         demandeId: parsedResponse.demandeId || Date.now().toString(),
         intentionPrincipale: {
@@ -655,29 +479,24 @@ export class AnalyseService {
             parsedResponse.intentionPrincipale?.description ||
             'Description non disponible',
         },
-        sousIntentions: Array.isArray(parsedResponse.sousIntentions)
-          ? parsedResponse.sousIntentions.map((si) => ({
-              nom: si.nom || 'sous_intention_inconnue',
-              description: si.description || 'Description non disponible',
-              confiance: si.confiance || 0.5,
-            }))
-          : [],
-        entites: Array.isArray(parsedResponse.entites)
-          ? parsedResponse.entites
-          : [],
+        sousIntentions:
+          parsedResponse.sousIntentions?.map((si) => ({
+            nom: si.nom || 'sous_intention_inconnue',
+            description: si.description || 'Description non disponible',
+            confiance: si.confiance || 0.5,
+          })) || [],
+        entites: parsedResponse.entites || [],
         niveauUrgence: parsedResponse.niveauUrgence || PrioriteType.NORMAL,
-        contraintes: Array.isArray(parsedResponse.contraintes)
-          ? parsedResponse.contraintes
-          : [],
+        contraintes: parsedResponse.contraintes || [],
         contexte: parsedResponse.contexte || '',
         timestamp: new Date(),
         questionCorrigee:
           parsedResponse.questionCorrigee || parsedResponse.question || '',
       };
     } catch (error) {
-      this.logger.error(`Erreur lors du parsing de la réponse: ${error}`);
-
-      // Retourner une réponse par défaut en cas d'erreur
+      this.logger.error(
+        `Erreur lors du parsing de la réponse: ${(error as Error).message}`,
+      );
       return {
         demandeId: Date.now().toString(),
         intentionPrincipale: {
@@ -692,6 +511,70 @@ export class AnalyseService {
         contexte: '',
         timestamp: new Date(),
         questionCorrigee: '',
+      };
+    }
+  }
+
+  private async getStructuredData(
+    question: string,
+  ): Promise<QueryBuilderResponse> {
+    try {
+      const response = await this.queryBuilderClient.buildQuery(question);
+      return {
+        explanation: response?.explanation || '',
+        sql: response?.sql || '',
+        data: response?.data || null,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la récupération des données structurées: ${error}`,
+      );
+      return {
+        error: `Erreur lors de la récupération des données structurées: ${error}`,
+      };
+    }
+  }
+
+  private async getSearchResults(
+    question: string,
+  ): Promise<SearchResponse> {
+    try {
+      const response = await this.elasticsearchClient.search(question);
+      return {
+        hits: {
+          hits: response?.hits?.hits || [],
+          total: response?.hits?.total || 0,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`Erreur lors de la recherche: ${error}`);
+      return {
+        hits: {
+          hits: [],
+          total: 0,
+        },
+        error: `Erreur lors de la recherche: ${error}`,
+      };
+    }
+  }
+
+  private async getKnowledgeResults(
+    question: string,
+  ): Promise<KnowledgeResponse> {
+    try {
+      const response = await this.ragClient.getKnowledge(question);
+      return {
+        answer: response?.answer || '',
+        confidence: response?.confidence || 0,
+        knowledge: response?.knowledge || [],
+        sources: response?.sources || [],
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la récupération des connaissances: ${error}`,
+      );
+      return {
+        error: `Erreur lors de la récupération des connaissances: ${error}`,
       };
     }
   }

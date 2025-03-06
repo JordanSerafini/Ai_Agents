@@ -209,16 +209,16 @@ Retourne uniquement la question reformulée, sans commentaires ni explications.
    */
   private agentToString(agent: AgentType): string {
     switch (agent) {
+      case AgentType.QUERYBUILDER:
+        return 'querybuilder';
+      case AgentType.ELASTICSEARCH:
+        return 'elasticsearch';
+      case AgentType.RAG:
+        return 'rag';
       case AgentType.GENERAL:
-        return 'agent_general';
-      case AgentType.API:
-        return 'agent_api';
-      case AgentType.WORKFLOW:
-        return 'agent_workflow';
-      case AgentType.AUTRE:
-        return 'agent_autre';
+        return 'general';
       default:
-        return 'agent_general';
+        return 'general';
     }
   }
 }

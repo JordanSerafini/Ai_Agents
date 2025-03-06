@@ -24,7 +24,11 @@ export interface IntentionConfig {
   confiance: number;
 }
 
-export type PrioriteType = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export enum PrioriteType {
+  URGENT = 'URGENT',
+  NORMAL = 'NORMAL',
+  BASSE = 'BASSE',
+}
 
 // Configuration de l'entreprise
 export interface EntrepriseConfig {

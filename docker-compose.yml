@@ -4,7 +4,7 @@ services:
       context: ./Backend/querybuilder_agent
       dockerfile: Dockerfile
     container_name: querybuilder_agent
-    restart: always
+    restart: on-failure:5
     ports:
       - "3002:3002"
     environment:
@@ -22,8 +22,10 @@ services:
     networks:
       - ai_network
     depends_on:
-      - ai_db
-      - elasticsearch
+      ai_db:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
 
   elasticsearch_agent:
     build:
@@ -123,6 +125,12 @@ services:
       - ./Database/seed.sql:/docker-entrypoint-initdb.d/2_seed.sql
     networks:
       - ai_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1

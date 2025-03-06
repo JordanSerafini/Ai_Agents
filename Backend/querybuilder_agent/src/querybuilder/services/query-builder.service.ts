@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseMetadataService } from './database-metadata.service';
+import { ElasticsearchAggregation } from '../../types/elasticsearch.types';
 import {
   QueryBuilderResult,
   QueryBuilderOptions,
@@ -69,7 +70,8 @@ export class QueryBuilderService {
       };
 
       // Analyse de la question pour déterminer les tables et colonnes concernées
-      const { tables, columns, conditions } = this.analyzeQuestion(question);
+      const { tables, columns, conditions } =
+        await this.analyzeQuestion(question);
 
       if (tables.length === 0) {
         return {
@@ -79,7 +81,7 @@ export class QueryBuilderService {
       }
 
       // Construction de la requête SQL
-      const { sql, params, explanation } = this.constructSqlQuery(
+      const { sql, params, explanation } = await this.constructSqlQuery(
         tables,
         columns,
         conditions,
@@ -96,7 +98,7 @@ export class QueryBuilderService {
         ragEnhanced: false,
         similarityScore: 0,
         baseQueryQuestion: question,
-        suggestedTables: this.suggestRelatedTables(tables),
+        suggestedTables: await this.suggestRelatedTables(tables),
       };
 
       return {
@@ -109,19 +111,21 @@ export class QueryBuilderService {
         success: true,
         metadata,
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Erreur lors de la construction de la requête: ${error.message}`,
+        `Erreur lors de la construction de la requête: ${errorMessage}`,
       );
       return {
         sql: '',
         params: [],
-        explanation: `Erreur: ${error.message}`,
+        explanation: `Erreur: ${errorMessage}`,
         tables: [],
         columns: [],
         conditions: [],
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }

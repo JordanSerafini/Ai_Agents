@@ -1,3 +1,5 @@
+import { ElasticsearchAggregation } from '../../types/elasticsearch.types';
+
 export interface QueryBuilderResult {
   sql: string;
   params: any[];
@@ -187,41 +189,6 @@ export interface ElasticsearchFilterClause {
   exists?: {
     field: string;
   };
-}
-
-export interface ElasticsearchAggregation {
-  terms?: {
-    field: string;
-    size?: number;
-    order?: Record<string, 'asc' | 'desc'>;
-  };
-  range?: {
-    field: string;
-    ranges: Array<{
-      from?: number;
-      to?: number;
-      key?: string;
-    }>;
-  };
-  date_histogram?: {
-    field: string;
-    calendar_interval?: string;
-    fixed_interval?: string;
-    format?: string;
-  };
-  sum?: {
-    field: string;
-  };
-  avg?: {
-    field: string;
-  };
-  min?: {
-    field: string;
-  };
-  max?: {
-    field: string;
-  };
-  aggs?: Record<string, ElasticsearchAggregation>;
 }
 
 export interface ElasticsearchHighlight {
