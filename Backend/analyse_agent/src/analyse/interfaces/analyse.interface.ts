@@ -217,3 +217,11 @@ export interface AnalyseRequest {
     timeout?: number;
   };
 }
+
+export interface PeriodeTemporelle {
+  type: 'DYNAMIQUE' | 'FIXE';
+  precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
+  reference?: 'PASSÉ' | 'PRESENT' | 'FUTUR';
+  debut?: string;
+  fin?: string;
+}

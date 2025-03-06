@@ -2,12 +2,12 @@
  * Types partagés pour le QueryBuilder
  */
 
+export interface QueryParameters {
+  [key: string]: string | number | boolean | null;
+}
+
 export interface QueryConditionParameters {
-  temporal?: {
-    start_date: string;
-    end_date: string;
-  };
-  [key: string]: unknown;
+  [key: string]: string | number | boolean | null;
 }
 
 /**

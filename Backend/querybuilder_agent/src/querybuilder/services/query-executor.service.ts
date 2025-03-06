@@ -16,10 +16,13 @@ export class QueryExecutorService {
     try {
       return this.connection.createQueryBuilder() as SelectQueryBuilder<ObjectLiteral>;
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Erreur inconnue';
+      this.logger.error(
+        `Erreur lors de la création du QueryBuilder: ${message}`,
+      );
       throw new QueryBuilderException(
-        `Erreur lors de la création du QueryBuilder: ${
-          error instanceof Error ? error.message : 'Erreur inconnue'
-        }`,
+        `Erreur lors de la création du QueryBuilder: ${message}`,
       );
     }
   }
@@ -33,23 +36,28 @@ export class QueryExecutorService {
   ): Promise<T[]> {
     try {
       const startTime = Date.now();
-
-      const queryPromise = qb.getMany();
+      this.logger.debug(`Début de l'exécution de la requête: ${qb.getSql()}`);
 
       if (!options?.timeout) {
-        return await queryPromise;
+        const results = await qb.getMany();
+        const executionTime = Date.now() - startTime;
+        this.logger.debug(`Requête exécutée en ${executionTime}ms`);
+        return results;
       }
 
-      const timeoutPromise = new Promise<T[]>((_, reject) => {
-        setTimeout(() => {
-          reject(
-            new Error(`La requête a dépassé le délai de ${options.timeout}ms`),
-          );
-        }, options.timeout);
-      });
+      const timeoutError = new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new QueryBuilderException(
+                `La requête a dépassé le délai de ${options.timeout}ms`,
+              ),
+            ),
+          options.timeout,
+        ),
+      );
 
-      const results = await Promise.race<T[]>([queryPromise, timeoutPromise]);
-
+      const results = await Promise.race([qb.getMany(), timeoutError]);
       const executionTime = Date.now() - startTime;
       this.logger.debug(`Requête exécutée en ${executionTime}ms`);
 

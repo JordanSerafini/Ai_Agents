@@ -11,6 +11,13 @@ export class QueryConfigService {
   constructor(private readonly executorService: QueryExecutorService) {}
 
   /**
+   * Génère un alias unique pour une table
+   */
+  private generateTableAlias(tableName: string): string {
+    return tableName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toLowerCase();
+  }
+
+  /**
    * Configure la table principale de la requête
    */
   configureMainTable(
@@ -24,17 +31,15 @@ export class QueryConfigService {
     }
 
     try {
-      qb.from(mainTable.nom, mainTable.alias);
-      const columns = mainTable.colonnes.map(
-        (col) => `${mainTable.alias}.${col}`,
-      );
+      const alias = mainTable.alias || this.generateTableAlias(mainTable.nom);
+      qb.from(mainTable.nom, alias);
+      const columns = mainTable.colonnes.map((col) => `${alias}.${col}`);
       qb.select(columns);
-      return mainTable;
+      return { ...mainTable, alias };
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
       throw new QueryBuilderException(
-        `Erreur lors de la configuration de la table principale: ${
-          error instanceof Error ? error.message : 'Erreur inconnue'
-        }`,
+        `Erreur lors de la configuration de la table principale: ${message}`,
       );
     }
   }
@@ -51,18 +56,44 @@ export class QueryConfigService {
         .filter((table) => table.type === 'JOINTE')
         .forEach((join) => {
           if (join.condition_jointure) {
-            qb.leftJoin(join.nom, join.alias, join.condition_jointure);
-            const columns = join.colonnes.map((col) => `${join.alias}.${col}`);
+            const alias = join.alias || this.generateTableAlias(join.nom);
+            qb.leftJoin(join.nom, alias, join.condition_jointure);
+            const columns = join.colonnes.map((col) => `${alias}.${col}`);
             qb.addSelect(columns);
           }
         });
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
       throw new QueryBuilderException(
-        `Erreur lors de la configuration des jointures: ${
-          error instanceof Error ? error.message : 'Erreur inconnue'
-        }`,
+        `Erreur lors de la configuration des jointures: ${message}`,
       );
     }
+  }
+
+  /**
+   * Applique un groupe de conditions à la requête
+   */
+  private applyConditionGroup(
+    qb: SelectQueryBuilder<ObjectLiteral>,
+    conditions: AnalyseQueryData['conditions'],
+    isFirstGroup: boolean,
+  ): void {
+    conditions?.forEach((condition, index) => {
+      const { expression, parametres } = condition;
+      const useWhere = isFirstGroup && index === 0;
+
+      // Vérifier si c'est une condition temporelle
+      if (condition.type === 'TEMPOREL') {
+        this.logger.debug(`Application de la condition temporelle: ${expression}`);
+        this.logger.debug(`Paramètres temporels: ${JSON.stringify(parametres)}`);
+      }
+
+      if (useWhere) {
+        qb.where(expression, parametres || {});
+      } else {
+        qb.andWhere(expression, parametres || {});
+      }
+    });
   }
 
   /**
@@ -89,32 +120,12 @@ export class QueryConfigService {
         temporalConditions.length === 0,
       );
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      this.logger.error(`Erreur lors de l'application des conditions: ${message}`);
       throw new QueryBuilderException(
-        `Erreur lors de l'application des conditions: ${
-          error instanceof Error ? error.message : 'Erreur inconnue'
-        }`,
+        `Erreur lors de l'application des conditions: ${message}`,
       );
     }
-  }
-
-  /**
-   * Applique un groupe de conditions à la requête
-   */
-  private applyConditionGroup(
-    qb: SelectQueryBuilder<ObjectLiteral>,
-    conditions: AnalyseQueryData['conditions'],
-    isFirstGroup: boolean,
-  ): void {
-    conditions?.forEach((condition, index) => {
-      const { expression, parametres } = condition;
-      const useWhere = isFirstGroup && index === 0;
-
-      if (useWhere) {
-        qb.where(expression, parametres || {});
-      } else {
-        qb.andWhere(expression, parametres || {});
-      }
-    });
   }
 
   /**
@@ -212,10 +223,7 @@ export class QueryConfigService {
 
     // Configuration du tri
     if (data.orderBy?.length) {
-      data.orderBy.forEach((order) => {
-        const [column, direction] = order.split(' ');
-        qb.addOrderBy(column, (direction as 'ASC' | 'DESC') || 'ASC');
-      });
+      this.configureOrdering(qb, data);
     }
 
     // Configuration de la limite

@@ -3,7 +3,6 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { OpenAIService } from './openai.service';
-import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 import { PrioriteType } from '../interfaces/analyse.interface';
 import { RouterService } from './router.service';
 import {
@@ -570,18 +569,47 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     );
   }
 
-  private calculerDatesDynamiques(periodeTemporelle: PeriodeTemporelle): {
-    debut: string;
-    fin: string;
-  } {
+  private extractPlaceholders(expression: string): string[] {
+    const regex = /:(\w+)/g;
+    const placeholders: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(expression)) !== null) {
+      placeholders.push(match[1]);
+    }
+    return placeholders;
+  }
+
+  private generateTemporalParameters(
+    placeholders: string[],
+    dates: { debut: string; fin: string },
+  ): Record<string, string> {
+    return placeholders.reduce((params: Record<string, string>, placeholder) => {
+      if (placeholder.includes('debut')) {
+        params[placeholder] = dates.debut;
+      } else if (placeholder.includes('fin')) {
+        params[placeholder] = dates.fin;
+      } else {
+        this.logger.warn(`Placeholder non reconnu: ${placeholder}`);
+        params[placeholder] = dates.debut; // Valeur par défaut
+      }
+      return params;
+    }, {});
+  }
+
+  private calculerDatesDynamiques(periode: {
+    type: 'DYNAMIQUE' | 'FIXE';
+    precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
+    reference?: 'PASSÉ' | 'PRESENT' | 'FUTUR';
+    debut?: string;
+    fin?: string;
+  }): { debut: string; fin: string } {
     const aujourdhui = new Date();
 
-    if (periodeTemporelle.type === 'DYNAMIQUE') {
-      if (periodeTemporelle.precision === 'SEMAINE') {
+    if (periode.type === 'DYNAMIQUE') {
+      if (periode.precision === 'SEMAINE') {
+        // Calcul pour la semaine prochaine
         const debutSemaine = new Date(aujourdhui);
-        debutSemaine.setDate(
-          aujourdhui.getDate() + 7 - aujourdhui.getDay() + 1,
-        );
+        debutSemaine.setDate(aujourdhui.getDate() + (8 - aujourdhui.getDay()));
 
         const finSemaine = new Date(debutSemaine);
         finSemaine.setDate(debutSemaine.getDate() + 6);
@@ -592,7 +620,8 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         };
       }
 
-      if (periodeTemporelle.precision === 'MOIS') {
+      if (periode.precision === 'MOIS') {
+        // Calcul pour le mois prochain
         const debutMois = new Date(
           aujourdhui.getFullYear(),
           aujourdhui.getMonth() + 1,
@@ -611,9 +640,10 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
       }
     }
 
+    // Si période fixe ou autre précision
     return {
-      debut: periodeTemporelle.debut,
-      fin: periodeTemporelle.fin,
+      debut: periode.debut || aujourdhui.toISOString().split('T')[0],
+      fin: periode.fin || aujourdhui.toISOString().split('T')[0],
     };
   }
 
@@ -648,6 +678,10 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
         try {
           // Construire la requête structurée
+          const dates = this.calculerDatesDynamiques(
+            analysisResult.analyse_semantique.temporalite.periode,
+          );
+
           const structuredQuery: AnalyseQueryData = {
             tables: analysisResult.structure_requete.tables.map((table) => ({
               nom: table.nom,
@@ -656,18 +690,23 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
               colonnes: table.colonnes,
               condition_jointure: table.condition_jointure,
             })),
-            conditions: analysisResult.structure_requete.conditions.map(
-              (cond) => ({
-                type: cond.type === 'TEMPOREL' ? 'TEMPOREL' : 'FILTRE',
-                expression:
-                  cond.type === 'TEMPOREL'
-                    ? cond.expression
-                        .replace(/date_debut/g, 'start_date')
-                        .replace(/date_fin/g, 'end_date')
-                    : cond.expression,
+            conditions: analysisResult.structure_requete.conditions.map((cond) => {
+              if (cond.type === 'TEMPOREL') {
+                return {
+                  type: 'TEMPOREL',
+                  expression: "ce.start_date >= :debut_semaine_prochaine AND ce.end_date <= :fin_semaine_prochaine",
+                  parametres: {
+                    debut_semaine_prochaine: dates.debut,
+                    fin_semaine_prochaine: dates.fin,
+                  },
+                };
+              }
+              return {
+                type: 'FILTRE',
+                expression: cond.expression,
                 parametres: cond.parametres,
-              }),
-            ),
+              };
+            }),
             groupBy: analysisResult.structure_requete.groupements,
             orderBy: analysisResult.structure_requete.ordre,
             metadata: {
