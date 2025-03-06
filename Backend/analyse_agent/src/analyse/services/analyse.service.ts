@@ -720,8 +720,8 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
                     expression: `ce.start_date >= :${debutPlaceholder} AND ce.end_date <= :${finPlaceholder}`,
                     parametres: {
                       [debutPlaceholder]: dates.debut,
-                      [finPlaceholder]: dates.fin,
-                    },
+                      [finPlaceholder]: dates.fin
+                    }
                   };
                 }
                 return {
