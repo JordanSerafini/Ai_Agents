@@ -96,7 +96,15 @@ export interface SearchConfig {
 
 export interface AggregationConfig {
   name: string;
-  type: 'terms' | 'range' | 'date_histogram' | 'sum' | 'avg' | 'min' | 'max' | 'count';
+  type:
+    | 'terms'
+    | 'range'
+    | 'date_histogram'
+    | 'sum'
+    | 'avg'
+    | 'min'
+    | 'max'
+    | 'count';
   field: string;
   options?: Record<string, any>;
 }
@@ -137,7 +145,12 @@ export interface ElasticsearchQueryBody {
   multi_match?: {
     query: string;
     fields: string[];
-    type?: 'best_fields' | 'most_fields' | 'cross_fields' | 'phrase' | 'phrase_prefix';
+    type?:
+      | 'best_fields'
+      | 'most_fields'
+      | 'cross_fields'
+      | 'phrase'
+      | 'phrase_prefix';
     operator?: 'and' | 'or';
     fuzziness?: string | number;
   };
@@ -161,13 +174,16 @@ export interface ElasticsearchFilterClause {
   term?: Record<string, any>;
   terms?: Record<string, any[]>;
   match_phrase_prefix?: Record<string, any>;
-  range?: Record<string, {
-    gt?: number | string;
-    gte?: number | string;
-    lt?: number | string;
-    lte?: number | string;
-    format?: string;
-  }>;
+  range?: Record<
+    string,
+    {
+      gt?: number | string;
+      gte?: number | string;
+      lt?: number | string;
+      lte?: number | string;
+      format?: string;
+    }
+  >;
   exists?: {
     field: string;
   };
@@ -209,12 +225,15 @@ export interface ElasticsearchAggregation {
 }
 
 export interface ElasticsearchHighlight {
-  fields: Record<string, {
-    number_of_fragments?: number;
-    fragment_size?: number;
-    pre_tags?: string[];
-    post_tags?: string[];
-  }>;
+  fields: Record<
+    string,
+    {
+      number_of_fragments?: number;
+      fragment_size?: number;
+      pre_tags?: string[];
+      post_tags?: string[];
+    }
+  >;
   pre_tags?: string[];
   post_tags?: string[];
-} 
+}

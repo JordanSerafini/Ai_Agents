@@ -9,8 +9,6 @@ import { RouterService } from './services/router.service';
 import { DatabaseMetadataService } from './services/database-metadata.service';
 import { AnalyseValidationPipe } from './pipes/analyse-validation.pipe';
 import { ReorientationService } from './services/reorientation.service';
-import { QueryBuilderService } from './services/query-builder.service';
-import { QueryBuilderController } from './controllers/query-builder.controller';
 
 @Module({
   imports: [
@@ -30,7 +28,7 @@ import { QueryBuilderController } from './controllers/query-builder.controller';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AnalyseController, QueryBuilderController],
+  controllers: [AnalyseController],
   providers: [
     AnalyseService,
     RagService,
@@ -38,7 +36,6 @@ import { QueryBuilderController } from './controllers/query-builder.controller';
     DatabaseMetadataService,
     AnalyseValidationPipe,
     ReorientationService,
-    QueryBuilderService,
   ],
 })
 export class AnalyseModule {}
