@@ -10,6 +10,71 @@ interface RouterResponse {
   reponse: string;
 }
 
+interface PeriodeTemporelle {
+  debut?: string;
+  fin?: string;
+  precision?: string;
+}
+
+interface TableIdentifiee {
+  nom: string;
+  alias?: string;
+  colonnes?: string[];
+}
+
+interface Metadonnees {
+  tablesConcernees: string[];
+  periodeTemporelle?: PeriodeTemporelle;
+  tablesIdentifiees?: {
+    principales: TableIdentifiee[];
+    jointures: TableIdentifiee[];
+    conditions: string[];
+  };
+  champsRequis?: {
+    selection: string[];
+    filtres: string[];
+    groupement: string[];
+  };
+  filtres?: {
+    temporels: string[];
+    logiques: string[];
+  };
+  parametresRequete?: {
+    tri: string[];
+    limite: number;
+  };
+}
+
+interface QueryBuilderResponse {
+  success: boolean;
+  sql?: string;
+  explanation?: string;
+  error?: string;
+}
+
+interface ElasticsearchHit {
+  title?: string;
+  _source?: {
+    title?: string;
+    content?: string;
+  };
+  highlight?: {
+    content?: string[];
+  };
+}
+
+interface ElasticsearchResponse {
+  hits?: ElasticsearchHit[];
+}
+
+interface RagResponse {
+  answer?: string;
+}
+
+interface WorkflowResponse {
+  reponse?: string;
+}
+
 @Injectable()
 export class RouterService {
   private readonly logger = new Logger(RouterService.name);
@@ -104,41 +169,46 @@ export class RouterService {
     additionalData?: Record<string, unknown>,
   ): Promise<RouterResponse> {
     try {
+      const analyseResult = {
+        ...additionalData,
+        metadonnees: additionalData?.metadonnees as Metadonnees,
+      } as AnalyseResult;
+
       // Formater la question avec les métadonnées d'analyse
       const formattedQuestion = {
         questionCorrigee: request.question,
         metadonnees: {
           tablesIdentifiees: {
-            principales: (additionalData as AnalyseResult)?.metadonnees?.tablesConcernees || [],
-            jointures: [],
-            conditions: []
+            principales:
+              analyseResult?.metadonnees?.tablesIdentifiees?.principales || [],
+            jointures:
+              analyseResult?.metadonnees?.tablesIdentifiees?.jointures || [],
+            conditions:
+              analyseResult?.metadonnees?.tablesIdentifiees?.conditions || [],
           },
-          champsRequis: {
+          champsRequis: analyseResult?.metadonnees?.champsRequis || {
             selection: [],
             filtres: [],
-            groupement: []
+            groupement: [],
           },
-          filtres: {
+          filtres: analyseResult?.metadonnees?.filtres || {
             temporels: [],
-            logiques: []
+            logiques: [],
           },
-          periodeTemporelle: {
-            debut: "CURRENT_DATE - INTERVAL '1 MONTH'",
-            fin: 'CURRENT_DATE',
-            precision: 'MOIS'
-          },
-          parametresRequete: {
+          periodeTemporelle:
+            analyseResult?.metadonnees?.periodeTemporelle || {},
+          parametresRequete: analyseResult?.metadonnees?.parametresRequete || {
             tri: [],
-            limite: 100
+            limite: 100,
           },
-          intention: (additionalData as AnalyseResult)?.intention || '',
-          contexte: (additionalData as AnalyseResult)?.contexte || '',
-          entites: (additionalData as AnalyseResult)?.entites || []
-        }
+          intention: analyseResult?.intention || '',
+          contexte: analyseResult?.contexte || '',
+          entites: analyseResult?.entites || [],
+        },
       };
 
       const response = await firstValueFrom(
-        this.httpService.post(
+        this.httpService.post<QueryBuilderResponse>(
           `${this.queryBuilderAgentUrl}/querybuilder/build`,
           {
             question: JSON.stringify(formattedQuestion),
@@ -161,7 +231,7 @@ export class RouterService {
       }
     } catch (error) {
       this.logger.error(
-        `Erreur lors de la communication avec l'agent QueryBuilder: ${error.message}`,
+        `Erreur lors de la communication avec l'agent QueryBuilder: ${(error as Error).message}`,
       );
       throw error;
     }
@@ -176,23 +246,27 @@ export class RouterService {
   ): Promise<RouterResponse> {
     try {
       const response = await firstValueFrom(
-        this.httpService.post(`${this.elasticsearchAgentUrl}/search`, {
-          query: request.question,
-          options: {
-            ...(additionalData || {}),
+        this.httpService.post<ElasticsearchResponse>(
+          `${this.elasticsearchAgentUrl}/search`,
+          {
+            query: request.question,
+            options: {
+              ...(additionalData || {}),
+            },
           },
-        }),
+        ),
       );
 
       if (response.data.hits && response.data.hits.length > 0) {
-        const hits = response.data.hits.slice(0, 5); // Limiter à 5 résultats
+        const hits = response.data.hits.slice(0, 5);
         let reponse = `Résultats de recherche:\n\n`;
 
-        hits.forEach((hit, index) => {
-          const title = hit.title || hit._source.title || 'Document sans titre';
+        hits.forEach((hit: ElasticsearchHit, index: number) => {
+          const title =
+            hit.title || hit._source?.title || 'Document sans titre';
           const snippet =
             hit.highlight?.content?.[0] ||
-            hit._source.content?.substring(0, 100) ||
+            hit._source?.content?.substring(0, 100) ||
             "Pas d'extrait disponible";
           reponse += `${index + 1}. ${title}\n${snippet}...\n\n`;
         });
@@ -205,7 +279,7 @@ export class RouterService {
       }
     } catch (error) {
       this.logger.error(
-        `Erreur lors de la communication avec l'agent Elasticsearch: ${error.message}`,
+        `Erreur lors de la communication avec l'agent Elasticsearch: ${(error as Error).message}`,
       );
       throw error;
     }
@@ -220,7 +294,7 @@ export class RouterService {
   ): Promise<RouterResponse> {
     try {
       const response = await firstValueFrom(
-        this.httpService.post(`${this.ragAgentUrl}/generate`, {
+        this.httpService.post<RagResponse>(`${this.ragAgentUrl}/generate`, {
           question: request.question,
           options: {
             ...(additionalData || {}),
@@ -233,7 +307,7 @@ export class RouterService {
       };
     } catch (error) {
       this.logger.error(
-        `Erreur lors de la communication avec l'agent RAG: ${error.message}`,
+        `Erreur lors de la communication avec l'agent RAG: ${(error as Error).message}`,
       );
       throw error;
     }
@@ -248,11 +322,14 @@ export class RouterService {
   ): Promise<RouterResponse> {
     try {
       const response = await firstValueFrom(
-        this.httpService.post(`${this.workflowAgentUrl}/process`, {
-          question: request.question,
-          userId: request.userId,
-          additionalData,
-        }),
+        this.httpService.post<WorkflowResponse>(
+          `${this.workflowAgentUrl}/process`,
+          {
+            question: request.question,
+            userId: request.userId,
+            additionalData,
+          },
+        ),
       );
 
       return {
@@ -261,7 +338,7 @@ export class RouterService {
       };
     } catch (error) {
       this.logger.error(
-        `Erreur lors de la communication avec l'agent Workflow: ${error.message}`,
+        `Erreur lors de la communication avec l'agent Workflow: ${(error as Error).message}`,
       );
       throw error;
     }

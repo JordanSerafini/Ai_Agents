@@ -10,23 +10,13 @@ import {
   ElasticsearchClientService,
   RagClientService,
 } from './clients';
-import {
-  QueryBuilderResponse,
-  SearchResponse,
-  KnowledgeResponse,
-  QueryBuilderClientResponse,
-  ElasticsearchClientResponse,
-  RagClientResponse,
-} from '../interfaces/client-responses.interface';
 
 interface OpenAIResponse {
-  data: {
-    choices: Array<{
-      message: {
-        content: string;
-      };
-    }>;
-  };
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
 }
 
 interface AnalyseAIResponse {
@@ -68,6 +58,8 @@ export enum AgentType {
   ELASTICSEARCH = 'elasticsearch',
   RAG = 'rag',
   WORKFLOW = 'workflow',
+  DATABASE = 'database',
+  SEARCH = 'search',
 }
 
 // Interface pour la réponse d'analyse
@@ -83,6 +75,29 @@ export interface AnalyseResult {
   questionsComplementaires?: string[];
   metadonnees?: {
     tablesConcernees: string[];
+    tablesIdentifiees?: {
+      principales: Array<{ nom: string; alias?: string; colonnes?: string[] }>;
+      jointures: Array<{ nom: string; alias?: string; colonnes?: string[] }>;
+      conditions: string[];
+    };
+    champsRequis?: {
+      selection: string[];
+      filtres: string[];
+      groupement: string[];
+    };
+    filtres?: {
+      temporels: string[];
+      logiques: string[];
+    };
+    periodeTemporelle?: {
+      debut?: string;
+      fin?: string;
+      precision?: string;
+    };
+    parametresRequete?: {
+      tri: string[];
+      limite: number;
+    };
   };
 }
 
@@ -298,7 +313,6 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
   }
 
   private requiresStructuredData(analyse: AnalyseResult): boolean {
-    // Vérifier si la question nécessite des données structurées (SQL)
     const databaseKeywords = [
       'base de données',
       'sql',
@@ -313,7 +327,6 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
     return (
       analyse.categorie === QuestionCategory.DATABASE ||
-      analyse.agentCible === AgentType.DATABASE ||
       analyse.agentCible === AgentType.QUERYBUILDER ||
       databaseKeywords.some((keyword) =>
         analyse.questionCorrigee.toLowerCase().includes(keyword.toLowerCase()),
@@ -322,7 +335,6 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
   }
 
   private requiresTextSearch(analyse: AnalyseResult): boolean {
-    // Vérifier si la question nécessite une recherche textuelle
     const searchKeywords = [
       'recherche',
       'chercher',
@@ -335,7 +347,6 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
     return (
       analyse.categorie === QuestionCategory.SEARCH ||
-      analyse.agentCible === AgentType.SEARCH ||
       analyse.agentCible === AgentType.ELASTICSEARCH ||
       searchKeywords.some((keyword) =>
         analyse.questionCorrigee.toLowerCase().includes(keyword.toLowerCase()),
@@ -449,6 +460,26 @@ Réponds au format JSON avec :
         contexte: analysedResponse.explication,
         metadonnees: {
           tablesConcernees: analysedResponse.tables_concernees,
+          tablesIdentifiees: {
+            principales: analysedResponse.tables_concernees.map((table) => ({
+              nom: table,
+            })),
+            jointures: [],
+            conditions: [],
+          },
+          champsRequis: {
+            selection: [],
+            filtres: [],
+            groupement: [],
+          },
+          filtres: {
+            temporels: [],
+            logiques: [],
+          },
+          parametresRequete: {
+            tri: [],
+            limite: 100,
+          },
         },
       };
     } catch (error) {
