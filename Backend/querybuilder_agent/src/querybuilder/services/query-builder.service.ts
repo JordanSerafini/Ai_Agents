@@ -1,43 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseMetadataService } from './database-metadata.service';
-import { ElasticsearchAggregation } from '../../types/elasticsearch.types';
+import { DatabaseService } from './database.service';
 import {
   QueryBuilderResult,
   QueryBuilderOptions,
-  JoinInfo,
-  OrderByInfo,
-  GroupByInfo,
-  JoinConfig,
-  SearchConfig,
-  ElasticsearchQuery,
-  ElasticsearchQueryBody,
-  AggregationConfig,
   QueryMetadata,
-  HighlightConfig,
-  FacetConfig,
+  AnalyseQuestion,
+  AnalyseMetadata,
 } from '../interfaces/query-builder.interface';
-
-interface SearchResult {
-  document: {
-    id: string;
-    question: string;
-    answer: string;
-    agentType: string;
-    embedding: number[];
-    metadata: {
-      timestamp: number;
-      category: string;
-      tags: string[];
-    };
-  };
-  score: number;
-}
 
 @Injectable()
 export class QueryBuilderService {
   private readonly logger = new Logger(QueryBuilderService.name);
   private readonly DEFAULT_LIMIT = 100;
-  private readonly COMMON_TABLES_RELATIONS = {
+  private readonly COMMON_TABLES_RELATIONS: Record<string, string[]> = {
     clients: ['projects', 'invoices', 'quotations', 'appointments'],
     projects: ['clients', 'tasks', 'documents', 'staff'],
     invoices: ['clients', 'payments'],
@@ -46,7 +22,10 @@ export class QueryBuilderService {
     staff: ['appointments', 'tasks', 'projects'],
   };
 
-  constructor(private readonly dbMetadataService: DatabaseMetadataService) {}
+  constructor(
+    private readonly dbMetadataService: DatabaseMetadataService,
+    private readonly databaseService: DatabaseService,
+  ) {}
 
   async buildQuery(
     question: string,
@@ -58,13 +37,13 @@ export class QueryBuilderService {
 
     try {
       // Vérifier si la question contient des métadonnées structurées
-      let metadata;
+      let metadata: AnalyseMetadata | undefined;
       try {
-        const parsedQuestion = JSON.parse(question);
+        const parsedQuestion = JSON.parse(question) as AnalyseQuestion;
         metadata = parsedQuestion.metadonnees;
         question = parsedQuestion.questionCorrigee;
-      } catch (e) {
-        this.logger.warn('Question reçue sans métadonnées structurées');
+      } catch (error) {
+        this.logger.warn('Question reçue sans métadonnées structurées', error);
       }
 
       // Résultat par défaut en cas d'échec
@@ -93,7 +72,7 @@ export class QueryBuilderService {
               ...metadata.filtres.logiques,
             ],
           }
-        : await this.analyzeQuestion(question);
+        : this.analyzeQuestion(question);
 
       if (tables.length === 0) {
         return {
@@ -107,18 +86,24 @@ export class QueryBuilderService {
         tables,
         columns,
         conditions,
-        metadata?.parametresRequete || options,
+        {
+          ...options,
+          ...(metadata?.parametresRequete || {}),
+        },
       );
+
+      // Exécution de la requête SQL
+      const startTime = Date.now();
+      const data = await this.databaseService.executeQuery(sql, params);
+      const executionTime = Date.now() - startTime;
 
       // Métadonnées de la requête
       const queryMetadata: QueryMetadata = {
-        executionTime: 0,
-        estimatedRows: 0,
+        executionTime,
+        estimatedRows: data.length,
         cacheUsed: false,
         indexesUsed: [],
         optimizationHints: [],
-        ragEnhanced: false,
-        similarityScore: 0,
         baseQueryQuestion: question,
         suggestedTables: this.suggestRelatedTables(tables),
       };
@@ -132,6 +117,7 @@ export class QueryBuilderService {
         conditions,
         success: true,
         metadata: queryMetadata,
+        data,
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -157,7 +143,6 @@ export class QueryBuilderService {
     columns: string[];
     conditions: string[];
   } {
-    // Analyse simplifiée pour l'exemple
     const tables: string[] = [];
     const columns: string[] = [];
     const conditions: string[] = [];
@@ -198,6 +183,24 @@ export class QueryBuilderService {
       ) {
         tables.push('projects');
         columns.push('projects.id', 'projects.name', 'projects.client_id');
+      } else if (
+        question.toLowerCase().includes('personnel') ||
+        question.toLowerCase().includes('staff') ||
+        question.toLowerCase().includes('dispo') ||
+        question.toLowerCase().includes('travail')
+      ) {
+        tables.push('staff');
+        tables.push('timesheet_entries');
+        tables.push('calendar_events');
+        columns.push(
+          'staff.id',
+          'staff.name',
+          'timesheet_entries.date',
+          'timesheet_entries.hours',
+          'calendar_events.start_date',
+          'calendar_events.end_date',
+          'calendar_events.type',
+        );
       }
     }
 
@@ -233,11 +236,22 @@ export class QueryBuilderService {
     const whereClause =
       conditions.length > 0 ? `WHERE ${this.parseConditions(conditions)}` : '';
 
-    // Limite de résultats
-    const limit = options?.maxResults || this.DEFAULT_LIMIT;
+    // Tri et limite
+    const orderByClause = options?.tri?.length
+      ? `ORDER BY ${options.tri.join(', ')}`
+      : '';
+    const limit = options?.limite || options?.maxResults || this.DEFAULT_LIMIT;
+    const offset = options?.offset ? `OFFSET ${options.offset}` : '';
 
     // Construction de la requête SQL complète
-    const sql = `SELECT ${selectColumns} FROM ${fromClause} ${whereClause} LIMIT ${limit}`;
+    const sql = `
+      SELECT ${selectColumns}
+      FROM ${fromClause}
+      ${whereClause}
+      ${orderByClause}
+      LIMIT ${limit}
+      ${offset}
+    `.trim().replace(/\s+/g, ' ');
 
     // Paramètres (vide pour cet exemple simplifié)
     const params: any[] = [];
@@ -289,8 +303,8 @@ export class QueryBuilderService {
             joinClause += ` LEFT JOIN ${secondaryTable} ON ${mainTable}.${inverseRelation.targetColumn} = ${secondaryTable}.${inverseRelation.sourceColumn}`;
           } else {
             // Pas de relation directe, vérification des relations communes
-            const commonRelations = this.COMMON_TABLES_RELATIONS[mainTable];
-            if (commonRelations && commonRelations.includes(secondaryTable)) {
+            const commonRelations = this.COMMON_TABLES_RELATIONS[mainTable] || [];
+            if (commonRelations.includes(secondaryTable)) {
               // Jointure basée sur les conventions de nommage
               joinClause += ` LEFT JOIN ${secondaryTable} ON ${mainTable}.id = ${secondaryTable}.${mainTable.slice(0, -1)}_id`;
             } else {
@@ -309,7 +323,6 @@ export class QueryBuilderService {
   }
 
   private parseConditions(conditions: string[]): string {
-    // Implémentation simplifiée pour l'exemple
     return conditions.join(' AND ');
   }
 
@@ -340,198 +353,34 @@ export class QueryBuilderService {
       explanation += `où ${conditions.join(' et ')} `;
     }
 
-    // Description de la limite
-    explanation += `avec une limite de ${options?.maxResults || this.DEFAULT_LIMIT} résultats.`;
+    // Description du tri
+    if (options?.tri?.length) {
+      explanation += `triés par ${options.tri.join(', ')} `;
+    }
 
-    return explanation;
+    // Description de la limite
+    explanation += `avec une limite de ${options?.limite || options?.maxResults || this.DEFAULT_LIMIT} résultats`;
+
+    // Description de l'offset
+    if (options?.offset) {
+      explanation += ` en commençant à partir du ${options.offset + 1}ème résultat`;
+    }
+
+    return explanation + '.';
   }
 
   private suggestRelatedTables(tables: string[]): string[] {
     const suggestions: string[] = [];
 
     tables.forEach((table) => {
-      const relatedTables = this.COMMON_TABLES_RELATIONS[table];
-      if (relatedTables) {
-        relatedTables.forEach((related) => {
-          if (!tables.includes(related) && !suggestions.includes(related)) {
-            suggestions.push(related);
-          }
-        });
-      }
+      const relatedTables = this.COMMON_TABLES_RELATIONS[table] || [];
+      relatedTables.forEach((related) => {
+        if (!tables.includes(related) && !suggestions.includes(related)) {
+          suggestions.push(related);
+        }
+      });
     });
 
     return suggestions;
-  }
-
-  // Méthodes pour la construction de requêtes Elasticsearch
-  buildElasticsearchQuery(searchConfig: SearchConfig): ElasticsearchQuery {
-    const {
-      query,
-      filters,
-      sort,
-      aggregations,
-      highlight,
-      page = 1,
-      pageSize = 10,
-    } = searchConfig;
-
-    const esQuery: ElasticsearchQuery = {
-      query: this.buildElasticsearchQueryBody(query, filters, searchConfig),
-      from: (page - 1) * pageSize,
-      size: pageSize,
-    };
-
-    // Ajout du tri
-    if (sort && Object.keys(sort).length > 0) {
-      esQuery.sort = Object.entries(sort).map(([field, direction]) => ({
-        [field]: direction,
-      }));
-    }
-
-    // Ajout des agrégations
-    if (aggregations && aggregations.length > 0) {
-      esQuery.aggs = {};
-      aggregations.forEach((agg) => {
-        esQuery.aggs![agg.name] = this.buildAggregation(agg);
-      });
-    }
-
-    // Ajout du highlighting
-    if (highlight && highlight.fields.length > 0) {
-      esQuery.highlight = {
-        fields: {},
-        pre_tags: highlight.preTag ? [highlight.preTag] : ['<em>'],
-        post_tags: highlight.postTag ? [highlight.postTag] : ['</em>'],
-      };
-
-      highlight.fields.forEach((field) => {
-        esQuery.highlight!.fields[field] = {
-          number_of_fragments: highlight.numberOfFragments || 3,
-        };
-      });
-    }
-
-    return esQuery;
-  }
-
-  private buildElasticsearchQueryBody(
-    query: string,
-    filters?: Record<string, any>,
-    config?: SearchConfig,
-  ): ElasticsearchQueryBody {
-    const searchType = config?.searchType || 'exact';
-    const fuzzyDistance = config?.fuzzyDistance || 2;
-
-    const queryBody: ElasticsearchQueryBody = {
-      bool: {
-        must: [],
-        filter: [],
-      },
-    };
-
-    // Construction de la clause de recherche principale
-    if (query) {
-      switch (searchType) {
-        case 'fuzzy':
-          queryBody.bool!.must!.push({
-            multi_match: {
-              query,
-              fields: ['*'],
-              fuzziness: fuzzyDistance,
-            },
-          });
-          break;
-        case 'semantic':
-          queryBody.bool!.must!.push({
-            multi_match: {
-              query,
-              fields: ['*'],
-              type: 'phrase',
-            },
-          });
-          break;
-        case 'exact':
-        default:
-          queryBody.bool!.must!.push({
-            multi_match: {
-              query,
-              fields: ['*'],
-              operator: 'and',
-            },
-          });
-          break;
-      }
-    }
-
-    // Ajout des filtres
-    if (filters && Object.keys(filters).length > 0) {
-      Object.entries(filters).forEach(([field, value]) => {
-        if (Array.isArray(value)) {
-          // Filtre sur plusieurs valeurs (OR)
-          queryBody.bool!.filter!.push({
-            terms: { [field]: value },
-          });
-        } else if (typeof value === 'object') {
-          // Filtre de plage (range)
-          queryBody.bool!.filter!.push({
-            range: { [field]: value },
-          });
-        } else {
-          // Filtre exact
-          queryBody.bool!.filter!.push({
-            term: { [field]: value },
-          });
-        }
-      });
-    }
-
-    return queryBody;
-  }
-
-  private buildAggregation(
-    config: AggregationConfig,
-  ): ElasticsearchAggregation {
-    const { type, field, options } = config;
-
-    switch (type) {
-      case 'terms':
-        return {
-          terms: {
-            field,
-            size: options?.size || 10,
-            ...(options?.order && { order: options.order }),
-          },
-        };
-      case 'range':
-        return {
-          range: {
-            field,
-            ranges: options?.ranges || [
-              { to: 50 },
-              { from: 50, to: 100 },
-              { from: 100 },
-            ],
-          },
-        };
-      case 'date_histogram':
-        return {
-          date_histogram: {
-            field,
-            calendar_interval: options?.interval || 'month',
-            format: options?.format || 'yyyy-MM-dd',
-          },
-        };
-      case 'sum':
-        return { sum: { field } };
-      case 'avg':
-        return { avg: { field } };
-      case 'min':
-        return { min: { field } };
-      case 'max':
-        return { max: { field } };
-      case 'count':
-      default:
-        return { terms: { field, size: options?.size || 10 } };
-    }
   }
 }

@@ -10,15 +10,6 @@ interface RouterResponse {
   reponse: string;
 }
 
-/**
- * Interface pour typer correctement la réponse de l'agent de base de données
- */
-interface DatabaseResponse {
-  reponse: string;
-  success?: boolean;
-  error?: string;
-  data?: Record<string, unknown>;
-}
 
 @Injectable()
 export class RouterService {
@@ -116,15 +107,84 @@ export class RouterService {
     additionalData?: Record<string, unknown>,
   ): Promise<RouterResponse> {
     try {
+      // Formater la question avec les métadonnées d'analyse
+      const formattedQuestion = {
+        questionCorrigee: request.question,
+        metadonnees: {
+          tablesIdentifiees: {
+            principales: [
+              'staff',
+              'timesheet_entries',
+              'calendar_events',
+              'projects',
+              'project_staff',
+              'clients',
+              'quotations',
+              'invoices',
+              'equipment_reservations',
+              'materials',
+              'project_materials',
+            ],
+            jointures: [
+              'project_staff',
+              'calendar_events',
+              'timesheet_entries',
+            ],
+            conditions: [],
+          },
+          champsRequis: {
+            selection: [
+              'staff.firstname',
+              'staff.lastname',
+              'staff.role',
+              'staff.is_available',
+              'timesheet_entries.date',
+              'timesheet_entries.hours',
+              'calendar_events.start_date',
+              'calendar_events.end_date',
+              'calendar_events.event_type',
+              'projects.name AS project_name',
+              'projects.status AS project_status',
+              'clients.firstname AS client_firstname',
+              'clients.lastname AS client_lastname',
+            ],
+            filtres: [],
+            groupement: ['staff.id', 'staff.firstname', 'staff.lastname'],
+          },
+          filtres: {
+            temporels: [
+              'timesheet_entries.date >= CURRENT_DATE',
+              'timesheet_entries.date < CURRENT_DATE + 7',
+              'calendar_events.start_date >= CURRENT_DATE',
+              'calendar_events.end_date <= CURRENT_DATE + 7',
+            ],
+            logiques: ['staff.is_available = true'],
+          },
+          periodeTemporelle: {
+            debut: 'CURRENT_DATE',
+            fin: 'CURRENT_DATE + 7',
+            precision: 'JOUR',
+          },
+          parametresRequete: {
+            tri: [
+              'staff.lastname ASC',
+              'staff.firstname ASC',
+              'timesheet_entries.date ASC',
+            ],
+            limite: 100,
+          },
+          ...(additionalData || {}),
+        },
+      };
+
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.queryBuilderAgentUrl}/querybuilder/build`,
           {
-            question: request.question,
+            question: JSON.stringify(formattedQuestion),
             options: {
               includeMetadata: true,
               maxResults: 100,
-              ...(additionalData || {}),
             },
           },
         ),

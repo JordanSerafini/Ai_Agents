@@ -169,11 +169,21 @@ Retourne uniquement la question reformulée, sans commentaires ni explications.
             Authorization: `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: 10000,
+          timeout: 15000,
+          validateStatus: (status) => status === 200,
         },
       );
 
+      if (!response.data?.choices?.[0]?.message?.content) {
+        throw new Error('Format de réponse OpenAI invalide');
+      }
+
       const reformulation = response.data.choices[0].message.content.trim();
+      
+      if (!reformulation || reformulation.length < 10) {
+        throw new Error('Reformulation invalide ou trop courte');
+      }
+
       this.logger.log(`Question reformulée: "${reformulation}"`);
       return reformulation;
     } catch (error) {

@@ -377,8 +377,14 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.openaiApiKey}`,
           },
+          timeout: 15000, // Timeout après 15 secondes
+          validateStatus: (status) => status === 200, // Valider uniquement le statut 200
         },
       );
+
+      if (!response.data?.choices?.[0]?.message?.content) {
+        throw new Error('Format de réponse OpenAI invalide');
+      }
 
       const openaiResponse = response.data as OpenAICompletionResponse;
       const analysedResponse = this.parserReponse(
