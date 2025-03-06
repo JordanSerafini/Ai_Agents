@@ -3,9 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { AnalyseRequestDto } from '../dto/analyse-request.dto';
-import { AnalyseResponseDto } from '../dto/analyse-response.dto';
 import { PrioriteType } from '../interfaces/analyse.interface';
-import { analysePrompt } from '../../var/analyse.prompt';
 import { RouterService } from './router.service';
 import {
   QueryBuilderClientService,
@@ -21,12 +19,22 @@ import {
   RagClientResponse,
 } from '../interfaces/client-responses.interface';
 
-interface OpenAICompletionResponse {
-  choices: {
-    message: {
-      content: string;
-    };
-  }[];
+interface OpenAIResponse {
+  data: {
+    choices: Array<{
+      message: {
+        content: string;
+      };
+    }>;
+  };
+}
+
+interface AnalyseAIResponse {
+  categorie: QuestionCategory;
+  explication: string;
+  tables_concernees: string[];
+  intention: string;
+  entites: string[];
 }
 
 interface CacheEntry {
@@ -73,6 +81,9 @@ export interface AnalyseResult {
   contexte: string;
   informationsManquantes?: string[];
   questionsComplementaires?: string[];
+  metadonnees?: {
+    tablesConcernees: string[];
+  };
 }
 
 @Injectable()
@@ -231,7 +242,7 @@ export class AnalyseService {
         return routedResponse;
       }
 
-      // 4. Pour les questions générales, utiliser OpenAI avec température plus basse
+      // 4. Pour les questions générales, utiliser OpenAI
       const messages = [
         {
           role: 'system',
@@ -247,12 +258,12 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         },
       ];
 
-      const response = await axios.post<OpenAICompletionResponse>(
+      const response = await axios.post<OpenAIResponse>(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-3.5-turbo',
+          model: 'gpt-4-turbo-preview',
           messages,
-          temperature: 0.2, // Température plus basse pour plus de cohérence
+          temperature: 0.2,
           max_tokens: 500,
         },
         {
@@ -356,22 +367,67 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     this.logger.log(`Analyse de la question: ${question}`);
 
     try {
-      const prompt = this.construirePrompt({ question });
-      const response = await axios.post(
+      const structureBDD = `
+Tables principales et leurs relations :
+- projects (id, name, status, start_date, end_date, total_amount)
+  → Contient les informations sur les chantiers/projets
+- clients (id, firstname, lastname, email, phone)
+  → Informations sur les clients liés aux projets
+- staff (id, firstname, lastname, role, is_available)
+  → Personnel de l'entreprise
+- project_staff (project_id, staff_id, role, hours_allocated)
+  → Liaison entre projets et personnel
+- materials (id, name, type, unit_price, stock_quantity)
+  → Matériaux disponibles
+- project_materials (project_id, material_id, quantity_needed)
+  → Matériaux nécessaires par projet
+- invoices (id, project_id, amount, status, due_date)
+  → Factures liées aux projets
+- quotations (id, project_id, amount, status, valid_until)
+  → Devis pour les projets
+- equipment_reservations (id, project_id, equipment_id, start_date, end_date)
+  → Réservations d'équipements pour les projets
+- calendar_events (id, project_id, staff_id, event_type, start_time, end_time)
+  → Événements et rendez-vous liés aux projets
+`;
+
+      const prompt = `En tant qu'assistant spécialisé pour Technidalle, une entreprise de bâtiment, analyse la question suivante en tenant compte de la structure de notre base de données :
+
+Question : "${question}"
+
+Structure de la base de données :
+${structureBDD}
+
+Analyse la question et détermine :
+1. Si elle nécessite une requête SQL (DATABASE)
+2. Si elle nécessite une recherche textuelle (SEARCH)
+3. Si elle nécessite des connaissances générales (KNOWLEDGE)
+4. Si elle concerne un processus métier (WORKFLOW)
+5. Si c'est une question générale (GENERAL)
+
+Réponds au format JSON avec :
+{
+  "categorie": "DATABASE|SEARCH|KNOWLEDGE|WORKFLOW|GENERAL",
+  "explication": "Explique pourquoi cette catégorie",
+  "tables_concernees": ["nom_table1", "nom_table2"],
+  "intention": "Description de l'intention",
+  "entites": ["entité1", "entité2"]
+}`;
+
+      const response = await axios.post<OpenAIResponse>(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-3.5-turbo',
+          model: 'gpt-4-turbo-preview',
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          max_tokens: 1500,
+          temperature: 0.2,
+          max_tokens: 1000,
         },
         {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.openaiApiKey}`,
           },
-          timeout: 15000, // Timeout après 15 secondes
-          validateStatus: (status) => status === 200, // Valider uniquement le statut 200
+          timeout: 15000,
         },
       );
 
@@ -379,23 +435,21 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         throw new Error('Format de réponse OpenAI invalide');
       }
 
-      const openaiResponse = response.data as OpenAICompletionResponse;
-      const analysedResponse = this.parserReponse(
-        openaiResponse.choices[0].message.content,
-      );
+      const analysedResponse = JSON.parse(
+        response.data.choices[0].message.content,
+      ) as AnalyseAIResponse;
 
       return {
-        questionCorrigee: analysedResponse.questionCorrigee || question,
-        intention: analysedResponse.intentionPrincipale.nom,
-        categorie: this.determinerCategorie(
-          analysedResponse.intentionPrincipale.nom,
-        ),
-        agentCible: this.determinerAgent(
-          analysedResponse.intentionPrincipale.nom,
-        ),
-        priorite: analysedResponse.niveauUrgence,
+        questionCorrigee: question,
+        intention: analysedResponse.intention,
+        categorie: analysedResponse.categorie,
+        agentCible: this.determinerAgent(analysedResponse.categorie),
+        priorite: PrioriteType.NORMAL,
         entites: analysedResponse.entites,
-        contexte: analysedResponse.contexte,
+        contexte: analysedResponse.explication,
+        metadonnees: {
+          tablesConcernees: analysedResponse.tables_concernees,
+        },
       };
     } catch (error) {
       this.logger.error(
@@ -413,206 +467,18 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     }
   }
 
-  private determinerCategorie(intention: string): QuestionCategory {
-    if (intention.toLowerCase().includes('base') || intention.toLowerCase().includes('sql') || intention.toLowerCase().includes('données')) {
-      return QuestionCategory.DATABASE;
-    }
-    if (intention.toLowerCase().includes('recherche') || intention.toLowerCase().includes('trouver')) {
-      return QuestionCategory.SEARCH;
-    }
-    if (intention.toLowerCase().includes('workflow') || intention.toLowerCase().includes('processus')) {
-      return QuestionCategory.WORKFLOW;
-    }
-    return QuestionCategory.GENERAL;
-  }
-
-  private determinerAgent(intention: string): AgentType {
-    // Questions liées aux données structurées (chantiers, montants, personnel)
-    if (
-      intention.toLowerCase().includes('chantier') ||
-      intention.toLowerCase().includes('montant') ||
-      intention.toLowerCase().includes('projet') ||
-      intention.toLowerCase().includes('coût') ||
-      intention.toLowerCase().includes('facture') ||
-      intention.toLowerCase().includes('personnel') ||
-      intention.toLowerCase().includes('planning') ||
-      intention.toLowerCase().includes('disponibilite') ||
-      intention.toLowerCase().includes('horaire') ||
-      intention.toLowerCase().includes('travail') ||
-      intention.toLowerCase().includes('base') ||
-      intention.toLowerCase().includes('sql') ||
-      intention.toLowerCase().includes('données')
-    ) {
-      return AgentType.QUERYBUILDER;
-    }
-
-    // Questions de recherche
-    if (
-      intention.toLowerCase().includes('recherche') ||
-      intention.toLowerCase().includes('trouver') ||
-      intention.toLowerCase().includes('chercher')
-    ) {
-      return AgentType.ELASTICSEARCH;
-    }
-
-    // Questions nécessitant des connaissances
-    if (
-      intention.toLowerCase().includes('comment') ||
-      intention.toLowerCase().includes('pourquoi') ||
-      intention.toLowerCase().includes('expliquer')
-    ) {
-      return AgentType.RAG;
-    }
-
-    // Questions liées aux processus
-    if (
-      intention.toLowerCase().includes('workflow') ||
-      intention.toLowerCase().includes('processus') ||
-      intention.toLowerCase().includes('étape')
-    ) {
-      return AgentType.WORKFLOW;
-    }
-
-    return AgentType.GENERAL;
-  }
-
-  private construirePrompt(request: AnalyseRequestDto): string {
-    const { question } = request;
-    return analysePrompt(question);
-  }
-
-  private parserReponse(reponse: string): AnalyseResponseDto {
-    try {
-      const parsedResponse = JSON.parse(reponse) as {
-        demandeId?: string;
-        intentionPrincipale?: {
-          nom?: string;
-          confiance?: number;
-          description?: string;
-        };
-        sousIntentions?: Array<{
-          nom?: string;
-          description?: string;
-          confiance?: number;
-        }>;
-        entites?: string[];
-        niveauUrgence?: PrioriteType;
-        contraintes?: string[];
-        contexte?: string;
-        questionCorrigee?: string;
-        question?: string;
-      };
-
-      return {
-        demandeId: parsedResponse.demandeId || Date.now().toString(),
-        intentionPrincipale: {
-          nom: parsedResponse.intentionPrincipale?.nom || 'intention_inconnue',
-          confiance: parsedResponse.intentionPrincipale?.confiance || 0.5,
-          description:
-            parsedResponse.intentionPrincipale?.description ||
-            'Description non disponible',
-        },
-        sousIntentions:
-          parsedResponse.sousIntentions?.map((si) => ({
-            nom: si.nom || 'sous_intention_inconnue',
-            description: si.description || 'Description non disponible',
-            confiance: si.confiance || 0.5,
-          })) || [],
-        entites: parsedResponse.entites || [],
-        niveauUrgence: parsedResponse.niveauUrgence || PrioriteType.NORMAL,
-        contraintes: parsedResponse.contraintes || [],
-        contexte: parsedResponse.contexte || '',
-        timestamp: new Date(),
-        questionCorrigee:
-          parsedResponse.questionCorrigee || parsedResponse.question || '',
-      };
-    } catch (error) {
-      this.logger.error(
-        `Erreur lors du parsing de la réponse: ${(error as Error).message}`,
-      );
-      return {
-        demandeId: Date.now().toString(),
-        intentionPrincipale: {
-          nom: 'erreur_parsing',
-          confiance: 1.0,
-          description: 'Erreur lors du parsing de la réponse',
-        },
-        sousIntentions: [],
-        entites: [],
-        niveauUrgence: PrioriteType.NORMAL,
-        contraintes: [],
-        contexte: '',
-        timestamp: new Date(),
-        questionCorrigee: '',
-      };
-    }
-  }
-
-  private async getStructuredData(
-    question: string,
-  ): Promise<QueryBuilderResponse> {
-    try {
-      const response = (await this.queryBuilderClient.buildQuery(
-        question,
-      )) as QueryBuilderClientResponse;
-      return {
-        explanation: response.explanation || '',
-        sql: response.sql || '',
-        data: response.data || null,
-      };
-    } catch (error) {
-      this.logger.error(
-        `Erreur lors de la récupération des données structurées: ${error}`,
-      );
-      return {
-        error: `Erreur lors de la récupération des données structurées: ${error}`,
-      };
-    }
-  }
-
-  private async getSearchResults(question: string): Promise<SearchResponse> {
-    try {
-      const response = (await this.elasticsearchClient.search(
-        question,
-      )) as ElasticsearchClientResponse;
-      return {
-        hits: {
-          hits: response.hits.hits || [],
-          total: response.hits.total || 0,
-        },
-      };
-    } catch (error) {
-      this.logger.error(`Erreur lors de la recherche: ${error}`);
-      return {
-        hits: {
-          hits: [],
-          total: 0,
-        },
-        error: `Erreur lors de la recherche: ${error}`,
-      };
-    }
-  }
-
-  private async getKnowledgeResults(
-    question: string,
-  ): Promise<KnowledgeResponse> {
-    try {
-      const response = (await this.ragClient.getKnowledge(
-        question,
-      )) as RagClientResponse;
-      return {
-        answer: response.answer || '',
-        confidence: response.confidence || 0,
-        knowledge: response.knowledge || [],
-        sources: response.sources || [],
-      };
-    } catch (error) {
-      this.logger.error(
-        `Erreur lors de la récupération des connaissances: ${error}`,
-      );
-      return {
-        error: `Erreur lors de la récupération des connaissances: ${error}`,
-      };
+  private determinerAgent(categorie: QuestionCategory): AgentType {
+    switch (categorie) {
+      case QuestionCategory.DATABASE:
+        return AgentType.QUERYBUILDER;
+      case QuestionCategory.SEARCH:
+        return AgentType.ELASTICSEARCH;
+      case QuestionCategory.KNOWLEDGE:
+        return AgentType.RAG;
+      case QuestionCategory.WORKFLOW:
+        return AgentType.WORKFLOW;
+      default:
+        return AgentType.GENERAL;
     }
   }
 }

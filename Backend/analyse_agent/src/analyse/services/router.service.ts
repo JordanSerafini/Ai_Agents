@@ -2,14 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { AnalyseRequestDto } from '../dto/analyse-request.dto';
-import { AgentType } from './analyse.service';
+import { AnalyseResult, AgentType } from './analyse.service';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 
 interface RouterResponse {
   reponse: string;
 }
-
 
 @Injectable()
 export class RouterService {
@@ -76,8 +75,6 @@ export class RouterService {
           return await this.routeToRag(request, additionalData);
         case AgentType.WORKFLOW:
           return await this.routeToWorkflow(request, additionalData);
-        case AgentType.API:
-          return await this.routeToApi(request, additionalData);
         default:
           return {
             reponse: `Je ne sais pas comment traiter cette demande. Veuillez reformuler ou contacter l'administrateur.`,
@@ -112,63 +109,32 @@ export class RouterService {
         questionCorrigee: request.question,
         metadonnees: {
           tablesIdentifiees: {
-            principales: [
-              'projects',
-              'project_details',
-              'clients',
-              'invoices',
-              'quotations',
-              'project_staff',
-              'staff',
-              'project_materials',
-              'materials'
-            ],
-            jointures: [
-              'project_staff',
-              'project_materials',
-              'invoices',
-              'quotations'
-            ],
-            conditions: [],
+            principales: (additionalData as AnalyseResult)?.metadonnees?.tablesConcernees || [],
+            jointures: [],
+            conditions: []
           },
           champsRequis: {
-            selection: [
-              'projects.name AS project_name',
-              'projects.status AS project_status',
-              'projects.start_date',
-              'projects.end_date',
-              'projects.total_amount',
-              'clients.firstname AS client_firstname',
-              'clients.lastname AS client_lastname',
-              'invoices.amount AS invoice_amount',
-              'quotations.amount AS quotation_amount'
-            ],
+            selection: [],
             filtres: [],
-            groupement: ['projects.id', 'projects.name'],
+            groupement: []
           },
           filtres: {
-            temporels: [
-              'projects.start_date <= CURRENT_DATE',
-              'projects.end_date >= CURRENT_DATE',
-              'EXTRACT(MONTH FROM projects.start_date) = EXTRACT(MONTH FROM CURRENT_DATE)',
-              'EXTRACT(YEAR FROM projects.start_date) = EXTRACT(YEAR FROM CURRENT_DATE)'
-            ],
-            logiques: ['projects.status != \'COMPLETED\''],
+            temporels: [],
+            logiques: []
           },
           periodeTemporelle: {
-            debut: 'CURRENT_DATE - INTERVAL \'1 MONTH\'',
+            debut: "CURRENT_DATE - INTERVAL '1 MONTH'",
             fin: 'CURRENT_DATE',
-            precision: 'MOIS',
+            precision: 'MOIS'
           },
           parametresRequete: {
-            tri: [
-              'projects.start_date DESC',
-              'projects.total_amount DESC'
-            ],
-            limite: 100,
+            tri: [],
+            limite: 100
           },
-          ...(additionalData || {}),
-        },
+          intention: (additionalData as AnalyseResult)?.intention || '',
+          contexte: (additionalData as AnalyseResult)?.contexte || '',
+          entites: (additionalData as AnalyseResult)?.entites || []
+        }
       };
 
       const response = await firstValueFrom(
@@ -296,33 +262,6 @@ export class RouterService {
     } catch (error) {
       this.logger.error(
         `Erreur lors de la communication avec l'agent Workflow: ${error.message}`,
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Route une requête vers l'agent API
-   */
-  private async routeToApi(
-    request: AnalyseRequestDto,
-    additionalData?: Record<string, unknown>,
-  ): Promise<RouterResponse> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.apiAgentUrl}/query`, {
-          question: request.question,
-          userId: request.userId,
-          additionalData,
-        }),
-      );
-
-      return {
-        reponse: response.data.reponse || 'Aucune réponse du service API.',
-      };
-    } catch (error) {
-      this.logger.error(
-        `Erreur lors de la communication avec l'agent API: ${error.message}`,
       );
       throw error;
     }
