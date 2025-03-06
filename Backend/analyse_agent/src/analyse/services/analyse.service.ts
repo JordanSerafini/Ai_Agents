@@ -681,53 +681,45 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
             analysisResult.analyse_semantique.temporalite.periode,
           );
 
-          // Déterminer le type de période pour les noms de placeholders
-          let prefixePeriode = 'periode';
-          if (
-            analysisResult.analyse_semantique.temporalite.periode.precision ===
-            'SEMAINE'
-          ) {
-            prefixePeriode = 'semaine_pro';
-          } else if (
-            analysisResult.analyse_semantique.temporalite.periode.precision ===
-            'MOIS'
-          ) {
-            prefixePeriode = 'mois_pro';
-          } else if (
-            analysisResult.analyse_semantique.temporalite.periode.precision ===
-            'ANNEE'
-          ) {
-            prefixePeriode = 'annee';
-          }
-
-          // Créer des noms de placeholders cohérents
-          const debutPlaceholder = `debut_${prefixePeriode}`;
-          const finPlaceholder = `fin_${prefixePeriode}`;
+          // Définir directement les clés des paramètres (sans utiliser les crochets dynamiques)
+          const debutParam = 'debut_semaine_pro';
+          const finParam = 'fin_semaine_pro';
 
           const structuredQuery: AnalyseQueryData = {
-            tables: analysisResult.structure_requete.tables.map((table) => ({
-              nom: table.nom,
-              alias: table.alias,
-              type: table.type,
-              colonnes: table.colonnes,
-              condition_jointure: table.condition_jointure,
-            })),
+            tables: analysisResult.structure_requete.tables.map((table) => {
+              // S'assurer que les colonnes nécessaires pour les conditions temporelles sont incluses
+              if (table.nom === 'calendar_events' && table.colonnes) {
+                if (!table.colonnes.includes('start_date')) {
+                  table.colonnes.push('start_date');
+                }
+                if (!table.colonnes.includes('end_date')) {
+                  table.colonnes.push('end_date');
+                }
+              }
+              return {
+                nom: table.nom,
+                alias: table.alias,
+                type: table.type,
+                colonnes: table.colonnes,
+                condition_jointure: table.condition_jointure,
+              };
+            }),
             conditions: analysisResult.structure_requete.conditions.map(
               (cond) => {
                 if (cond.type === 'TEMPOREL') {
                   return {
                     type: 'TEMPOREL',
-                    expression: `ce.start_date >= :${debutPlaceholder} AND ce.end_date <= :${finPlaceholder}`,
+                    expression: `ce.start_date >= :${debutParam} AND ce.end_date <= :${finParam}`,
                     parametres: {
-                      [debutPlaceholder]: dates.debut,
-                      [finPlaceholder]: dates.fin,
-                    },
+                      [debutParam]: dates.debut,
+                      [finParam]: dates.fin
+                    }
                   };
                 }
                 return {
                   type: 'FILTRE',
                   expression: cond.expression,
-                  parametres: cond.parametres,
+                  parametres: cond.parametres
                 };
               },
             ),
