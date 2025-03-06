@@ -60,10 +60,16 @@ export interface RelationshipInfo {
   description?: string;
 }
 
+export interface TableIdentifiee {
+  nom: string;
+  alias?: string;
+  colonnes?: string[];
+}
+
 export interface AnalyseMetadata {
   tablesIdentifiees: {
-    principales: string[];
-    jointures: string[];
+    principales: TableIdentifiee[];
+    jointures: TableIdentifiee[];
     conditions: string[];
   };
   champsRequis: {
@@ -76,9 +82,9 @@ export interface AnalyseMetadata {
     logiques: string[];
   };
   periodeTemporelle: {
-    debut: string;
-    fin: string;
-    precision: 'JOUR' | 'SEMAINE' | 'MOIS';
+    debut?: string;
+    fin?: string;
+    precision?: 'JOUR' | 'SEMAINE' | 'MOIS';
   };
   parametresRequete: {
     tri: string[];

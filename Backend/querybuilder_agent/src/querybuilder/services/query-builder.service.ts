@@ -38,12 +38,15 @@ export class QueryBuilderService {
     try {
       // Vérifier si la question contient des métadonnées structurées
       let metadata: AnalyseMetadata | undefined;
+      let questionText = question;
+
       try {
         const parsedQuestion = JSON.parse(question) as AnalyseQuestion;
         metadata = parsedQuestion.metadonnees;
-        question = parsedQuestion.questionCorrigee;
+        questionText = parsedQuestion.questionCorrigee;
+        this.logger.log('Métadonnées structurées détectées dans la question');
       } catch (error) {
-        this.logger.warn('Question reçue sans métadonnées structurées', error);
+        this.logger.warn('Question reçue sans métadonnées structurées');
       }
 
       // Résultat par défaut en cas d'échec
@@ -59,20 +62,105 @@ export class QueryBuilderService {
       };
 
       // Utiliser les métadonnées si disponibles, sinon analyser la question
-      const { tables, columns, conditions } = metadata
-        ? {
-            tables: [
-              ...metadata.tablesIdentifiees.principales,
-              ...metadata.tablesIdentifiees.jointures,
-            ],
-            columns: metadata.champsRequis.selection,
-            conditions: [
-              ...metadata.tablesIdentifiees.conditions,
-              ...metadata.filtres.temporels,
-              ...metadata.filtres.logiques,
-            ],
-          }
-        : this.analyzeQuestion(question);
+      let tables: string[] = [];
+      let columns: string[] = [];
+      let conditions: string[] = [];
+      let temporalConditions: string[] = [];
+
+      if (metadata) {
+        // Extraire les noms des tables
+        tables = [
+          ...metadata.tablesIdentifiees.principales.map((t) => t.nom),
+          ...metadata.tablesIdentifiees.jointures.map((t) => t.nom),
+        ];
+
+        // Ajouter automatiquement project_staff si on parle de staff et qu'elle n'est pas déjà incluse
+        if (
+          tables.includes('staff') &&
+          !tables.includes('project_staff') &&
+          (questionText.toLowerCase().includes('dispo') ||
+            questionText.toLowerCase().includes('travail'))
+        ) {
+          tables.push('project_staff');
+          this.logger.log(
+            'Ajout automatique de la table project_staff pour les questions de disponibilité',
+          );
+        }
+
+        // Extraire les colonnes
+        columns = metadata.champsRequis.selection;
+
+        // Extraire les conditions
+        conditions = [
+          ...metadata.tablesIdentifiees.conditions,
+          ...metadata.filtres.logiques,
+        ];
+
+        // Ajouter une condition sur is_available si on parle de disponibilité
+        if (
+          tables.includes('staff') &&
+          questionText.toLowerCase().includes('dispo') &&
+          !conditions.some((c) => c.includes('is_available'))
+        ) {
+          conditions.push('staff.is_available = true');
+          this.logger.log('Ajout automatique de la condition sur is_available');
+        }
+
+        // Ignorer complètement les périodes temporelles avec des valeurs par défaut
+        if (
+          metadata.periodeTemporelle &&
+          metadata.periodeTemporelle.debut === 'YYYY-MM-DD' &&
+          metadata.periodeTemporelle.fin === 'YYYY-MM-DD'
+        ) {
+          this.logger.log('Période temporelle ignorée car valeurs par défaut');
+          // Ne pas utiliser metadata.periodeTemporelle
+        } else {
+          // Traiter les filtres temporels
+          temporalConditions = this.processTemporalFilters(
+            metadata.filtres.temporels,
+            metadata.periodeTemporelle,
+            questionText,
+          );
+        }
+
+        // Ajouter des conditions temporelles basées sur le texte de la question
+        if (
+          questionText.toLowerCase().includes('semaine pro') ||
+          questionText.toLowerCase().includes('semaine prochaine')
+        ) {
+          const today = new Date();
+          const nextMonday = new Date(today);
+          nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
+
+          const nextSunday = new Date(nextMonday);
+          nextSunday.setDate(nextMonday.getDate() + 6);
+
+          const mondayStr = nextMonday.toISOString().split('T')[0];
+          const sundayStr = nextSunday.toISOString().split('T')[0];
+
+          temporalConditions.push(`(
+            calendar_events.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR 
+            calendar_events.end_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
+            project_staff.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
+            project_staff.end_date BETWEEN '${mondayStr}' AND '${sundayStr}'
+          )`);
+
+          this.logger.log(
+            `Ajout de condition temporelle pour la semaine prochaine: ${mondayStr} à ${sundayStr}`,
+          );
+        }
+
+        conditions = [...conditions, ...temporalConditions];
+
+        this.logger.log(`Tables identifiées: ${tables.join(', ')}`);
+        this.logger.log(`Colonnes identifiées: ${columns.join(', ')}`);
+        this.logger.log(`Conditions identifiées: ${conditions.join(', ')}`);
+      } else {
+        const analysisResult = this.analyzeQuestion(questionText);
+        tables = analysisResult.tables;
+        columns = analysisResult.columns;
+        conditions = analysisResult.conditions;
+      }
 
       if (tables.length === 0) {
         return {
@@ -104,7 +192,7 @@ export class QueryBuilderService {
         cacheUsed: false,
         indexesUsed: [],
         optimizationHints: [],
-        baseQueryQuestion: question,
+        baseQueryQuestion: questionText,
         suggestedTables: this.suggestRelatedTables(tables),
       };
 
@@ -190,17 +278,29 @@ export class QueryBuilderService {
         question.toLowerCase().includes('travail')
       ) {
         tables.push('staff');
-        tables.push('timesheet_entries');
+        columns.push('staff.id', 'staff.name', 'staff.is_available');
+
+        // Ajouter les tables liées au personnel et à la disponibilité
+        tables.push('project_staff');
+        columns.push(
+          'project_staff.staff_id',
+          'project_staff.project_id',
+          'project_staff.start_date',
+          'project_staff.end_date',
+        );
+
         tables.push('calendar_events');
         columns.push(
-          'staff.id',
-          'staff.name',
-          'timesheet_entries.date',
-          'timesheet_entries.hours',
+          'calendar_events.staff_id',
           'calendar_events.start_date',
           'calendar_events.end_date',
           'calendar_events.type',
         );
+
+        // Ajouter une condition pour la disponibilité si mentionnée
+        if (question.toLowerCase().includes('dispo')) {
+          conditions.push('staff.is_available = true');
+        }
       }
     }
 
@@ -233,8 +333,55 @@ export class QueryBuilderService {
       tables.length === 1 ? tables[0] : this.constructJoinClause(tables);
 
     // Construction de la clause WHERE avec les conditions
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${this.parseConditions(conditions)}` : '';
+    let whereClause = '';
+    if (conditions.length > 0) {
+      this.logger.log(
+        `Conditions avant filtrage: ${JSON.stringify(conditions)}`,
+      );
+
+      // Filtrer les conditions qui contiennent des références à des tables non incluses
+      const validConditions = conditions.filter((condition) => {
+        // Exclure explicitement les conditions problématiques
+        if (
+          condition.includes('date BETWEEN') &&
+          condition.startsWith('date ')
+        ) {
+          this.logger.log(
+            `Condition exclue (date BETWEEN générique): ${condition}`,
+          );
+          return false;
+        }
+
+        if (condition.includes('timesheet_entries.date')) {
+          this.logger.log(
+            `Condition exclue (timesheet_entries.date): ${condition}`,
+          );
+          return false;
+        }
+
+        // Vérifier que toutes les tables référencées dans la condition sont incluses
+        const hasValidTableReference = tables.some((table) =>
+          condition.includes(`${table}.`),
+        );
+
+        // Si la condition contient un point (référence à une table.colonne)
+        // mais qu'aucune des tables n'est trouvée, l'exclure
+        if (condition.includes('.') && !hasValidTableReference) {
+          this.logger.log(`Condition exclue (table non incluse): ${condition}`);
+          return false;
+        }
+
+        return true;
+      });
+
+      this.logger.log(
+        `Conditions après filtrage: ${JSON.stringify(validConditions)}`,
+      );
+
+      if (validConditions.length > 0) {
+        whereClause = `WHERE ${this.parseConditions(validConditions)}`;
+      }
+    }
 
     // Tri et limite
     const orderByClause = options?.tri?.length
@@ -251,7 +398,11 @@ export class QueryBuilderService {
       ${orderByClause}
       LIMIT ${limit}
       ${offset}
-    `.trim().replace(/\s+/g, ' ');
+    `
+      .trim()
+      .replace(/\s+/g, ' ');
+
+    this.logger.log(`Requête SQL générée: ${sql}`);
 
     // Paramètres (vide pour cet exemple simplifié)
     const params: any[] = [];
@@ -303,10 +454,14 @@ export class QueryBuilderService {
             joinClause += ` LEFT JOIN ${secondaryTable} ON ${mainTable}.${inverseRelation.targetColumn} = ${secondaryTable}.${inverseRelation.sourceColumn}`;
           } else {
             // Pas de relation directe, vérification des relations communes
-            const commonRelations = this.COMMON_TABLES_RELATIONS[mainTable] || [];
+            const commonRelations =
+              this.COMMON_TABLES_RELATIONS[mainTable] || [];
             if (commonRelations.includes(secondaryTable)) {
               // Jointure basée sur les conventions de nommage
-              joinClause += ` LEFT JOIN ${secondaryTable} ON ${mainTable}.id = ${secondaryTable}.${mainTable.slice(0, -1)}_id`;
+              const singularMainTable = mainTable.endsWith('s')
+                ? mainTable.slice(0, -1)
+                : mainTable;
+              joinClause += ` LEFT JOIN ${secondaryTable} ON ${mainTable}.id = ${secondaryTable}.${singularMainTable}_id`;
             } else {
               // Jointure par défaut sur les ID
               joinClause += ` LEFT JOIN ${secondaryTable} ON ${mainTable}.id = ${secondaryTable}.${mainTable}_id`;
@@ -315,7 +470,10 @@ export class QueryBuilderService {
         }
       } else {
         // Si les métadonnées ne sont pas disponibles, jointure par défaut
-        joinClause += ` LEFT JOIN ${secondaryTable} ON ${mainTable}.id = ${secondaryTable}.${mainTable.slice(0, -1)}_id`;
+        const singularMainTable = mainTable.endsWith('s')
+          ? mainTable.slice(0, -1)
+          : mainTable;
+        joinClause += ` LEFT JOIN ${secondaryTable} ON ${mainTable}.id = ${secondaryTable}.${singularMainTable}_id`;
       }
     }
 
@@ -382,5 +540,161 @@ export class QueryBuilderService {
     });
 
     return suggestions;
+  }
+
+  /**
+   * Traite les filtres temporels et la période temporelle pour générer des conditions SQL
+   */
+  private processTemporalFilters(
+    temporalFilters: string[],
+    periodInfo?: {
+      debut?: string;
+      fin?: string;
+      precision?: string;
+    },
+    question?: string,
+  ): string[] {
+    const conditions: string[] = [];
+
+    // Ajouter les filtres temporels explicites, mais filtrer ceux qui contiennent "date" générique
+    if (temporalFilters && temporalFilters.length > 0) {
+      const validFilters = temporalFilters.filter(
+        (filter) =>
+          !(filter.includes('date BETWEEN') && filter.startsWith('date ')),
+      );
+      conditions.push(...validFilters);
+    }
+
+    // Traiter la période temporelle si elle est définie
+    if (periodInfo && periodInfo.debut && periodInfo.fin) {
+      // Ne pas ajouter de condition si les dates sont au format YYYY-MM-DD (valeurs par défaut)
+      if (
+        periodInfo.debut !== 'YYYY-MM-DD' &&
+        periodInfo.fin !== 'YYYY-MM-DD'
+      ) {
+        conditions.push(`(
+          calendar_events.start_date BETWEEN '${periodInfo.debut}' AND '${periodInfo.fin}' OR 
+          calendar_events.end_date BETWEEN '${periodInfo.debut}' AND '${periodInfo.fin}' OR
+          project_staff.start_date BETWEEN '${periodInfo.debut}' AND '${periodInfo.fin}' OR
+          project_staff.end_date BETWEEN '${periodInfo.debut}' AND '${periodInfo.fin}'
+        )`);
+      } else {
+        // Si les dates sont des valeurs par défaut, utiliser les dates calculées
+        if (
+          question &&
+          (question.toLowerCase().includes('semaine pro') ||
+            question.toLowerCase().includes('semaine prochaine'))
+        ) {
+          const today = new Date();
+          const nextMonday = new Date(today);
+          nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
+
+          const nextSunday = new Date(nextMonday);
+          nextSunday.setDate(nextMonday.getDate() + 6);
+
+          const mondayStr = nextMonday.toISOString().split('T')[0];
+          const sundayStr = nextSunday.toISOString().split('T')[0];
+
+          conditions.push(`(
+            calendar_events.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR 
+            calendar_events.end_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
+            project_staff.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
+            project_staff.end_date BETWEEN '${mondayStr}' AND '${sundayStr}'
+          )`);
+
+          this.logger.log(
+            `Ajout de condition temporelle pour la semaine prochaine: ${mondayStr} à ${sundayStr}`,
+          );
+        } else if (
+          question &&
+          question.toLowerCase().includes('mois prochain')
+        ) {
+          const today = new Date();
+          const firstDayNextMonth = new Date(
+            today.getFullYear(),
+            today.getMonth() + 1,
+            1,
+          );
+          const lastDayNextMonth = new Date(
+            today.getFullYear(),
+            today.getMonth() + 2,
+            0,
+          );
+
+          const firstDayStr = firstDayNextMonth.toISOString().split('T')[0];
+          const lastDayStr = lastDayNextMonth.toISOString().split('T')[0];
+
+          conditions.push(`(
+            calendar_events.start_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR 
+            calendar_events.end_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR
+            project_staff.start_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR
+            project_staff.end_date BETWEEN '${firstDayStr}' AND '${lastDayStr}'
+          )`);
+
+          this.logger.log(
+            `Ajout de condition temporelle pour le mois prochain: ${firstDayStr} à ${lastDayStr}`,
+          );
+        }
+      }
+    } else {
+      // Si aucune période n'est définie, détecter les périodes temporelles dans la question
+      if (question) {
+        if (
+          question.toLowerCase().includes('semaine pro') ||
+          question.toLowerCase().includes('semaine prochaine')
+        ) {
+          const today = new Date();
+          const nextMonday = new Date(today);
+          nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
+
+          const nextSunday = new Date(nextMonday);
+          nextSunday.setDate(nextMonday.getDate() + 6);
+
+          const mondayStr = nextMonday.toISOString().split('T')[0];
+          const sundayStr = nextSunday.toISOString().split('T')[0];
+
+          conditions.push(`(
+            calendar_events.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR 
+            calendar_events.end_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
+            project_staff.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
+            project_staff.end_date BETWEEN '${mondayStr}' AND '${sundayStr}'
+          )`);
+
+          this.logger.log(
+            `Ajout de condition temporelle pour la semaine prochaine: ${mondayStr} à ${sundayStr}`,
+          );
+        }
+
+        if (question.toLowerCase().includes('mois prochain')) {
+          const today = new Date();
+          const firstDayNextMonth = new Date(
+            today.getFullYear(),
+            today.getMonth() + 1,
+            1,
+          );
+          const lastDayNextMonth = new Date(
+            today.getFullYear(),
+            today.getMonth() + 2,
+            0,
+          );
+
+          const firstDayStr = firstDayNextMonth.toISOString().split('T')[0];
+          const lastDayStr = lastDayNextMonth.toISOString().split('T')[0];
+
+          conditions.push(`(
+            calendar_events.start_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR 
+            calendar_events.end_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR
+            project_staff.start_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR
+            project_staff.end_date BETWEEN '${firstDayStr}' AND '${lastDayStr}'
+          )`);
+
+          this.logger.log(
+            `Ajout de condition temporelle pour le mois prochain: ${firstDayStr} à ${lastDayStr}`,
+          );
+        }
+      }
+    }
+
+    return conditions;
   }
 }

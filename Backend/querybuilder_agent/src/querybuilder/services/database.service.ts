@@ -40,7 +40,9 @@ export class DatabaseService {
       return result.rows as T[];
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
-      this.logger.error(`Erreur lors de l'exécution de la requête: ${errorMessage}`);
+      this.logger.error(
+        `Erreur lors de l'exécution de la requête: ${errorMessage}`,
+      );
       throw new Error(`Erreur d'exécution SQL: ${errorMessage}`);
     } finally {
       if (client) {
@@ -54,21 +56,24 @@ export class DatabaseService {
       const client = await this.pool.connect();
       client.release();
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
       this.logger.error(
-        `Erreur de connexion à la base de données: ${error.message}`,
+        `Erreur de connexion à la base de données: ${errorMessage}`,
       );
       return false;
     }
   }
 
-  async onModuleDestroy() {
+  async onModuleDestroy(): Promise<void> {
     try {
       await this.pool.end();
       this.logger.log('Connexion à la base de données fermée');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
-      this.logger.error(`Erreur lors de la fermeture du pool: ${errorMessage}`);
+      this.logger.error(
+        `Erreur lors de la fermeture du pool: ${errorMessage}`,
+      );
     }
   }
 }

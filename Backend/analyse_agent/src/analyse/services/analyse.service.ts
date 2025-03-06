@@ -25,6 +25,11 @@ interface AnalyseAIResponse {
   tables_concernees: string[];
   intention: string;
   entites: string[];
+  periode_temporelle?: {
+    debut?: string;
+    fin?: string;
+    precision?: string;
+  };
 }
 
 interface CacheEntry {
@@ -276,7 +281,7 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
       const response = await axios.post<OpenAIResponse>(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-4-turbo-preview',
+          model: 'gpt-3.5-turbo',
           messages,
           temperature: 0.2,
           max_tokens: 500,
@@ -379,59 +384,104 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
     try {
       const structureBDD = `
-Tables principales et leurs relations :
-- projects (id, name, status, start_date, end_date, total_amount)
-  → Contient les informations sur les chantiers/projets
-- clients (id, firstname, lastname, email, phone)
-  → Informations sur les clients liés aux projets
-- staff (id, firstname, lastname, role, is_available)
-  → Personnel de l'entreprise
-- project_staff (project_id, staff_id, role, hours_allocated)
-  → Liaison entre projets et personnel
-- materials (id, name, type, unit_price, stock_quantity)
-  → Matériaux disponibles
-- project_materials (project_id, material_id, quantity_needed)
-  → Matériaux nécessaires par projet
-- invoices (id, project_id, amount, status, due_date)
-  → Factures liées aux projets
-- quotations (id, project_id, amount, status, valid_until)
-  → Devis pour les projets
-- equipment_reservations (id, project_id, equipment_id, start_date, end_date)
-  → Réservations d'équipements pour les projets
-- calendar_events (id, project_id, staff_id, event_type, start_time, end_time)
-  → Événements et rendez-vous liés aux projets
+Tables principales:
+- staff: Informations sur le personnel (id, name, email, role, is_available)
+- projects: Projets en cours (id, name, description, client_id, start_date, end_date, status)
+- clients: Clients de l'entreprise (id, name, email, phone, address)
+- timesheet_entries: Heures travaillées (id, staff_id, project_id, date, hours, description)
+- calendar_events: Événements du calendrier (id, staff_id, title, start_date, end_date, type)
+- project_staff: Affectation du personnel aux projets (project_id, staff_id, role, start_date, end_date)
+- tasks: Tâches à réaliser (id, project_id, title, description, status, priority, assigned_to, due_date)
+- documents: Documents liés aux projets (id, project_id, title, file_path, upload_date, type)
+- invoices: Factures (id, client_id, project_id, amount, issue_date, due_date, status)
+- payments: Paiements reçus (id, invoice_id, amount, payment_date, method)
+- quotations: Devis (id, client_id, project_id, amount, issue_date, valid_until, status)
+- materials: Matériaux utilisés (id, name, unit, unit_price, stock_quantity)
+- project_materials: Matériaux utilisés par projet (project_id, material_id, quantity, cost)
 `;
 
-      const prompt = `En tant qu'assistant spécialisé pour Technidalle, une entreprise de bâtiment, analyse la question suivante en tenant compte de la structure de notre base de données :
-
-Question : "${question}"
-
-Structure de la base de données :
-${structureBDD}
-
-Analyse la question et détermine :
-1. Si elle nécessite une requête SQL (DATABASE)
-2. Si elle nécessite une recherche textuelle (SEARCH)
-3. Si elle nécessite des connaissances générales (KNOWLEDGE)
-4. Si elle concerne un processus métier (WORKFLOW)
-5. Si c'est une question générale (GENERAL)
-
-Réponds au format JSON avec :
-{
-  "categorie": "DATABASE|SEARCH|KNOWLEDGE|WORKFLOW|GENERAL",
-  "explication": "Explique pourquoi cette catégorie",
-  "tables_concernees": ["nom_table1", "nom_table2"],
-  "intention": "Description de l'intention",
-  "entites": ["entité1", "entité2"]
-}`;
+      const prompt = [
+        "En tant qu'assistant spécialisé pour Technidalle, une entreprise de bâtiment, analyse la question suivante en tenant compte de la structure de notre base de données :",
+        '',
+        `Question : "${question}"`,
+        '',
+        'Structure de la base de données :',
+        structureBDD,
+        '',
+        'Analyse la question et détermine :',
+        '1. Si elle nécessite une requête SQL (DATABASE)',
+        '2. Si elle nécessite une recherche textuelle (SEARCH)',
+        '3. Si elle nécessite des connaissances générales (KNOWLEDGE)',
+        '4. Si elle concerne un processus métier (WORKFLOW)',
+        "5. Si c'est une question générale (GENERAL)",
+        '',
+        'Pour les questions de type DATABASE, identifie précisément :',
+        '- Les tables principales concernées',
+        '- Les jointures nécessaires',
+        '- Les conditions de filtrage (notamment temporelles)',
+        '- Les champs à sélectionner',
+        '- Si la question concerne une période spécifique (semaine prochaine, mois prochain, etc.)',
+        '',
+        'IMPORTANT pour les périodes temporelles :',
+        '- Si la question mentionne "semaine prochaine" ou "semaine pro", calcule les dates réelles',
+        "- Aujourd'hui nous sommes le " +
+          new Date().toISOString().split('T')[0],
+        '- La semaine prochaine commence le ' +
+          (() => {
+            const today = new Date();
+            const nextMonday = new Date(today);
+            nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
+            return nextMonday.toISOString().split('T')[0];
+          })(),
+        '- La semaine prochaine se termine le ' +
+          (() => {
+            const today = new Date();
+            const nextMonday = new Date(today);
+            nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
+            const nextSunday = new Date(nextMonday);
+            nextSunday.setDate(nextMonday.getDate() + 6);
+            return nextSunday.toISOString().split('T')[0];
+          })(),
+        '',
+        'IMPORTANT pour les questions sur le personnel et la disponibilité :',
+        '- Inclure toujours les tables "staff", "project_staff" et "calendar_events"',
+        '- La disponibilité est indiquée par le champ "is_available" dans la table "staff"',
+        '- Les affectations aux projets sont dans la table "project_staff"',
+        '- Les événements du calendrier sont dans la table "calendar_events"',
+        '',
+        'IMPORTANT: Réponds UNIQUEMENT avec un objet JSON valide, sans formatage supplémentaire (pas de backticks, pas de "```json", etc.) :',
+        '{',
+        '  "categorie": "DATABASE|SEARCH|KNOWLEDGE|WORKFLOW|GENERAL",',
+        '  "explication": "Explique pourquoi cette catégorie",',
+        '  "tables_concernees": ["nom_table1", "nom_table2"],',
+        '  "intention": "Description de l\'intention",',
+        '  "entites": ["entité1", "entité2"],',
+        '  "periode_temporelle": {',
+        '    "debut": "YYYY-MM-DD",',
+        '    "fin": "YYYY-MM-DD",',
+        '    "precision": "JOUR|SEMAINE|MOIS"',
+        '  }',
+        '}',
+      ].join('\n');
 
       const response = await axios.post<OpenAIResponse>(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-4-turbo-preview',
-          messages: [{ role: 'user', content: prompt }],
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content:
+                "Tu es un assistant spécialisé dans l'analyse de questions pour une entreprise de bâtiment. Tu réponds UNIQUEMENT avec un objet JSON valide, sans formatage supplémentaire.",
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
           temperature: 0.2,
           max_tokens: 1000,
+          response_format: { type: 'json_object' },
         },
         {
           headers: {
@@ -476,6 +526,7 @@ Réponds au format JSON avec :
             temporels: [],
             logiques: [],
           },
+          periodeTemporelle: analysedResponse.periode_temporelle || {},
           parametresRequete: {
             tri: [],
             limite: 100,
