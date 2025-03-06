@@ -247,11 +247,25 @@ export class RouterService {
         },
       };
 
+      // Vérifier et désérialiser si nécessaire
+      const questionData = typeof queryData === 'string' ? JSON.parse(queryData) : queryData;
+      
+      // Log détaillé des conditions pour débogage
+      if (questionData.conditions && questionData.conditions.length > 0) {
+        questionData.conditions.forEach((cond, index) => {
+          this.logger.debug(`Condition ${index} - Type: ${cond.type}`);
+          this.logger.debug(`Condition ${index} - Expression: ${cond.expression}`);
+          if (cond.parametres) {
+            this.logger.debug(`Condition ${index} - Paramètres: ${JSON.stringify(cond.parametres)}`);
+          }
+        });
+      }
+
       const response = await firstValueFrom(
         this.httpService.post<QueryBuilderResult>(
           `${this.queryBuilderAgentUrl}/querybuilder/build`,
           {
-            question: queryData,
+            question: questionData,
             options: {
               includeMetadata: true,
               maxResults: 100,

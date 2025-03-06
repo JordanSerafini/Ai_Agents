@@ -579,17 +579,20 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     placeholders: string[],
     dates: { debut: string; fin: string },
   ): Record<string, string> {
-    return placeholders.reduce((params: Record<string, string>, placeholder) => {
-      if (placeholder.includes('debut')) {
-        params[placeholder] = dates.debut;
-      } else if (placeholder.includes('fin')) {
-        params[placeholder] = dates.fin;
-      } else {
-        this.logger.warn(`Placeholder non reconnu: ${placeholder}`);
-        params[placeholder] = dates.debut; // Valeur par défaut
-      }
-      return params;
-    }, {});
+    return placeholders.reduce(
+      (params: Record<string, string>, placeholder) => {
+        if (placeholder.includes('debut')) {
+          params[placeholder] = dates.debut;
+        } else if (placeholder.includes('fin')) {
+          params[placeholder] = dates.fin;
+        } else {
+          this.logger.warn(`Placeholder non reconnu: ${placeholder}`);
+          params[placeholder] = dates.debut; // Valeur par défaut
+        }
+        return params;
+      },
+      {},
+    );
   }
 
   private calculerDatesDynamiques(periode: {
@@ -680,11 +683,20 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
           // Déterminer le type de période pour les noms de placeholders
           let prefixePeriode = 'periode';
-          if (analysisResult.analyse_semantique.temporalite.periode.precision === 'SEMAINE') {
+          if (
+            analysisResult.analyse_semantique.temporalite.periode.precision ===
+            'SEMAINE'
+          ) {
             prefixePeriode = 'semaine_pro';
-          } else if (analysisResult.analyse_semantique.temporalite.periode.precision === 'MOIS') {
+          } else if (
+            analysisResult.analyse_semantique.temporalite.periode.precision ===
+            'MOIS'
+          ) {
             prefixePeriode = 'mois_pro';
-          } else if (analysisResult.analyse_semantique.temporalite.periode.precision === 'ANNEE') {
+          } else if (
+            analysisResult.analyse_semantique.temporalite.periode.precision ===
+            'ANNEE'
+          ) {
             prefixePeriode = 'annee';
           }
 
@@ -700,23 +712,25 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
               colonnes: table.colonnes,
               condition_jointure: table.condition_jointure,
             })),
-            conditions: analysisResult.structure_requete.conditions.map((cond) => {
-              if (cond.type === 'TEMPOREL') {
+            conditions: analysisResult.structure_requete.conditions.map(
+              (cond) => {
+                if (cond.type === 'TEMPOREL') {
+                  return {
+                    type: 'TEMPOREL',
+                    expression: `ce.start_date >= :${debutPlaceholder} AND ce.end_date <= :${finPlaceholder}`,
+                    parametres: {
+                      [debutPlaceholder]: dates.debut,
+                      [finPlaceholder]: dates.fin,
+                    },
+                  };
+                }
                 return {
-                  type: 'TEMPOREL',
-                  expression: `ce.start_date >= :${debutPlaceholder} AND ce.end_date <= :${finPlaceholder}`,
-                  parametres: {
-                    [debutPlaceholder]: dates.debut,
-                    [finPlaceholder]: dates.fin
-                  }
+                  type: 'FILTRE',
+                  expression: cond.expression,
+                  parametres: cond.parametres,
                 };
-              }
-              return {
-                type: 'FILTRE',
-                expression: cond.expression,
-                parametres: cond.parametres
-              };
-            }),
+              },
+            ),
             groupBy: analysisResult.structure_requete.groupements,
             orderBy: analysisResult.structure_requete.ordre,
             metadata: {
@@ -752,8 +766,11 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
                 periodeTemporelle: {
                   debut: dates.debut,
                   fin: dates.fin,
-                  precision: analysisResult.analyse_semantique.temporalite.periode.precision,
-                  type: analysisResult.analyse_semantique.temporalite.periode.type,
+                  precision:
+                    analysisResult.analyse_semantique.temporalite.periode
+                      .precision,
+                  type: analysisResult.analyse_semantique.temporalite.periode
+                    .type,
                 },
                 tablesIdentifiees: {
                   principales: analysisResult.structure_requete.tables
