@@ -8,12 +8,25 @@ export class DatabaseService {
   private readonly pool: Pool;
 
   constructor(private readonly configService: ConfigService) {
+    const host = this.configService.get<string>('PG_HOST');
+    const port = this.configService.get<string>('PG_PORT');
+    const user = this.configService.get<string>('PG_USERNAME');
+    const password = this.configService.get<string>('PG_PASSWORD');
+    const database = this.configService.get<string>('PG_DATABASE');
+
+    if (!host || !port || !user || !password || !database) {
+      this.logger.error('Configuration de la base de données manquante');
+      throw new Error('Configuration de la base de données incomplète');
+    }
+
+    this.logger.log(`Connexion à la base de données PostgreSQL sur ${host}:${port}`);
+
     this.pool = new Pool({
-      host: this.configService.get<string>('PG_HOST', 'localhost'),
-      port: parseInt(this.configService.get<string>('PG_PORT', '5432')),
-      user: this.configService.get<string>('PG_USERNAME', 'postgres'),
-      password: this.configService.get<string>('PG_PASSWORD', 'postgres'),
-      database: this.configService.get<string>('PG_DATABASE', 'postgres'),
+      host,
+      port: parseInt(port),
+      user,
+      password,
+      database,
     });
   }
 
