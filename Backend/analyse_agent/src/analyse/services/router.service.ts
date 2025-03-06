@@ -213,28 +213,84 @@ export class RouterService {
           ...(analyseResult.metadonnees.filtres?.temporels || []).map((filtre) => {
             const periodeTemporelle = analyseResult.metadonnees?.periodeTemporelle;
             
+            // Correction pour PostgreSQL: Remplacer CURDATE() par CURRENT_DATE
+            let expression = filtre;
+            if (expression.includes('CURDATE()')) {
+              expression = expression.replace('CURDATE()', 'CURRENT_DATE');
+            }
+            
+            // Correction pour PostgreSQL: Corriger la syntaxe des intervalles
+            const intervalPatterns = [
+              { pattern: /INTERVAL (\d+) DAY/g, replacement: "INTERVAL '$1 day'" },
+              { pattern: /INTERVAL (\d+) MONTH/g, replacement: "INTERVAL '$1 month'" },
+              { pattern: /INTERVAL (\d+) WEEK/g, replacement: "INTERVAL '$1 week'" },
+              { pattern: /INTERVAL (\d+) YEAR/g, replacement: "INTERVAL '$1 year'" }
+            ];
+            
+            intervalPatterns.forEach(({ pattern, replacement }) => {
+              if (pattern.test(expression)) {
+                expression = expression.replace(pattern, replacement);
+              }
+            });
+            
+            // Ne pas ajouter de filtre sur event_type si la question concerne les chantiers/projets
+            const isProjectQuery = 
+              analyseResult.contexte?.toLowerCase().includes('chantier') || 
+              analyseResult.contexte?.toLowerCase().includes('projet');
+              
+            if (isProjectQuery && expression.includes("ce.event_type = 'reunion_chantier'")) {
+              // Supprimer la condition sur event_type
+              expression = expression.replace(" AND ce.event_type = 'reunion_chantier'", '');
+            }
+            
+            // Extraire les noms des placeholders de l'expression pour garantir la correspondance
+            const placeholderRegex = /:([a-zA-Z0-9_]+)/g;
+            const matches = [...expression.matchAll(placeholderRegex)];
+            const placeholders = matches.map(match => match[1]);
+            
+            // Créer les paramètres avec les placeholders exacts de l'expression
+            const parametres = {};
+            if (placeholders.length > 0) {
+              if (placeholders.length === 1) {
+                // Un seul placeholder, utiliser la même date pour début et fin
+                parametres[placeholders[0]] = periodeTemporelle?.debut || new Date().toISOString().split('T')[0];
+              } else {
+                // Deux placeholders ou plus
+                parametres[placeholders[0]] = periodeTemporelle?.debut || new Date().toISOString().split('T')[0];
+                parametres[placeholders[1]] = periodeTemporelle?.fin || new Date().toISOString().split('T')[0];
+              }
+            }
+            
+            return {
+              type: 'TEMPOREL' as const,
+              expression: expression,
+              parametres: parametres
+            };
+          }),
+          ...(analyseResult.metadonnees.filtres?.logiques || []).map((filtre) => {
             // Extraire les noms des placeholders de l'expression pour garantir la correspondance
             const placeholderRegex = /:([a-zA-Z0-9_]+)/g;
             const matches = [...filtre.matchAll(placeholderRegex)];
             const placeholders = matches.map(match => match[1]);
             
-            // Créer les paramètres avec les placeholders exacts de l'expression
+            // Créer les paramètres avec des valeurs par défaut
             const parametres = {};
-            if (placeholders.length >= 2) {
-              parametres[placeholders[0]] = periodeTemporelle?.debut;
-              parametres[placeholders[1]] = periodeTemporelle?.fin;
-            }
-            
+            placeholders.forEach(placeholder => {
+              if (placeholder === 'status') {
+                parametres[placeholder] = 'en_cours';
+              } else if (placeholder === 'type') {
+                parametres[placeholder] = 'chantier';
+              } else {
+                parametres[placeholder] = 'valeur_par_defaut';
+              }
+            });
+
             return {
-              type: 'TEMPOREL' as const,
+              type: 'FILTRE' as const,
               expression: filtre,
               parametres: parametres
             };
           }),
-          ...(analyseResult.metadonnees.filtres?.logiques || []).map((filtre) => ({
-            type: 'FILTRE' as const,
-            expression: filtre,
-          })),
         ],
         metadata: {
           intention: analyseResult.intention || '',
@@ -261,16 +317,23 @@ export class RouterService {
         });
       }
 
+      // Options pour la requête
+      const options = {
+        includeMetadata: true,
+        maxResults: 100,
+      };
+
+      this.logger.debug(`Envoi de la requête au QueryBuilder: ${JSON.stringify(questionData)}`);
+
       const response = await firstValueFrom(
         this.httpService.post<QueryBuilderResult>(
           `${this.queryBuilderAgentUrl}/querybuilder/build`,
+          questionData,
           {
-            question: questionData,
-            options: {
-              includeMetadata: true,
-              maxResults: 100,
-            },
-          },
+            params: {
+              options: JSON.stringify(options)
+            }
+          }
         ),
       );
 

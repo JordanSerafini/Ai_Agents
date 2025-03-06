@@ -27,10 +27,12 @@ export class QueryBuilderClientService {
 
   async buildQuery(input: string | AnalyseQueryData): Promise<any> {
     try {
+      const data = typeof input === 'string' ? JSON.parse(input) : input;
+      
+      this.logger.debug(`Envoi de la requête au QueryBuilder: ${JSON.stringify(data)}`);
+      
       const response = await firstValueFrom(
-        this.httpService.post(`${this.baseUrl}/querybuilder/build`, {
-          question: typeof input === 'string' ? input : JSON.stringify(input),
-        }),
+        this.httpService.post(`${this.baseUrl}/querybuilder/build`, data),
       );
       return response.data;
     } catch (error: unknown) {

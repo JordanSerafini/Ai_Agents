@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { QueryValidatorService } from './query-validator.service';
 import { QueryConfigService } from './query-config.service';
-import { QueryExecutorService } from './query-executor.service';
+import { DatabaseService } from './database.service';
 import {
   AnalyseQueryData,
   QueryBuilderResult,
@@ -14,7 +14,7 @@ export class QueryBuilderService {
   constructor(
     private readonly validatorService: QueryValidatorService,
     private readonly configService: QueryConfigService,
-    private readonly executorService: QueryExecutorService,
+    private readonly databaseService: DatabaseService,
   ) {}
 
   async buildQuery(
@@ -30,19 +30,20 @@ export class QueryBuilderService {
       this.validatorService.validateQueryData(data);
       this.logger.debug('Validation réussie');
 
-      // Configurer la requête
-      this.logger.debug('Configuration de la requête...');
-      const queryBuilder = await this.configService.configureQuery(data);
-      this.logger.debug(`Requête SQL générée: ${queryBuilder.getSql()}`);
+      // Générer la requête SQL brute
+      this.logger.debug('Génération de la requête SQL...');
+      const { sql, params } = this.configService.generateRawSql(data);
+      this.logger.debug(`Requête SQL générée: ${sql}`);
+      this.logger.debug(`Paramètres: ${JSON.stringify(params)}`);
 
       // Exécuter la requête
       this.logger.debug('Exécution de la requête...');
-      const result = await this.executorService.executeQuery(queryBuilder, options);
+      const result = await this.databaseService.executeQuery(sql, params);
       this.logger.debug(`Nombre de résultats: ${result.length}`);
 
       const response = {
         success: true,
-        sql: queryBuilder.getSql(),
+        sql: sql,
         data: result,
         explanation: this.configService.generateExplanation(data),
         metadata: {

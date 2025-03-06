@@ -29,12 +29,12 @@ import { QueryExecutorService } from './services/query-executor.service';
   ],
   controllers: [QueryBuilderController],
   providers: [
-    QueryBuilderService,
-    DatabaseMetadataService,
     DatabaseService,
     QueryValidatorService,
     QueryConfigService,
     QueryExecutorService,
+    QueryBuilderService,
+    DatabaseMetadataService,
   ],
   exports: [QueryBuilderService, DatabaseMetadataService],
 })

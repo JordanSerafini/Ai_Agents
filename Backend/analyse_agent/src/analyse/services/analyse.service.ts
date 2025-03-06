@@ -677,38 +677,44 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
         try {
           // Construire la requête structurée
-          const dates = this.calculerDatesDynamiques(
-            analysisResult.analyse_semantique.temporalite.periode,
-          );
-
-          // Définir directement les clés des paramètres (sans utiliser les crochets dynamiques)
-          const debutParam = 'debut_semaine_pro';
-          const finParam = 'fin_semaine_pro';
-
           const structuredQuery: AnalyseQueryData = {
-            tables: analysisResult.structure_requete.tables.map((table) => {
-              // S'assurer que les colonnes nécessaires pour les conditions temporelles sont incluses
-              if (table.nom === 'calendar_events' && table.colonnes) {
-                if (!table.colonnes.includes('start_date')) {
-                  table.colonnes.push('start_date');
-                }
-                if (!table.colonnes.includes('end_date')) {
-                  table.colonnes.push('end_date');
-                }
-              }
-              return {
-                nom: table.nom,
-                alias: table.alias,
-                type: table.type,
-                colonnes: table.colonnes,
-                condition_jointure: table.condition_jointure,
-              };
-            }),
-            conditions: analysisResult.structure_requete.conditions.map(
-              (cond) => {
-                if (cond.type === 'TEMPOREL') {
+            tables: analysisResult.structure_requete.tables.map((table) => ({
+              nom: table.nom,
+              alias: table.alias || table.nom.toLowerCase(),
+              type: table.type || 'PRINCIPALE',
+              colonnes: Array.isArray(table.colonnes) ? table.colonnes : ['*'],
+              condition_jointure: table.type === 'JOINTE' ? (table.condition_jointure || `${table.alias || table.nom.toLowerCase()}.id = principale.${table.nom.toLowerCase()}_id`) : undefined
+            })),
+            conditions: analysisResult.structure_requete.conditions.map((cond) => {
+              if (cond.type === 'TEMPOREL') {
+                const debutParam = 'debut_periode';
+                const finParam = 'fin_periode';
+                const dates = this.calculerDatesDynamiques(
+                  analysisResult.analyse_semantique.temporalite.periode,
+                );
+                
+                // Vérifier si l'expression contient déjà une référence à CURRENT_DATE ou une date spécifique
+                if (cond.expression.includes('CURDATE()')) {
+                  // Corriger la syntaxe pour PostgreSQL
                   return {
-                    type: 'TEMPOREL',
+                    type: 'TEMPOREL' as const,
+                    expression: cond.expression.replace('CURDATE()', 'CURRENT_DATE')
+                                       .replace('INTERVAL 1 DAY', "INTERVAL '1 day'")
+                                       .replace('INTERVAL 1 MONTH', "INTERVAL '1 month'")
+                                       .replace('INTERVAL 1 WEEK', "INTERVAL '1 week'"),
+                    parametres: {}
+                  };
+                } else if (cond.expression.includes('CURRENT_DATE')) {
+                  // Déjà au format PostgreSQL
+                  return {
+                    type: 'TEMPOREL' as const,
+                    expression: cond.expression,
+                    parametres: {}
+                  };
+                } else {
+                  // Utiliser les paramètres de date standard
+                  return {
+                    type: 'TEMPOREL' as const,
                     expression: `ce.start_date >= :${debutParam} AND ce.end_date <= :${finParam}`,
                     parametres: {
                       [debutParam]: dates.debut,
@@ -716,19 +722,30 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
                     }
                   };
                 }
-                return {
-                  type: 'FILTRE',
-                  expression: cond.expression,
-                  parametres: cond.parametres
-                };
-              },
-            ),
-            groupBy: analysisResult.structure_requete.groupements,
-            orderBy: analysisResult.structure_requete.ordre,
+              }
+              // S'assurer que tous les paramètres sont extraits de l'expression
+              const placeholders = this.extractPlaceholders(cond.expression);
+              const parametres = cond.parametres || {};
+              
+              // Remplir les paramètres manquants avec des valeurs par défaut
+              placeholders.forEach(placeholder => {
+                if (!parametres[placeholder] && placeholder === 'type') {
+                  parametres[placeholder] = 'chantier'; // Valeur par défaut pour le type
+                }
+              });
+              
+              return {
+                type: 'FILTRE' as const,
+                expression: cond.expression,
+                parametres: parametres
+              };
+            }),
+            groupBy: analysisResult.structure_requete.groupements || [],
+            orderBy: analysisResult.structure_requete.ordre || [],
             metadata: {
-              intention: analysisResult.analyse_semantique.intention.action,
-              description: analysisResult.analyse_semantique.intention.objectif,
-            },
+              intention: analysisResult.analyse_semantique.intention.action || 'RECHERCHE',
+              description: analysisResult.analyse_semantique.intention.objectif || 'Recherche générale'
+            }
           };
 
           try {
@@ -748,21 +765,13 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
               ],
               contexte: analysisResult.analyse_semantique.intention.objectif,
               questionCorrigee: request.question,
-              reponseAgent: queryResult,
-              informationsManquantes: [],
-              questionsComplementaires: [],
               metadonnees: {
-                tablesConcernees: analysisResult.structure_requete.tables.map(
-                  (t) => t.nom,
-                ),
+                tablesConcernees: structuredQuery.tables.map(t => t.nom),
                 periodeTemporelle: {
-                  debut: dates.debut,
-                  fin: dates.fin,
-                  precision:
-                    analysisResult.analyse_semantique.temporalite.periode
-                      .precision,
-                  type: analysisResult.analyse_semantique.temporalite.periode
-                    .type,
+                  debut: this.calculerDatesDynamiques(analysisResult.analyse_semantique.temporalite.periode).debut,
+                  fin: this.calculerDatesDynamiques(analysisResult.analyse_semantique.temporalite.periode).fin,
+                  precision: analysisResult.analyse_semantique.temporalite.periode.precision,
+                  type: analysisResult.analyse_semantique.temporalite.periode.type,
                 },
                 tablesIdentifiees: {
                   principales: analysisResult.structure_requete.tables
