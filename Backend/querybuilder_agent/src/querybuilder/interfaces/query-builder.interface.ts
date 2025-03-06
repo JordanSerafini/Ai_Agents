@@ -204,3 +204,35 @@ export interface ElasticsearchHighlight {
   pre_tags?: string[];
   post_tags?: string[];
 }
+
+export interface AnalyseMetadata {
+  tablesIdentifiees: {
+    principales: string[];
+    jointures: string[];
+    conditions: string[];
+  };
+  champsRequis: {
+    selection: string[];
+    filtres: string[];
+    groupement: string[];
+  };
+  filtres: {
+    temporels: string[];
+    logiques: string[];
+  };
+  periodeTemporelle: {
+    debut: string;
+    fin: string;
+    precision: 'JOUR' | 'SEMAINE' | 'MOIS';
+  };
+  parametresRequete: {
+    tri: string[];
+    limite?: number;
+    offset?: number;
+  };
+}
+
+export interface AnalyseQuestion {
+  questionCorrigee: string;
+  metadonnees: AnalyseMetadata;
+}

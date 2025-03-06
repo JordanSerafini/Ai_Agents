@@ -111,6 +111,16 @@ Format de réponse JSON attendu:
       "limite": "nombre",
       "offset": "nombre"
     }
+  },
+  "formatReponse": {
+    "type": "PLANNING_HEBDOMADAIRE",
+    "groupement": "PAR_JOUR",
+    "details": [
+      "nom_employe",
+      "horaires",
+      "status"
+    ],
+    "style": "LISTE_STRUCTUREE"
   }
 }
 
@@ -120,9 +130,9 @@ Exemple pour une question sur le personnel:
   "categorie": "DATABASE",
   "agent": "QUERYBUILDER",
   "intentionPrincipale": {
-    "nom": "consulter_planning_personnel",
+    "nom": "consulter_disponibilite_personnel",
     "confiance": 0.95,
-    "description": "Recherche des horaires de travail du personnel pour la semaine prochaine",
+    "description": "Recherche du personnel disponible pour travailler la semaine prochaine",
     "type": "LECTURE"
   },
   "sousIntentions": [
@@ -133,29 +143,29 @@ Exemple pour une question sur le personnel:
       "dependances": []
     },
     {
-      "nom": "joindre_tables_personnel",
-      "description": "Joindre les tables staff et timesheet_entries",
+      "nom": "verifier_disponibilite",
+      "description": "Vérifier les créneaux de disponibilité",
       "confiance": 0.85,
       "dependances": ["filtrer_par_periode"]
     }
   ],
   "entites": {
-    "principales": ["personnel", "horaires"],
-    "secondaires": ["departement"],
-    "relations": ["personnel_horaires"]
+    "principales": ["personnel", "disponibilite"],
+    "secondaires": ["horaires"],
+    "relations": ["personnel_disponibilite"]
   },
   "niveauUrgence": "NORMAL",
   "contraintes": {
     "temporelles": ["periode: semaine_prochaine"],
     "spatiales": [],
-    "logiques": ["type_donnees: horaires", "type_entite: personnel"]
+    "logiques": ["status: CONFIRMED"]
   },
   "contexte": {
-    "general": "Consultation des plannings",
-    "specifique": "Planning hebdomadaire du personnel",
-    "utilisateur": "Gestionnaire RH"
+    "general": "Planification des ressources humaines",
+    "specifique": "Disponibilité hebdomadaire",
+    "utilisateur": "Gestionnaire planning"
   },
-  "questionCorrigee": "Sélectionner les membres du personnel et leurs horaires de travail prévus pour la semaine du ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}",
+  "questionCorrigee": "Identifier le personnel disponible et leurs horaires de travail pour la semaine du ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}",
   "metadonnees": {
     "tablesIdentifiees": {
       "principales": ["staff"],
@@ -163,27 +173,52 @@ Exemple pour une question sur le personnel:
       "conditions": ["staff.id = timesheet_entries.staff_id"]
     },
     "champsRequis": {
-      "selection": ["staff.name", "staff.role", "timesheet_entries.date", "timesheet_entries.start_time", "timesheet_entries.end_time"],
+      "selection": [
+        "staff.id",
+        "staff.name",
+        "timesheet_entries.date",
+        "timesheet_entries.start_time",
+        "timesheet_entries.end_time",
+        "timesheet_entries.status"
+      ],
       "filtres": ["timesheet_entries.date", "timesheet_entries.status"],
-      "groupement": ["staff.id"]
+      "groupement": ["staff.id", "timesheet_entries.date"]
     },
     "filtres": {
       "temporels": [
-        "timesheet_entries.date >= 'début_semaine_prochaine'",
-        "timesheet_entries.date <= 'fin_semaine_prochaine'"
+        "timesheet_entries.date >= DATE_TRUNC('week', CURRENT_DATE + INTERVAL '1 week')",
+        "timesheet_entries.date < DATE_TRUNC('week', CURRENT_DATE + INTERVAL '2 week')"
       ],
-      "logiques": ["timesheet_entries.status = 'CONFIRMED'"]
+      "logiques": [
+        "timesheet_entries.status = 'CONFIRMED'",
+        "timesheet_entries.start_time IS NOT NULL",
+        "timesheet_entries.end_time IS NOT NULL"
+      ]
     },
     "periodeTemporelle": {
-      "debut": "début_semaine_prochaine",
-      "fin": "fin_semaine_prochaine",
-      "precision": "SEMAINE"
+      "debut": "DATE_TRUNC('week', CURRENT_DATE + INTERVAL '1 week')",
+      "fin": "DATE_TRUNC('week', CURRENT_DATE + INTERVAL '2 week') - INTERVAL '1 day'",
+      "precision": "JOUR"
     },
     "parametresRequete": {
-      "tri": ["staff.name ASC", "timesheet_entries.date ASC"],
+      "tri": [
+        "timesheet_entries.date ASC",
+        "staff.name ASC",
+        "timesheet_entries.start_time ASC"
+      ],
       "limite": null,
       "offset": null
     }
+  },
+  "formatReponse": {
+    "type": "PLANNING_HEBDOMADAIRE",
+    "groupement": "PAR_JOUR",
+    "details": [
+      "nom_employe",
+      "horaires",
+      "status"
+    ],
+    "style": "LISTE_STRUCTUREE"
   }
 }
 `;

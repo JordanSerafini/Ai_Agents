@@ -57,6 +57,16 @@ export class QueryBuilderService {
     );
 
     try {
+      // Vérifier si la question contient des métadonnées structurées
+      let metadata;
+      try {
+        const parsedQuestion = JSON.parse(question);
+        metadata = parsedQuestion.metadonnees;
+        question = parsedQuestion.questionCorrigee;
+      } catch (e) {
+        this.logger.warn('Question reçue sans métadonnées structurées');
+      }
+
       // Résultat par défaut en cas d'échec
       const defaultResult: QueryBuilderResult = {
         sql: '',
@@ -69,9 +79,21 @@ export class QueryBuilderService {
         error: 'Impossible de générer une requête SQL pour cette question.',
       };
 
-      // Analyse de la question pour déterminer les tables et colonnes concernées
-      const { tables, columns, conditions } =
-        await this.analyzeQuestion(question);
+      // Utiliser les métadonnées si disponibles, sinon analyser la question
+      const { tables, columns, conditions } = metadata
+        ? {
+            tables: [
+              ...metadata.tablesIdentifiees.principales,
+              ...metadata.tablesIdentifiees.jointures,
+            ],
+            columns: metadata.champsRequis.selection,
+            conditions: [
+              ...metadata.tablesIdentifiees.conditions,
+              ...metadata.filtres.temporels,
+              ...metadata.filtres.logiques,
+            ],
+          }
+        : await this.analyzeQuestion(question);
 
       if (tables.length === 0) {
         return {
@@ -81,15 +103,15 @@ export class QueryBuilderService {
       }
 
       // Construction de la requête SQL
-      const { sql, params, explanation } = await this.constructSqlQuery(
+      const { sql, params, explanation } = this.constructSqlQuery(
         tables,
         columns,
         conditions,
-        options,
+        metadata?.parametresRequete || options,
       );
 
       // Métadonnées de la requête
-      const metadata: QueryMetadata = {
+      const queryMetadata: QueryMetadata = {
         executionTime: 0,
         estimatedRows: 0,
         cacheUsed: false,
@@ -98,7 +120,7 @@ export class QueryBuilderService {
         ragEnhanced: false,
         similarityScore: 0,
         baseQueryQuestion: question,
-        suggestedTables: await this.suggestRelatedTables(tables),
+        suggestedTables: this.suggestRelatedTables(tables),
       };
 
       return {
@@ -109,7 +131,7 @@ export class QueryBuilderService {
         columns,
         conditions,
         success: true,
-        metadata,
+        metadata: queryMetadata,
       };
     } catch (error: unknown) {
       const errorMessage =

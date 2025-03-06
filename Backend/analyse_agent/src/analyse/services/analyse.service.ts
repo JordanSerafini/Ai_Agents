@@ -16,6 +16,9 @@ import {
   QueryBuilderResponse,
   SearchResponse,
   KnowledgeResponse,
+  QueryBuilderClientResponse,
+  ElasticsearchClientResponse,
+  RagClientResponse,
 } from '../interfaces/client-responses.interface';
 
 interface OpenAICompletionResponse {
@@ -193,32 +196,36 @@ export class AnalyseService {
   async analyser(request: AnalyseRequestDto): Promise<{ reponse: string }> {
     const { question, userId, useHistory = false } = request;
     const cacheKey = this.getCacheKey(question);
-    const cachedResponse = this.getFromCache(cacheKey);
-
-    if (cachedResponse) {
-      if (useHistory && userId) {
-        this.addToConversationHistory(userId, 'user', question);
-        this.addToConversationHistory(userId, 'assistant', cachedResponse);
-      }
-      return { reponse: cachedResponse };
-    }
 
     try {
+      // 1. Analyser d'abord la question
       const analyse = await this.analyserQuestion(question);
-      let reponse = '';
 
-      // Si l'agent cible n'est pas GENERAL, router la requête vers l'agent approprié
+      // 2. Vérifier le cache UNIQUEMENT pour les questions générales
+      if (analyse.agentCible === AgentType.GENERAL) {
+        const cachedResponse = this.getFromCache(cacheKey);
+        if (cachedResponse) {
+          if (useHistory && userId) {
+            this.addToConversationHistory(userId, 'user', question);
+            this.addToConversationHistory(userId, 'assistant', cachedResponse);
+          }
+          return { reponse: cachedResponse };
+        }
+      }
+
+      // 3. Router vers l'agent approprié si ce n'est pas GENERAL
       if (analyse.agentCible !== AgentType.GENERAL) {
         this.logger.log(
           `Routage de la requête vers l'agent: ${analyse.agentCible}`,
         );
+
+        // Ne pas utiliser le cache pour les requêtes routées
         const routedResponse = await this.routerService.routeRequest(
           request,
           analyse.agentCible,
           analyse as unknown as Record<string, unknown>,
         );
 
-        // Ajouter la réponse routée à l'historique
         if (useHistory && userId) {
           this.addToConversationHistory(userId, 'user', question);
           this.addToConversationHistory(
@@ -231,7 +238,7 @@ export class AnalyseService {
         return routedResponse;
       }
 
-      // Continuer avec le traitement normal pour l'agent GENERAL
+      // 4. Pour les questions générales, utiliser OpenAI avec température plus basse
       const messages = [
         {
           role: 'system',
@@ -241,21 +248,18 @@ Fournis une réponse détaillée et informative en français (3-5 phrases) qui r
 Si la question concerne des informations générales sur le bâtiment, les matériaux ou les services, donne des explications complètes.
 Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         },
+        {
+          role: 'user',
+          content: analyse.questionCorrigee,
+        },
       ];
 
-      // Ajouter la question actuelle
-      messages.push({
-        role: 'user',
-        content: analyse.questionCorrigee,
-      });
-
-      // Générer une réponse basée sur l'analyse
       const response = await axios.post<OpenAICompletionResponse>(
         'https://api.openai.com/v1/chat/completions',
         {
           model: 'gpt-3.5-turbo',
           messages,
-          temperature: 0.7,
+          temperature: 0.2, // Température plus basse pour plus de cohérence
           max_tokens: 500,
         },
         {
@@ -267,16 +271,15 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         },
       );
 
-      reponse = response.data.choices[0].message.content.trim();
+      const reponse = response.data.choices[0].message.content.trim();
 
-      // Ajouter la réponse à l'historique
+      // Mettre en cache UNIQUEMENT les réponses générales
+      this.saveToCache(cacheKey, reponse);
+
       if (useHistory && userId) {
         this.addToConversationHistory(userId, 'user', question);
         this.addToConversationHistory(userId, 'assistant', reponse);
       }
-
-      // Mettre en cache
-      this.saveToCache(cacheKey, reponse);
 
       return { reponse };
     } catch (error) {
@@ -428,9 +431,22 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
   }
 
   private determinerAgent(intention: string): AgentType {
-    if (intention.includes('database') || intention.includes('sql')) {
-      return AgentType.DATABASE;
+    // Questions liées au personnel et planning
+    if (
+      intention.toLowerCase().includes('personnel') ||
+      intention.toLowerCase().includes('planning') ||
+      intention.toLowerCase().includes('disponibilite') ||
+      intention.toLowerCase().includes('horaire') ||
+      intention.toLowerCase().includes('travail')
+    ) {
+      return AgentType.QUERYBUILDER;
     }
+
+    // Questions liées à la base de données
+    if (intention.includes('database') || intention.includes('sql')) {
+      return AgentType.QUERYBUILDER;
+    }
+
     if (intention.includes('search') || intention.includes('find')) {
       return AgentType.SEARCH;
     }
@@ -519,11 +535,13 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     question: string,
   ): Promise<QueryBuilderResponse> {
     try {
-      const response = await this.queryBuilderClient.buildQuery(question);
+      const response = (await this.queryBuilderClient.buildQuery(
+        question,
+      )) as QueryBuilderClientResponse;
       return {
-        explanation: response?.explanation || '',
-        sql: response?.sql || '',
-        data: response?.data || null,
+        explanation: response.explanation || '',
+        sql: response.sql || '',
+        data: response.data || null,
       };
     } catch (error) {
       this.logger.error(
@@ -535,15 +553,15 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     }
   }
 
-  private async getSearchResults(
-    question: string,
-  ): Promise<SearchResponse> {
+  private async getSearchResults(question: string): Promise<SearchResponse> {
     try {
-      const response = await this.elasticsearchClient.search(question);
+      const response = (await this.elasticsearchClient.search(
+        question,
+      )) as ElasticsearchClientResponse;
       return {
         hits: {
-          hits: response?.hits?.hits || [],
-          total: response?.hits?.total || 0,
+          hits: response.hits.hits || [],
+          total: response.hits.total || 0,
         },
       };
     } catch (error) {
@@ -562,12 +580,14 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     question: string,
   ): Promise<KnowledgeResponse> {
     try {
-      const response = await this.ragClient.getKnowledge(question);
+      const response = (await this.ragClient.getKnowledge(
+        question,
+      )) as RagClientResponse;
       return {
-        answer: response?.answer || '',
-        confidence: response?.confidence || 0,
-        knowledge: response?.knowledge || [],
-        sources: response?.sources || [],
+        answer: response.answer || '',
+        confidence: response.confidence || 0,
+        knowledge: response.knowledge || [],
+        sources: response.sources || [],
       };
     } catch (error) {
       this.logger.error(
