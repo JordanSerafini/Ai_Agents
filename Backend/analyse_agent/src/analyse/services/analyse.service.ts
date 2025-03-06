@@ -86,6 +86,7 @@ export interface AnalyseResult {
   reponseAgent?: any;
   metadonnees?: {
     tablesConcernees: string[];
+    periodeTemporelle?: PeriodeTemporelle;
     tablesIdentifiees?: {
       principales: Array<{ nom: string; alias?: string; colonnes?: string[] }>;
       jointures: Array<{
@@ -105,12 +106,6 @@ export interface AnalyseResult {
       temporels: string[];
       logiques: string[];
     };
-    periodeTemporelle?: {
-      debut?: string;
-      fin?: string;
-      precision?: string;
-      type?: 'DYNAMIQUE' | 'FIXE';
-    };
     parametresRequete?: {
       tri: string[];
       limite: number;
@@ -121,7 +116,7 @@ export interface AnalyseResult {
 interface PeriodeTemporelle {
   debut: string;
   fin: string;
-  precision: 'JOUR' | 'SEMAINE' | 'MOIS';
+  precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
   type: 'DYNAMIQUE' | 'FIXE';
 }
 
@@ -151,6 +146,7 @@ export interface AnalyseQueryData {
   conditions?: Array<{
     type: 'FILTRE' | 'TEMPOREL';
     expression: string;
+    parametres?: Record<string, unknown>;
   }>;
   groupBy?: string[];
   orderBy?: string[];
@@ -739,6 +735,12 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
                 tablesConcernees: analysisResult.structure_requete.tables.map(
                   (t) => t.nom,
                 ),
+                periodeTemporelle: {
+                  debut: dates.debut,
+                  fin: dates.fin,
+                  precision: analysisResult.analyse_semantique.temporalite.periode.precision,
+                  type: analysisResult.analyse_semantique.temporalite.periode.type,
+                },
                 tablesIdentifiees: {
                   principales: analysisResult.structure_requete.tables
                     .filter((t) => t.type === 'PRINCIPALE')

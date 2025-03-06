@@ -210,16 +210,17 @@ export class RouterService {
           })),
         ],
         conditions: [
-          ...(analyseResult.metadonnees.filtres?.temporels || []).map((filtre) => ({
-            type: 'TEMPOREL' as const,
-            expression: filtre,
-            parametres: {
-              temporal: {
-                start_date: 'start_date',
-                end_date: 'end_date'
-              }
-            },
-          })),
+          ...(analyseResult.metadonnees.filtres?.temporels || []).map((filtre) => {
+            const periodeTemporelle = analyseResult.metadonnees?.periodeTemporelle;
+            return {
+              type: 'TEMPOREL' as const,
+              expression: filtre,
+              parametres: {
+                debut_semaine_prochaine: periodeTemporelle?.debut,
+                fin_semaine_prochaine: periodeTemporelle?.fin
+              },
+            };
+          }),
           ...(analyseResult.metadonnees.filtres?.logiques || []).map((filtre) => ({
             type: 'FILTRE' as const,
             expression: filtre,
