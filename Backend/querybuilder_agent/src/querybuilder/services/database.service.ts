@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 
 @Injectable()
 export class DatabaseService {
@@ -19,7 +19,9 @@ export class DatabaseService {
       throw new Error('Configuration de la base de données incomplète');
     }
 
-    this.logger.log(`Connexion à la base de données PostgreSQL sur ${host}:${port}`);
+    this.logger.log(
+      `Connexion à la base de données PostgreSQL sur ${host}:${port}`,
+    );
 
     this.pool = new Pool({
       host,
@@ -30,25 +32,20 @@ export class DatabaseService {
     });
   }
 
-  async executeQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
-    this.logger.log(`Exécution de la requête SQL: ${sql}`);
-    this.logger.debug(`Paramètres: ${JSON.stringify(params)}`);
-
+  async executeQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+    let client: PoolClient | null = null;
     try {
-      const startTime = Date.now();
-      const result = await this.pool.query(sql, params);
-      const executionTime = Date.now() - startTime;
-
-      this.logger.log(
-        `Requête exécutée en ${executionTime}ms, ${result.rowCount} lignes retournées`,
-      );
-
+      client = await this.pool.connect();
+      const result = await client.query(sql, params);
       return result.rows as T[];
     } catch (error) {
-      this.logger.error(
-        `Erreur lors de l'exécution de la requête: ${error.message}`,
-      );
-      throw new Error(`Erreur d'exécution SQL: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      this.logger.error(`Erreur lors de l'exécution de la requête: ${errorMessage}`);
+      throw new Error(`Erreur d'exécution SQL: ${errorMessage}`);
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   }
 
@@ -62,6 +59,16 @@ export class DatabaseService {
         `Erreur de connexion à la base de données: ${error.message}`,
       );
       return false;
+    }
+  }
+
+  async onModuleDestroy() {
+    try {
+      await this.pool.end();
+      this.logger.log('Connexion à la base de données fermée');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      this.logger.error(`Erreur lors de la fermeture du pool: ${errorMessage}`);
     }
   }
 }
