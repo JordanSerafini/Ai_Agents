@@ -8,7 +8,6 @@ import {
   QuestionCategory,
 } from './analyse.service';
 import { ReorientationRequestDto } from '../dto/reorientation-request.dto';
-import { PrioriteType } from '../interfaces/analyse.interface';
 
 interface ReorientationResponse {
   questionOriginale: string;
@@ -22,6 +21,14 @@ interface ReorientationResponse {
   informationsManquantes?: string[];
   questionsComplémentaires?: string[];
   réponseAgent?: string;
+}
+
+interface OpenAIResponse {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
 }
 
 @Injectable()
@@ -124,7 +131,7 @@ export class ReorientationService {
         return null;
       }
 
-      const prompt = `
+      const systemPrompt = `
 Tu es un assistant spécialisé dans l'analyse et la reformulation de questions pour une entreprise de bâtiment (Technidalle).
 
 Question originale: "${questionOriginale}"
@@ -146,31 +153,49 @@ La reformulation doit :
 Retourne uniquement la question reformulée, sans commentaires ni explications.
 `;
 
-      const response = await axios.post(
+      const userPrompt = `
+Question originale: "${questionOriginale}"
+
+Analyse préliminaire:
+- Intention détectée: ${analyse.intention}
+- Catégorie: ${this.catégorieToString(analyse.categorie)}
+- Agent cible: ${this.agentToString(analyse.agentCible)}
+- Entités identifiées: ${analyse.entites.join(', ')}
+${contexteOriginal ? `\nContexte additionnel fourni:\n${contexteOriginal}` : ''}
+
+Tâche: Reformule cette question pour la rendre plus précise, claire et complète. Extrais l'intention réelle derrière la formulation initiale.
+La reformulation doit :
+1. Corriger les erreurs grammaticales ou orthographiques
+2. Clarifier les ambiguïtés
+3. Ajouter le contexte implicite
+4. Restructurer la question pour faciliter son traitement automatique
+
+Retourne uniquement la question reformulée, sans commentaires ni explications.
+`;
+
+      const response = await axios.post<OpenAIResponse>(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-3.5-turbo',
+          model: 'gpt-4-turbo-preview',
           messages: [
             {
               role: 'system',
-              content:
-                'Tu es un assistant spécialisé dans la reformulation précise de questions. Tu réponds uniquement avec la question reformulée, sans ajouts.',
+              content: systemPrompt,
             },
             {
               role: 'user',
-              content: prompt,
+              content: userPrompt,
             },
           ],
-          temperature: 0.3,
-          max_tokens: 300,
+          temperature: 0.2,
+          max_tokens: 1000,
         },
         {
           headers: {
-            Authorization: `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.openaiApiKey}`,
           },
           timeout: 15000,
-          validateStatus: (status) => status === 200,
         },
       );
 
@@ -179,7 +204,7 @@ Retourne uniquement la question reformulée, sans commentaires ni explications.
       }
 
       const reformulation = response.data.choices[0].message.content.trim();
-      
+
       if (!reformulation || reformulation.length < 10) {
         throw new Error('Reformulation invalide ou trop courte');
       }
@@ -203,12 +228,14 @@ Retourne uniquement la question reformulée, sans commentaires ni explications.
     switch (categorie) {
       case QuestionCategory.GENERAL:
         return 'GENERAL';
-      case QuestionCategory.API:
-        return 'API';
+      case QuestionCategory.DATABASE:
+        return 'DATABASE';
+      case QuestionCategory.SEARCH:
+        return 'SEARCH';
+      case QuestionCategory.KNOWLEDGE:
+        return 'KNOWLEDGE';
       case QuestionCategory.WORKFLOW:
         return 'WORKFLOW';
-      case QuestionCategory.AUTRE:
-        return 'AUTRE';
       default:
         return 'GENERAL';
     }
