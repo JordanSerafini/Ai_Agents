@@ -1,9 +1,9 @@
 import { Controller, Post, Body, Logger, Get } from '@nestjs/common';
 import { AnalyseService } from '../services/analyse.service';
 import { AnalyseRequestDto } from '../dto/analyse-request.dto';
+import { DatabaseMetadataService } from '../services/database-metadata.service';
 import { ReorientationRequestDto } from '../dto/reorientation-request.dto';
 import { ReorientationService } from '../services/reorientation.service';
-import { QueryBuilderClientService } from '../services/clients';
 
 @Controller('analyse')
 export class AnalyseController {
@@ -11,8 +11,8 @@ export class AnalyseController {
 
   constructor(
     private readonly analyseService: AnalyseService,
+    private readonly dbMetadataService: DatabaseMetadataService,
     private readonly reorientationService: ReorientationService,
-    private readonly queryBuilderClient: QueryBuilderClientService,
   ) {}
 
   @Post()
@@ -41,28 +41,11 @@ export class AnalyseController {
   }
 
   @Get('database-metadata')
-  async getDatabaseMetadata() {
-    try {
-      // Utiliser le client QueryBuilder pour obtenir les métadonnées
-      const health = await this.queryBuilderClient.checkHealth();
-      if (!health) {
-        return {
-          error: "L'agent QueryBuilder n'est pas disponible",
-          status: 'error',
-        };
-      }
-
-      // Rediriger vers l'endpoint de métadonnées de l'agent QueryBuilder
-      return {
-        message:
-          "Cette fonctionnalité est maintenant gérée par l'agent QueryBuilder",
-        redirectTo: '/querybuilder/database-metadata',
-      };
-    } catch (error) {
-      return {
-        error: `Erreur lors de la communication avec l'agent QueryBuilder, ${error}`,
-        status: 'error',
-      };
-    }
+  getDatabaseMetadata() {
+    return {
+      tables: this.dbMetadataService.getAllTables(),
+      enums: this.dbMetadataService.getAllEnums(),
+      description: this.dbMetadataService.getDatabaseDescription(),
+    };
   }
 }
