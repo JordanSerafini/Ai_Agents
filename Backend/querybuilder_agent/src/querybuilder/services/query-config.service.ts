@@ -14,7 +14,10 @@ export class QueryConfigService {
    * Génère un alias unique pour une table
    */
   private generateTableAlias(tableName: string): string {
-    return tableName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toLowerCase();
+    return tableName
+      .replace(/[^a-zA-Z]/g, '')
+      .slice(0, 3)
+      .toLowerCase();
   }
 
   /**
@@ -37,7 +40,8 @@ export class QueryConfigService {
       qb.select(columns);
       return { ...mainTable, alias };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      const message =
+        error instanceof Error ? error.message : 'Erreur inconnue';
       throw new QueryBuilderException(
         `Erreur lors de la configuration de la table principale: ${message}`,
       );
@@ -63,7 +67,8 @@ export class QueryConfigService {
           }
         });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      const message =
+        error instanceof Error ? error.message : 'Erreur inconnue';
       throw new QueryBuilderException(
         `Erreur lors de la configuration des jointures: ${message}`,
       );
@@ -84,8 +89,12 @@ export class QueryConfigService {
 
       // Vérifier si c'est une condition temporelle
       if (condition.type === 'TEMPOREL') {
-        this.logger.debug(`Application de la condition temporelle: ${expression}`);
-        this.logger.debug(`Paramètres temporels: ${JSON.stringify(parametres)}`);
+        this.logger.debug(
+          `Application de la condition temporelle: ${expression}`,
+        );
+        this.logger.debug(
+          `Paramètres temporels: ${JSON.stringify(parametres)}`,
+        );
       }
 
       if (useWhere) {
@@ -120,8 +129,11 @@ export class QueryConfigService {
         temporalConditions.length === 0,
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erreur inconnue';
-      this.logger.error(`Erreur lors de l'application des conditions: ${message}`);
+      const message =
+        error instanceof Error ? error.message : 'Erreur inconnue';
+      this.logger.error(
+        `Erreur lors de l'application des conditions: ${message}`,
+      );
       throw new QueryBuilderException(
         `Erreur lors de l'application des conditions: ${message}`,
       );
@@ -200,7 +212,9 @@ export class QueryConfigService {
     return explanation;
   }
 
-  async configureQuery(data: AnalyseQueryData): Promise<SelectQueryBuilder<ObjectLiteral>> {
+  async configureQuery(
+    data: AnalyseQueryData,
+  ): Promise<SelectQueryBuilder<ObjectLiteral>> {
     const qb = this.createQueryBuilder();
 
     // Configuration de la table principale
