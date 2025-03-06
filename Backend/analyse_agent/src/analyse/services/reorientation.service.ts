@@ -62,9 +62,11 @@ export class ReorientationService {
       );
 
       // Utiliser le service d'analyse pour analyser la question
-      const analyseResult = await this.analyseService.analyserQuestion(
-        request.question,
-      );
+      const analyseResult = await this.analyseService.analyserQuestion({
+        question: request.question,
+        userId: request.userId,
+        useHistory: false,
+      });
 
       // Améliorer la reformulation de la question avec GPT-3.5/4
       const questionAméliorée = await this.améliorerReformulation(
@@ -176,7 +178,7 @@ Retourne uniquement la question reformulée, sans commentaires ni explications.
       const response = await axios.post<OpenAIResponse>(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-4-turbo-preview',
+          model: 'gpt-3.5-turbo',
           messages: [
             {
               role: 'system',

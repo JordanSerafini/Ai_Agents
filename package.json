@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "@elastic/elasticsearch": "^8.17.1",
-    "@nestjs/config": "^4.0.1",
-    "@nestjs/elasticsearch": "^11.0.0"
-  }
-}

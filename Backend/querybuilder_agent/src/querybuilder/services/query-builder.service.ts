@@ -1,84 +1,56 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectConnection } from '@nestjs/typeorm';
-import { Connection } from 'typeorm';
-
-export interface AnalyseQueryData {
-  tables: Array<{
-    nom: string;
-    alias: string;
-    type: 'PRINCIPALE' | 'JOINTE';
-    colonnes: string[];
-    condition_jointure?: string;
-  }>;
-  conditions?: Array<{
-    type: 'FILTRE' | 'TEMPOREL';
-    expression: string;
-  }>;
-  groupBy?: string[];
-  orderBy?: string[];
-  limit?: number;
-  metadata?: {
-    intention: string;
-    description: string;
-  };
-}
+import { QueryValidatorService } from './query-validator.service';
+import { QueryConfigService } from './query-config.service';
+import { QueryExecutorService } from './query-executor.service';
+import {
+  AnalyseQueryData,
+  QueryBuilderResult,
+} from '../interfaces/query-builder.types';
 
 @Injectable()
 export class QueryBuilderService {
   private readonly logger = new Logger(QueryBuilderService.name);
 
-  constructor(@InjectConnection() private readonly connection: Connection) {}
+  constructor(
+    private readonly validatorService: QueryValidatorService,
+    private readonly configService: QueryConfigService,
+    private readonly executorService: QueryExecutorService,
+  ) {}
 
-  async executeQuery(queryData: AnalyseQueryData): Promise<any> {
-    const qb = this.connection.createQueryBuilder();
+  async buildQuery(
+    data: AnalyseQueryData,
+    options?: { timeout?: number },
+  ): Promise<QueryBuilderResult> {
+    try {
+      // Valider les données d'entrée
+      this.validatorService.validateQueryData(data);
 
-    const mainTable = queryData.tables.find((t) => t.type === 'PRINCIPALE');
-    if (!mainTable)
-      throw new Error('Aucune table principale définie dans la requête');
+      // Configurer la requête
+      const queryBuilder = await this.configService.configureQuery(data);
 
-    qb.from(mainTable.nom, mainTable.alias).select(
-      mainTable.colonnes.map((col) => `${mainTable.alias}.${col}`),
-    );
+      // Exécuter la requête
+      const result = await this.executorService.executeQuery(
+        queryBuilder,
+        options,
+      );
 
-    queryData.tables
-      .filter((t) => t.type === 'JOINTE')
-      .forEach((join) => {
-        if (join.condition_jointure) {
-          qb.leftJoin(join.nom, join.alias, join.condition_jointure);
-          qb.addSelect(join.colonnes.map((col) => `${join.alias}.${col}`));
-        }
-      });
-
-    queryData.conditions?.forEach((condition) => {
-      qb.andWhere(condition.expression);
-    });
-
-    if (queryData.groupBy?.length) {
-      qb.groupBy(queryData.groupBy.join(', '));
+      return {
+        success: true,
+        sql: queryBuilder.getSql(),
+        data: result,
+        metadata: {
+          executionTime: Date.now(),
+          baseQueryQuestion: data.metadata?.description,
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la génération de la requête SQL: ${error.message}`,
+      );
+      return {
+        success: false,
+        error: `Erreur lors de la génération de la requête SQL: ${error.message}`,
+      };
     }
-
-    queryData.orderBy?.forEach((order) => {
-      const [column, direction] = this.orderByAlias(order);
-      qb.addOrderBy(this.columnAlias(column), direction);
-    });
-
-    if (queryData.limit) qb.limit(queryData.limit);
-
-    const results = await qb.getRawMany();
-
-    return {
-      success: true,
-      results,
-      query: qb.getSql(),
-    };
-  }
-
-  private orderByAlias(orderBy: string): [string, 'ASC' | 'DESC'] {
-    const [col, dir] = orderBy.split(' ');
-    return [col.trim(), dir?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'];
-  }
-
-  private columnAlias(column: string): string {
-    return column.includes('.') ? column : `\`${column}\``;
   }
 }

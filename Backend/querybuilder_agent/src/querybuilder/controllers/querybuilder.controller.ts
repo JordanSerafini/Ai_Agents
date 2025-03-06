@@ -1,9 +1,6 @@
-import { Controller, Post, Body, Get } from '@nestjs/common';
+import { Controller, Post, Body } from '@nestjs/common';
 import { QueryBuilderService } from '../services/query-builder.service';
-import {
-  QueryBuilderResult,
-  QueryBuilderOptions,
-} from '../interfaces/query-builder.interface';
+import { AnalyseQueryData, QueryBuilderResult } from '../interfaces/query-builder.types';
 
 @Controller('querybuilder')
 export class QueryBuilderController {
@@ -11,14 +8,9 @@ export class QueryBuilderController {
 
   @Post('build')
   async buildQuery(
-    @Body('question') question: string,
-    @Body('options') options?: QueryBuilderOptions,
+    @Body() data: AnalyseQueryData,
+    @Body('options') options?: { timeout?: number }
   ): Promise<QueryBuilderResult> {
-    return this.queryBuilderService.buildQuery(question, options);
-  }
-
-  @Get('health')
-  async checkHealth(): Promise<{ status: string }> {
-    return { status: 'ok' };
+    return this.queryBuilderService.buildQuery(data, options);
   }
 }

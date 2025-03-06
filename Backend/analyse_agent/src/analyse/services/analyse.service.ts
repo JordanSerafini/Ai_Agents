@@ -11,6 +11,7 @@ import {
   ElasticsearchClientService,
   RagClientService,
 } from './clients';
+import { UserQuestionDto } from '../dto/user-question.dto';
 
 interface OpenAIResponse {
   choices: Array<{
@@ -83,6 +84,7 @@ export interface AnalyseResult {
   contexte: string;
   informationsManquantes?: string[];
   questionsComplementaires?: string[];
+  reponseAgent?: any;
   metadonnees?: {
     tablesConcernees: string[];
     tablesIdentifiees?: {
@@ -139,12 +141,6 @@ interface RouterResponse {
   resultats?: StaffEvent[];
 }
 
-export interface UserQuestionDto {
-  question: string;
-  userId?: string;
-  useHistory?: boolean;
-}
-
 export interface AnalyseQueryData {
   tables: Array<{
     nom: string;
@@ -163,6 +159,70 @@ export interface AnalyseQueryData {
   metadata?: {
     intention: string;
     description: string;
+  };
+}
+
+/**
+ * Interface pour la réponse d'analyse sémantique structurée
+ */
+export interface AnalyseSemantiqueResponse {
+  analyse_semantique: {
+    intention: {
+      action: string;
+      objectif: string;
+    };
+    temporalite: {
+      periode: {
+        type: 'DYNAMIQUE' | 'FIXE';
+        precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
+        reference: 'PASSÉ' | 'PRESENT' | 'FUTUR';
+      };
+      dates: {
+        debut?: string;
+        fin?: string;
+      };
+    };
+    entites: {
+      principale: {
+        nom: string;
+        attributs: string[];
+      };
+      secondaires: Array<{
+        nom: string;
+        relation: string;
+        attributs: string[];
+      }>;
+    };
+    contraintes: {
+      explicites: string[];
+      implicites: string[];
+    };
+    informations_demandees: {
+      champs: string[];
+      agregations: string[];
+      ordre: string[];
+    };
+  };
+  structure_requete: {
+    tables: Array<{
+      nom: string;
+      alias: string;
+      type: 'PRINCIPALE' | 'JOINTE';
+      colonnes: string[];
+      condition_jointure?: string;
+    }>;
+    conditions: Array<{
+      type: 'TEMPOREL' | 'LOGIQUE';
+      expression: string;
+      parametres?: Record<string, unknown>;
+    }>;
+    groupements: string[];
+    ordre: string[];
+  };
+  validation: {
+    colonnes_verifiees: boolean;
+    relations_coherentes: boolean;
+    types_compatibles: boolean;
   };
 }
 
@@ -323,7 +383,7 @@ export class AnalyseService {
 
     let reponse = `Pour ${semaine}, voici la situation :\n\n`;
 
-    employes.forEach((employe, id) => {
+    employes.forEach((employe) => {
       reponse += `${employe.nom} :\n`;
       if (employe.evenements.length > 0) {
         reponse += 'Événements prévus :\n';
@@ -558,81 +618,185 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
   }
 
   async analyserQuestion(request: UserQuestionDto): Promise<AnalyseResult> {
-    this.logger.log(`Analyse de la question: ${request.question}`);
-
     try {
-      const prompt = [
-        'Tu es un expert SQL pour une société de BTP.',
-        'Analyse précisément la question suivante, identifie les tables, colonnes, conditions, groupements, tris et limites nécessaires pour créer une requête SQL.',
-        '',
-        'Base de données disponible :',
-        '  - projects(id, client_id, name, status, start_date, end_date)',
-        '  - invoices(id, project_id, total_ht, total_ttc, status, issue_date)',
-        '  - clients(id, firstname, lastname, email)',
-        '  - staff(id, firstname, lastname, role)',
-        '  - project_staff(project_id, staff_id, hours_planned, rate_hourly)',
-        '  - calendar_events(id, staff_id, title, start_date, end_date, location)',
-        '',
-        'Relations :',
-        '  - projects.client_id → clients.id',
-        '  - invoices.project_id → projects.id',
-        '  - project_staff.project_id → projects.id',
-        '  - project_staff.staff_id → staff.id',
-        '  - calendar_events.staff_id → staff.id',
-        '',
-        'RÈGLES IMPORTANTES :',
-        '1. Si une agrégation est demandée (moyenne, total), ajoute un GROUP BY',
-        '2. Si un tri est implicite (top N, plus récents), ajoute ORDER BY et LIMIT',
-        '3. Si une période est mentionnée, ajoute un filtre temporel',
-        '4. Utilise les alias de table (p pour projects, i pour invoices, etc.)',
-        '5. Assure-toi que la structure est valide en SQL',
-        '',
-        'Question utilisateur : "' + request.question + '"',
-        '',
-        'Réponds uniquement en JSON selon ce format strict :',
-        '{',
-        '  "tables": [{',
-        '    "nom": "table",',
-        '    "alias": "t",',
-        '    "type": "PRINCIPALE|JOINTE",',
-        '    "colonnes": ["colonne1", "colonne2"],',
-        '    "condition_jointure": "condition SQL pour la jointure (seulement si JOINTE)"',
-        '  }],',
-        '  "conditions": [{',
-        '    "type": "FILTRE|TEMPOREL",',
-        '    "expression": "expression SQL du filtre"',
-        '  }],',
-        '  "groupBy": ["t.colonne"],',
-        '  "orderBy": ["t.colonne DESC"],',
-        '  "limit": 10,',
-        '  "metadata": {',
-        '    "intention": "CONSULTATION|ANALYSE|STATISTIQUES",',
-        '    "description": "Description de l\'intention"',
-        '  }',
-        '}'
-      ].join('\n');
+      this.logger.log(`Analyse de la question: ${request.question}`);
 
-      const completion = await this.openaiService.createCompletion({
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'system', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 1000,
-      });
-
-      if (!completion?.choices?.[0]?.message?.content) {
-        throw new Error('Format de réponse OpenAI invalide');
+      // Récupérer l'historique des conversations si disponible
+      const userId = request.userId || 'anonymous';
+      if (request.useHistory) {
+        this.addToConversationHistory(userId, 'user', request.question);
       }
 
-      const responseContent = completion.choices[0].message.content.trim();
-      const structuredQuery = JSON.parse(responseContent) as AnalyseQueryData;
+      // Vérifier si la réponse est dans le cache
+      const cachedResponse = this.getFromCache(request.question);
+      if (cachedResponse) {
+        this.logger.log('Réponse trouvée dans le cache');
+        return JSON.parse(cachedResponse);
+      }
 
-      return this.queryBuilderClient.executeQuery(structuredQuery);
+      try {
+        // Utiliser le nouvel OpenAIService avec le prompt externalisé
+        const analysisResult = (await this.openaiService.analyseQuestion(
+          request.question,
+          'semantic-analysis',
+        )) as AnalyseSemantiqueResponse;
+
+        // Valider la structure de la réponse
+        if (!this.validerStructureAnalyse(analysisResult)) {
+          throw new Error('Format de réponse invalide');
+        }
+
+        try {
+          // Construire la requête structurée
+          const structuredQuery: AnalyseQueryData = {
+            tables: analysisResult.structure_requete.tables.map((table) => ({
+              nom: table.nom,
+              alias: table.alias,
+              type: table.type,
+              colonnes: table.colonnes,
+              condition_jointure: table.condition_jointure,
+            })),
+            conditions: analysisResult.structure_requete.conditions.map(
+              (cond) => ({
+                type: cond.type === 'TEMPOREL' ? 'TEMPOREL' : 'FILTRE',
+                expression:
+                  cond.type === 'TEMPOREL'
+                    ? cond.expression
+                        .replace(/date_debut/g, 'start_date')
+                        .replace(/date_fin/g, 'end_date')
+                    : cond.expression,
+                parametres: cond.parametres,
+              }),
+            ),
+            groupBy: analysisResult.structure_requete.groupements,
+            orderBy: analysisResult.structure_requete.ordre,
+            metadata: {
+              intention: analysisResult.analyse_semantique.intention.action,
+              description: analysisResult.analyse_semantique.intention.objectif,
+            },
+          };
+
+          try {
+            // Envoyer la requête au QueryBuilder
+            const queryResult =
+              await this.queryBuilderClient.buildQuery(structuredQuery);
+
+            const result = {
+              intention: analysisResult.analyse_semantique.intention.action,
+              categorie: this.determinerCategorie(
+                analysisResult.analyse_semantique.intention.action,
+              ),
+              agentCible: AgentType.QUERYBUILDER,
+              priorite: PrioriteType.NORMAL,
+              entites: [
+                analysisResult.analyse_semantique.entites.principale.nom,
+              ],
+              contexte: analysisResult.analyse_semantique.intention.objectif,
+              questionCorrigee: request.question,
+              reponseAgent: queryResult,
+              informationsManquantes: [],
+              questionsComplementaires: [],
+              metadonnees: {
+                tablesConcernees: analysisResult.structure_requete.tables.map(
+                  (t) => t.nom,
+                ),
+                tablesIdentifiees: {
+                  principales: analysisResult.structure_requete.tables
+                    .filter((t) => t.type === 'PRINCIPALE')
+                    .map((t) => ({
+                      nom: t.nom,
+                      alias: t.alias,
+                      colonnes: t.colonnes,
+                    })),
+                  jointures: analysisResult.structure_requete.tables
+                    .filter((t) => t.type === 'JOINTE')
+                    .map((t) => ({
+                      nom: t.nom,
+                      alias: t.alias,
+                      colonnes: t.colonnes,
+                      condition: t.condition_jointure,
+                    })),
+                  conditions: analysisResult.structure_requete.conditions.map(
+                    (c) => c.expression,
+                  ),
+                },
+                filtres: {
+                  temporels: analysisResult.structure_requete.conditions
+                    .filter((c) => c.type === 'TEMPOREL')
+                    .map((c) => c.expression),
+                  logiques: analysisResult.structure_requete.conditions
+                    .filter((c) => c.type === 'LOGIQUE')
+                    .map((c) => c.expression),
+                },
+                champsRequis: {
+                  selection:
+                    analysisResult.analyse_semantique.informations_demandees
+                      .champs || [],
+                  filtres:
+                    analysisResult.analyse_semantique.informations_demandees
+                      .agregations || [],
+                  groupement:
+                    analysisResult.structure_requete.groupements || [],
+                },
+                parametresRequete: {
+                  tri: analysisResult.structure_requete.ordre || [],
+                  limite: 100,
+                },
+              },
+            };
+
+            // Sauvegarder dans le cache
+            this.saveToCache(request.question, JSON.stringify(result));
+
+            return result;
+          } catch (error) {
+            this.logger.error(
+              `Erreur lors de la construction de la requête: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
+            );
+            throw error;
+          }
+        } catch (error) {
+          this.logger.error(
+            `Erreur lors de la validation de la réponse: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
+          );
+          throw error;
+        }
+      } catch (error) {
+        this.logger.error(
+          `Erreur lors de l'analyse de la question: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+        throw error;
+      }
     } catch (error) {
       this.logger.error(
-        `Erreur lors de l'analyse de la question: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Erreur lors de l'analyse de la question: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       throw error;
     }
+  }
+
+  private validerStructureAnalyse(analyse: AnalyseSemantiqueResponse): boolean {
+    if (
+      !analyse?.analyse_semantique?.intention?.action ||
+      !analyse?.analyse_semantique?.intention?.objectif ||
+      !analyse?.analyse_semantique?.temporalite?.periode ||
+      !analyse?.analyse_semantique?.entites?.principale ||
+      !analyse?.structure_requete?.tables ||
+      !Array.isArray(analyse.structure_requete.tables) ||
+      analyse.structure_requete.tables.length === 0
+    ) {
+      return false;
+    }
+
+    // Vérification des tables
+    return analyse.structure_requete.tables.every(
+      (table) =>
+        table.nom &&
+        table.alias &&
+        table.type &&
+        Array.isArray(table.colonnes) &&
+        table.colonnes.length > 0,
+    );
   }
 
   private determinerCategorie(domaine: string): QuestionCategory {

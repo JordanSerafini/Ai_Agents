@@ -5,6 +5,7 @@ import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 import { AnalyseResult, AgentType } from './analyse.service';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
+import { AnalyseQueryData, QueryBuilderResult, QueryConditionParameters } from '../../querybuilder/interfaces/query-builder.types';
 
 interface RouterResponse {
   reponse: string;
@@ -184,44 +185,62 @@ export class RouterService {
         metadonnees: additionalData?.metadonnees as Metadonnees,
       } as AnalyseResult;
 
-      // Formater la question avec les métadonnées d'analyse
-      const formattedQuestion = {
-        questionCorrigee: request.question,
-        metadonnees: {
-          tablesIdentifiees: {
-            principales:
-              analyseResult?.metadonnees?.tablesIdentifiees?.principales || [],
-            jointures:
-              analyseResult?.metadonnees?.tablesIdentifiees?.jointures || [],
-            conditions:
-              analyseResult?.metadonnees?.tablesIdentifiees?.conditions || [],
+      if (!analyseResult.metadonnees?.tablesIdentifiees) {
+        return {
+          reponse:
+            "Impossible de générer la requête : aucune table identifiée dans l'analyse.",
+        };
+      }
+
+      // Construire l'objet AnalyseQueryData à partir des métadonnées
+      const queryData: AnalyseQueryData = {
+        tables: [
+          ...analyseResult.metadonnees.tablesIdentifiees.principales.map((table) => ({
+            nom: table.nom,
+            alias: table.alias || table.nom.charAt(0),
+            type: 'PRINCIPALE' as const,
+            colonnes: table.colonnes || ['*'],
+          })),
+          ...analyseResult.metadonnees.tablesIdentifiees.jointures.map((table) => ({
+            nom: table.nom,
+            alias: table.alias || table.nom.charAt(0),
+            type: 'JOINTE' as const,
+            colonnes: table.colonnes || ['*'],
+            condition_jointure: table.condition,
+          })),
+        ],
+        conditions: [
+          ...(analyseResult.metadonnees.filtres?.temporels || []).map((filtre) => ({
+            type: 'TEMPOREL' as const,
+            expression: filtre,
+            parametres: {
+              temporal: {
+                start_date: 'start_date',
+                end_date: 'end_date'
+              }
+            },
+          })),
+          ...(analyseResult.metadonnees.filtres?.logiques || []).map((filtre) => ({
+            type: 'FILTRE' as const,
+            expression: filtre,
+          })),
+        ],
+        metadata: {
+          intention: analyseResult.intention || '',
+          description: analyseResult.contexte || '',
+          champsRequis: analyseResult.metadonnees.champsRequis?.selection,
+          parametresRequete: {
+            tri: analyseResult.metadonnees.parametresRequete?.tri,
+            limite: analyseResult.metadonnees.parametresRequete?.limite,
           },
-          champsRequis: analyseResult?.metadonnees?.champsRequis || {
-            selection: [],
-            filtres: [],
-            groupement: [],
-          },
-          filtres: analyseResult?.metadonnees?.filtres || {
-            temporels: [],
-            logiques: [],
-          },
-          periodeTemporelle:
-            analyseResult?.metadonnees?.periodeTemporelle || {},
-          parametresRequete: analyseResult?.metadonnees?.parametresRequete || {
-            tri: [],
-            limite: 100,
-          },
-          intention: analyseResult?.intention || '',
-          contexte: analyseResult?.contexte || '',
-          entites: analyseResult?.entites || [],
         },
       };
 
       const response = await firstValueFrom(
-        this.httpService.post<QueryBuilderResponse>(
+        this.httpService.post<QueryBuilderResult>(
           `${this.queryBuilderAgentUrl}/querybuilder/build`,
           {
-            question: JSON.stringify(formattedQuestion),
+            question: queryData,
             options: {
               includeMetadata: true,
               maxResults: 100,
@@ -235,11 +254,13 @@ export class RouterService {
         let reponse = `Requête SQL générée: ${response.data.sql}\n\n`;
 
         // Ajouter l'explication de la requête
-        reponse += `Explication: ${response.data.explanation}`;
+        if (response.data.explanation) {
+          reponse += `Explication: ${response.data.explanation}\n\n`;
+        }
 
         // Ajouter les résultats de la requête s'ils sont disponibles
         if (response.data.data && response.data.data.length > 0) {
-          reponse += `\n\nRésultats (${response.data.data.length} lignes):\n`;
+          reponse += `Résultats (${response.data.data.length} lignes):\n`;
 
           // Limiter à 10 résultats pour éviter une réponse trop longue
           const limitedData = response.data.data.slice(0, 10);
@@ -275,17 +296,15 @@ export class RouterService {
             reponse += JSON.stringify(limitedData, null, 2);
           }
         } else if (response.data.data) {
-          reponse += '\n\nAucun résultat trouvé.';
+          reponse += 'Aucun résultat trouvé.';
         }
 
-        return {
-          reponse,
-        };
-      } else {
-        return {
-          reponse: `Erreur lors de la génération de la requête SQL: ${response.data.error}`,
-        };
+        return { reponse };
       }
+
+      return {
+        reponse: `Erreur lors de la génération de la requête SQL: ${response.data.error}`,
+      };
     } catch (error) {
       this.logger.error(
         `Erreur lors de la communication avec l'agent QueryBuilder: ${(error as Error).message}`,

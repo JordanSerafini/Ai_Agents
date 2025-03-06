@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
-import { AnalyseResult } from './analyse.service';
+import { AnalyseResult, AnalyseQueryData } from './analyse.service';
 
 interface HealthResponse {
   status: string;
@@ -25,11 +25,11 @@ export class QueryBuilderClientService {
     this.logger.log(`QueryBuilder Agent URL: ${this.baseUrl}`);
   }
 
-  async buildQuery(question: string): Promise<any> {
+  async buildQuery(input: string | AnalyseQueryData): Promise<any> {
     try {
       const response = await firstValueFrom(
         this.httpService.post(`${this.baseUrl}/querybuilder/build`, {
-          question,
+          question: typeof input === 'string' ? input : JSON.stringify(input),
         }),
       );
       return response.data;
