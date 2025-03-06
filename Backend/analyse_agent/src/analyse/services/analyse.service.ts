@@ -21,15 +21,19 @@ interface OpenAIResponse {
 }
 
 interface AnalyseAIResponse {
-  categorie: QuestionCategory;
-  explication: string;
-  tables_concernees: string[];
-  intention: string;
-  entites: string[];
-  periode_temporelle?: {
-    debut?: string;
-    fin?: string;
-    precision?: string;
+  tables: string[];
+  selects: string[];
+  joins?: Array<{
+    table: string;
+    condition: string;
+  }>;
+  filters?: string[];
+  groupBy?: string[];
+  orderBy?: string[];
+  limit?: number;
+  metadata?: {
+    intention: string;
+    description: string;
   };
 }
 
@@ -83,7 +87,12 @@ export interface AnalyseResult {
     tablesConcernees: string[];
     tablesIdentifiees?: {
       principales: Array<{ nom: string; alias?: string; colonnes?: string[] }>;
-      jointures: Array<{ nom: string; alias?: string; colonnes?: string[] }>;
+      jointures: Array<{
+        nom: string;
+        alias?: string;
+        colonnes?: string[];
+        condition?: string;
+      }>;
       conditions: string[];
     };
     champsRequis?: {
@@ -99,6 +108,7 @@ export interface AnalyseResult {
       debut?: string;
       fin?: string;
       precision?: string;
+      type?: 'DYNAMIQUE' | 'FIXE';
     };
     parametresRequete?: {
       tri: string[];
@@ -112,6 +122,48 @@ interface PeriodeTemporelle {
   fin: string;
   precision: 'JOUR' | 'SEMAINE' | 'MOIS';
   type: 'DYNAMIQUE' | 'FIXE';
+}
+
+interface StaffEvent {
+  id: number;
+  firstname: string;
+  lastname: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  location: string;
+}
+
+interface RouterResponse {
+  reponse: string;
+  resultats?: StaffEvent[];
+}
+
+export interface UserQuestionDto {
+  question: string;
+  userId?: string;
+  useHistory?: boolean;
+}
+
+export interface AnalyseQueryData {
+  tables: Array<{
+    nom: string;
+    alias: string;
+    type: 'PRINCIPALE' | 'JOINTE';
+    colonnes: string[];
+    condition_jointure?: string;
+  }>;
+  conditions?: Array<{
+    type: 'FILTRE' | 'TEMPOREL';
+    expression: string;
+  }>;
+  groupBy?: string[];
+  orderBy?: string[];
+  limit?: number;
+  metadata?: {
+    intention: string;
+    description: string;
+  };
 }
 
 @Injectable()
@@ -226,38 +278,97 @@ export class AnalyseService {
     }
   }
 
-  async analyser(request: AnalyseRequestDto): Promise<{ reponse: string }> {
+  private formaterReponseDisponibilite(resultats: StaffEvent[]): string {
+    // Regrouper par employé
+    const employes = new Map<
+      number,
+      {
+        nom: string;
+        evenements: Array<{
+          titre: string;
+          debut: Date;
+          fin: Date;
+          lieu: string;
+        }>;
+      }
+    >();
+
+    resultats.forEach((r: StaffEvent) => {
+      if (!employes.has(r.id)) {
+        employes.set(r.id, {
+          nom: `${r.firstname} ${r.lastname}`,
+          evenements: [],
+        });
+      }
+
+      if (r.title) {
+        const employe = employes.get(r.id);
+        if (employe) {
+          employe.evenements.push({
+            titre: r.title,
+            debut: new Date(r.start_date),
+            fin: new Date(r.end_date),
+            lieu: r.location,
+          });
+        }
+      }
+    });
+
+    // Construire la réponse
+    const dateDebut = new Date(resultats[0]?.start_date);
+    const dateFin = new Date(resultats[0]?.end_date);
+    const semaine = dateDebut
+      ? `du ${dateDebut.toLocaleDateString('fr-FR')} au ${dateFin.toLocaleDateString('fr-FR')}`
+      : 'la semaine prochaine';
+
+    let reponse = `Pour ${semaine}, voici la situation :\n\n`;
+
+    employes.forEach((employe, id) => {
+      reponse += `${employe.nom} :\n`;
+      if (employe.evenements.length > 0) {
+        reponse += 'Événements prévus :\n';
+        employe.evenements.forEach((evt) => {
+          const heureDebut = evt.debut.toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          const heureFin = evt.fin.toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          const date = evt.debut.toLocaleDateString('fr-FR', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+          });
+          reponse += `- ${date} de ${heureDebut} à ${heureFin} : ${evt.titre} à ${evt.lieu}\n`;
+        });
+      } else {
+        reponse += 'Entièrement disponible\n';
+      }
+      reponse += '\n';
+    });
+
+    return reponse;
+  }
+
+  async analyser(request: UserQuestionDto): Promise<{ reponse: string }> {
     const { question, userId, useHistory = false } = request;
     const cacheKey = this.getCacheKey(question);
 
     try {
-      // 1. Analyser d'abord la question
-      const analyse = await this.analyserQuestion(question);
+      const analyse = await this.analyserQuestion(request);
 
-      // 2. Vérifier le cache UNIQUEMENT pour les questions générales
-      if (analyse.agentCible === AgentType.GENERAL) {
-        const cachedResponse = this.getFromCache(cacheKey);
-        if (cachedResponse) {
-          if (useHistory && userId) {
-            this.addToConversationHistory(userId, 'user', question);
-            this.addToConversationHistory(userId, 'assistant', cachedResponse);
-          }
-          return { reponse: cachedResponse };
-        }
-      }
-
-      // 3. Router vers l'agent approprié si ce n'est pas GENERAL
       if (analyse.agentCible !== AgentType.GENERAL) {
         this.logger.log(
           `Routage de la requête vers l'agent: ${analyse.agentCible}`,
         );
 
-        // Ne pas utiliser le cache pour les requêtes routées
-        const routedResponse = await this.routerService.routeRequest(
+        const routedResponse = (await this.routerService.routeRequest(
           request,
           analyse.agentCible,
           analyse as unknown as Record<string, unknown>,
-        );
+        )) as RouterResponse;
 
         if (useHistory && userId) {
           this.addToConversationHistory(userId, 'user', question);
@@ -266,6 +377,17 @@ export class AnalyseService {
             'assistant',
             routedResponse.reponse,
           );
+        }
+
+        if (
+          analyse.intention === 'verifier_disponibilite' &&
+          routedResponse.resultats
+        ) {
+          return {
+            reponse: this.formaterReponseDisponibilite(
+              routedResponse.resultats,
+            ),
+          };
         }
 
         return routedResponse;
@@ -435,65 +557,65 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     };
   }
 
-  async analyserQuestion(question: string): Promise<AnalyseResult> {
-    this.logger.log(`Analyse de la question: ${question}`);
+  async analyserQuestion(request: UserQuestionDto): Promise<AnalyseResult> {
+    this.logger.log(`Analyse de la question: ${request.question}`);
 
     try {
       const prompt = [
-        "En tant qu'assistant spécialisé pour Technidalle, analyse la question suivante :",
+        'Tu es un expert SQL pour une société de BTP.',
+        'Analyse précisément la question suivante, identifie les tables, colonnes, conditions, groupements, tris et limites nécessaires pour créer une requête SQL.',
         '',
-        `Question : "${question}"`,
+        'Base de données disponible :',
+        '  - projects(id, client_id, name, status, start_date, end_date)',
+        '  - invoices(id, project_id, total_ht, total_ttc, status, issue_date)',
+        '  - clients(id, firstname, lastname, email)',
+        '  - staff(id, firstname, lastname, role)',
+        '  - project_staff(project_id, staff_id, hours_planned, rate_hourly)',
+        '  - calendar_events(id, staff_id, title, start_date, end_date, location)',
         '',
-        'INSTRUCTIONS IMPORTANTES :',
-        '1. Détecter les expressions temporelles comme :',
-        '   - "semaine pro/prochaine" -> calculer les dates exactes à partir de la date actuelle',
-        '   - "mois prochain" -> calculer les dates exactes à partir de la date actuelle',
-        '   - "entre [date1] et [date2]" -> extraire les dates',
-        '   - "du [date1] au [date2]" -> extraire les dates',
-        '   - "à partir du [date]" -> extraire la date de début',
-        '   - "jusqu\'au [date]" -> extraire la date de fin',
+        'Relations :',
+        '  - projects.client_id → clients.id',
+        '  - invoices.project_id → projects.id',
+        '  - project_staff.project_id → projects.id',
+        '  - project_staff.staff_id → staff.id',
+        '  - calendar_events.staff_id → staff.id',
         '',
-        '2. Pour les questions sur le personnel :',
-        '   - Inclure les tables : staff, project_staff, calendar_events',
-        '   - Ajouter la condition : staff.is_available = true',
-        '   - Calculer les dates dynamiquement (ex: semaine prochaine = date_actuelle + 7 jours)',
+        'RÈGLES IMPORTANTES :',
+        '1. Si une agrégation est demandée (moyenne, total), ajoute un GROUP BY',
+        '2. Si un tri est implicite (top N, plus récents), ajoute ORDER BY et LIMIT',
+        '3. Si une période est mentionnée, ajoute un filtre temporel',
+        '4. Utilise les alias de table (p pour projects, i pour invoices, etc.)',
+        '5. Assure-toi que la structure est valide en SQL',
         '',
-        'Format de réponse JSON attendu :',
+        'Question utilisateur : "' + request.question + '"',
+        '',
+        'Réponds uniquement en JSON selon ce format strict :',
         '{',
-        '  "questionCorrigee": "...",',
-        '  "intention": "verifier_disponibilite|consulter_planning|...",',
-        '  "categorie": "DATABASE",',
-        '  "metadonnees": {',
-        '    "tablesIdentifiees": {',
-        '      "principales": [{"nom": "staff"}],',
-        '      "jointures": [{"nom": "project_staff"}, {"nom": "calendar_events"}],',
-        '      "conditions": ["staff.is_available = true"]',
-        '    },',
-        '    "periodeTemporelle": {',
-        '      "debut": "YYYY-MM-DD",',
-        '      "fin": "YYYY-MM-DD",',
-        '      "precision": "JOUR|SEMAINE|MOIS",',
-        '      "type": "DYNAMIQUE|FIXE"',
-        '    }',
+        '  "tables": [{',
+        '    "nom": "table",',
+        '    "alias": "t",',
+        '    "type": "PRINCIPALE|JOINTE",',
+        '    "colonnes": ["colonne1", "colonne2"],',
+        '    "condition_jointure": "condition SQL pour la jointure (seulement si JOINTE)"',
+        '  }],',
+        '  "conditions": [{',
+        '    "type": "FILTRE|TEMPOREL",',
+        '    "expression": "expression SQL du filtre"',
+        '  }],',
+        '  "groupBy": ["t.colonne"],',
+        '  "orderBy": ["t.colonne DESC"],',
+        '  "limit": 10,',
+        '  "metadata": {',
+        '    "intention": "CONSULTATION|ANALYSE|STATISTIQUES",',
+        '    "description": "Description de l\'intention"',
         '  }',
-        '}',
+        '}'
       ].join('\n');
 
       const completion = await this.openaiService.createCompletion({
-        model:
-          this.configService.get<string>('OPENAI_MODEL') ||
-          'gpt-4-turbo-preview',
-        messages: [
-          {
-            role: 'system',
-            content: prompt,
-          },
-          {
-            role: 'user',
-            content: question,
-          },
-        ],
-        temperature: 0.7,
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'system', content: prompt }],
+        temperature: 0.1,
         max_tokens: 1000,
       });
 
@@ -501,73 +623,33 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         throw new Error('Format de réponse OpenAI invalide');
       }
 
-      const analysedResponse = JSON.parse(
-        completion.choices[0].message.content,
-      ) as {
-        questionCorrigee: string;
-        intention: string;
-        categorie: QuestionCategory;
-        metadonnees: {
-          tablesIdentifiees: {
-            principales: Array<{ nom: string }>;
-            jointures: Array<{ nom: string }>;
-            conditions: string[];
-          };
-          periodeTemporelle?: {
-            debut: string;
-            fin: string;
-            precision: string;
-          };
-        };
-      };
+      const responseContent = completion.choices[0].message.content.trim();
+      const structuredQuery = JSON.parse(responseContent) as AnalyseQueryData;
 
-      // Calculer les dates dynamiques si nécessaire
-      if (analysedResponse.metadonnees.periodeTemporelle) {
-        const periodeAvecType = {
-          ...analysedResponse.metadonnees.periodeTemporelle,
-          type: 'DYNAMIQUE' as const,
-          precision: analysedResponse.metadonnees.periodeTemporelle.precision as 'JOUR' | 'SEMAINE' | 'MOIS',
-        };
-        const dates = this.calculerDatesDynamiques(periodeAvecType);
-        analysedResponse.metadonnees.periodeTemporelle.debut = dates.debut;
-        analysedResponse.metadonnees.periodeTemporelle.fin = dates.fin;
-      }
-
-      return {
-        questionCorrigee: question,
-        intention: analysedResponse.intention,
-        categorie: analysedResponse.categorie,
-        agentCible: this.determinerAgent(analysedResponse.categorie),
-        priorite: PrioriteType.NORMAL,
-        entites: [],
-        contexte: '',
-        metadonnees: {
-          tablesConcernees:
-            analysedResponse.metadonnees.tablesIdentifiees.principales.map(
-              (t) => t.nom,
-            ),
-          tablesIdentifiees: analysedResponse.metadonnees.tablesIdentifiees,
-          champsRequis: {
-            selection: [],
-            filtres: [],
-            groupement: [],
-          },
-          filtres: {
-            temporels: [],
-            logiques: [],
-          },
-          periodeTemporelle: analysedResponse.metadonnees.periodeTemporelle,
-          parametresRequete: {
-            tri: [],
-            limite: 100,
-          },
-        },
-      };
+      return this.queryBuilderClient.executeQuery(structuredQuery);
     } catch (error) {
       this.logger.error(
-        `Erreur lors de l'analyse de la question: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Erreur lors de l'analyse de la question: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
       throw error;
+    }
+  }
+
+  private determinerCategorie(domaine: string): QuestionCategory {
+    switch (domaine.toUpperCase()) {
+      case 'CHANTIERS':
+      case 'FINANCES':
+      case 'CLIENTS':
+        return QuestionCategory.DATABASE;
+      case 'PERSONNEL':
+        return this.requiresKnowledge({
+          questionCorrigee: '',
+          categorie: QuestionCategory.DATABASE,
+        } as AnalyseResult)
+          ? QuestionCategory.KNOWLEDGE
+          : QuestionCategory.DATABASE;
+      default:
+        return QuestionCategory.GENERAL;
     }
   }
 
