@@ -11,6 +11,7 @@ import {
   ElasticsearchClientService,
   RagClientService,
 } from './services/clients';
+import { OpenAIService } from './services/openai.service';
 
 @Module({
   imports: [
@@ -28,6 +29,8 @@ import {
     QueryBuilderClientService,
     ElasticsearchClientService,
     RagClientService,
+    OpenAIService,
   ],
+  exports: [AnalyseService],
 })
 export class AnalyseModule {}

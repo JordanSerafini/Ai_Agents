@@ -50,6 +50,16 @@ interface QueryBuilderResponse {
   sql?: string;
   explanation?: string;
   error?: string;
+  data?: any[];
+  metadata?: {
+    executionTime?: number;
+    estimatedRows?: number;
+    cacheUsed?: boolean;
+    indexesUsed?: string[];
+    optimizationHints?: string[];
+    baseQueryQuestion?: string;
+    suggestedTables?: string[];
+  };
 }
 
 interface ElasticsearchHit {
@@ -221,8 +231,55 @@ export class RouterService {
       );
 
       if (response.data.success) {
+        // Afficher la requête SQL générée
+        let reponse = `Requête SQL générée: ${response.data.sql}\n\n`;
+
+        // Ajouter l'explication de la requête
+        reponse += `Explication: ${response.data.explanation}`;
+
+        // Ajouter les résultats de la requête s'ils sont disponibles
+        if (response.data.data && response.data.data.length > 0) {
+          reponse += `\n\nRésultats (${response.data.data.length} lignes):\n`;
+
+          // Limiter à 10 résultats pour éviter une réponse trop longue
+          const limitedData = response.data.data.slice(0, 10);
+
+          // Formater les résultats en tableau
+          try {
+            // Extraire les noms des colonnes du premier résultat
+            const columns = Object.keys(limitedData[0]);
+
+            // Ajouter les en-têtes des colonnes
+            reponse += columns.join(' | ') + '\n';
+            reponse += columns.map(() => '---').join(' | ') + '\n';
+
+            // Ajouter les données
+            limitedData.forEach((row) => {
+              reponse +=
+                columns
+                  .map((col) => {
+                    const value = row[col];
+                    if (value === null || value === undefined) return 'NULL';
+                    if (typeof value === 'object') return JSON.stringify(value);
+                    return String(value);
+                  })
+                  .join(' | ') + '\n';
+            });
+
+            // Indiquer s'il y a plus de résultats
+            if (response.data.data.length > 10) {
+              reponse += `\n... et ${response.data.data.length - 10} autres résultats.`;
+            }
+          } catch (error) {
+            // En cas d'erreur de formatage, afficher les données brutes
+            reponse += JSON.stringify(limitedData, null, 2);
+          }
+        } else if (response.data.data) {
+          reponse += '\n\nAucun résultat trouvé.';
+        }
+
         return {
-          reponse: `Requête SQL générée: ${response.data.sql}\n\nExplication: ${response.data.explanation}`,
+          reponse,
         };
       } else {
         return {

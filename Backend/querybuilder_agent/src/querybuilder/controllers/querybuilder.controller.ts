@@ -18,7 +18,7 @@ export class QueryBuilderController {
   }
 
   @Get('health')
-  async checkHealth() {
+  async checkHealth(): Promise<{ status: string }> {
     return { status: 'ok' };
   }
 }

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { OpenAIService } from './openai.service';
 import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 import { PrioriteType } from '../interfaces/analyse.interface';
 import { RouterService } from './router.service';
@@ -106,6 +107,13 @@ export interface AnalyseResult {
   };
 }
 
+interface PeriodeTemporelle {
+  debut: string;
+  fin: string;
+  precision: 'JOUR' | 'SEMAINE' | 'MOIS';
+  type: 'DYNAMIQUE' | 'FIXE';
+}
+
 @Injectable()
 export class AnalyseService {
   private readonly logger = new Logger(AnalyseService.name);
@@ -124,6 +132,7 @@ export class AnalyseService {
     private readonly queryBuilderClient: QueryBuilderClientService,
     private readonly elasticsearchClient: ElasticsearchClientService,
     private readonly ragClient: RagClientService,
+    private readonly openaiService: OpenAIService,
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
     if (!this.openaiApiKey) {
@@ -379,126 +388,150 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     );
   }
 
+  private calculerDatesDynamiques(periodeTemporelle: PeriodeTemporelle): {
+    debut: string;
+    fin: string;
+  } {
+    const aujourdhui = new Date();
+
+    if (periodeTemporelle.type === 'DYNAMIQUE') {
+      if (periodeTemporelle.precision === 'SEMAINE') {
+        const debutSemaine = new Date(aujourdhui);
+        debutSemaine.setDate(
+          aujourdhui.getDate() + 7 - aujourdhui.getDay() + 1,
+        );
+
+        const finSemaine = new Date(debutSemaine);
+        finSemaine.setDate(debutSemaine.getDate() + 6);
+
+        return {
+          debut: debutSemaine.toISOString().split('T')[0],
+          fin: finSemaine.toISOString().split('T')[0],
+        };
+      }
+
+      if (periodeTemporelle.precision === 'MOIS') {
+        const debutMois = new Date(
+          aujourdhui.getFullYear(),
+          aujourdhui.getMonth() + 1,
+          1,
+        );
+        const finMois = new Date(
+          aujourdhui.getFullYear(),
+          aujourdhui.getMonth() + 2,
+          0,
+        );
+
+        return {
+          debut: debutMois.toISOString().split('T')[0],
+          fin: finMois.toISOString().split('T')[0],
+        };
+      }
+    }
+
+    return {
+      debut: periodeTemporelle.debut,
+      fin: periodeTemporelle.fin,
+    };
+  }
+
   async analyserQuestion(question: string): Promise<AnalyseResult> {
     this.logger.log(`Analyse de la question: ${question}`);
 
     try {
-      const structureBDD = `
-Tables principales:
-- staff: Informations sur le personnel (id, name, email, role, is_available)
-- projects: Projets en cours (id, name, description, client_id, start_date, end_date, status)
-- clients: Clients de l'entreprise (id, name, email, phone, address)
-- timesheet_entries: Heures travaillées (id, staff_id, project_id, date, hours, description)
-- calendar_events: Événements du calendrier (id, staff_id, title, start_date, end_date, type)
-- project_staff: Affectation du personnel aux projets (project_id, staff_id, role, start_date, end_date)
-- tasks: Tâches à réaliser (id, project_id, title, description, status, priority, assigned_to, due_date)
-- documents: Documents liés aux projets (id, project_id, title, file_path, upload_date, type)
-- invoices: Factures (id, client_id, project_id, amount, issue_date, due_date, status)
-- payments: Paiements reçus (id, invoice_id, amount, payment_date, method)
-- quotations: Devis (id, client_id, project_id, amount, issue_date, valid_until, status)
-- materials: Matériaux utilisés (id, name, unit, unit_price, stock_quantity)
-- project_materials: Matériaux utilisés par projet (project_id, material_id, quantity, cost)
-`;
-
       const prompt = [
-        "En tant qu'assistant spécialisé pour Technidalle, une entreprise de bâtiment, analyse la question suivante en tenant compte de la structure de notre base de données :",
+        "En tant qu'assistant spécialisé pour Technidalle, analyse la question suivante :",
         '',
         `Question : "${question}"`,
         '',
-        'Structure de la base de données :',
-        structureBDD,
+        'INSTRUCTIONS IMPORTANTES :',
+        '1. Détecter les expressions temporelles comme :',
+        '   - "semaine pro/prochaine" -> calculer les dates exactes à partir de la date actuelle',
+        '   - "mois prochain" -> calculer les dates exactes à partir de la date actuelle',
+        '   - "entre [date1] et [date2]" -> extraire les dates',
+        '   - "du [date1] au [date2]" -> extraire les dates',
+        '   - "à partir du [date]" -> extraire la date de début',
+        '   - "jusqu\'au [date]" -> extraire la date de fin',
         '',
-        'Analyse la question et détermine :',
-        '1. Si elle nécessite une requête SQL (DATABASE)',
-        '2. Si elle nécessite une recherche textuelle (SEARCH)',
-        '3. Si elle nécessite des connaissances générales (KNOWLEDGE)',
-        '4. Si elle concerne un processus métier (WORKFLOW)',
-        "5. Si c'est une question générale (GENERAL)",
+        '2. Pour les questions sur le personnel :',
+        '   - Inclure les tables : staff, project_staff, calendar_events',
+        '   - Ajouter la condition : staff.is_available = true',
+        '   - Calculer les dates dynamiquement (ex: semaine prochaine = date_actuelle + 7 jours)',
         '',
-        'Pour les questions de type DATABASE, identifie précisément :',
-        '- Les tables principales concernées',
-        '- Les jointures nécessaires',
-        '- Les conditions de filtrage (notamment temporelles)',
-        '- Les champs à sélectionner',
-        '- Si la question concerne une période spécifique (semaine prochaine, mois prochain, etc.)',
-        '',
-        'IMPORTANT pour les périodes temporelles :',
-        '- Si la question mentionne "semaine prochaine" ou "semaine pro", calcule les dates réelles',
-        "- Aujourd'hui nous sommes le " +
-          new Date().toISOString().split('T')[0],
-        '- La semaine prochaine commence le ' +
-          (() => {
-            const today = new Date();
-            const nextMonday = new Date(today);
-            nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
-            return nextMonday.toISOString().split('T')[0];
-          })(),
-        '- La semaine prochaine se termine le ' +
-          (() => {
-            const today = new Date();
-            const nextMonday = new Date(today);
-            nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
-            const nextSunday = new Date(nextMonday);
-            nextSunday.setDate(nextMonday.getDate() + 6);
-            return nextSunday.toISOString().split('T')[0];
-          })(),
-        '',
-        'IMPORTANT pour les questions sur le personnel et la disponibilité :',
-        '- Inclure toujours les tables "staff", "project_staff" et "calendar_events"',
-        '- La disponibilité est indiquée par le champ "is_available" dans la table "staff"',
-        '- Les affectations aux projets sont dans la table "project_staff"',
-        '- Les événements du calendrier sont dans la table "calendar_events"',
-        '',
-        'IMPORTANT: Réponds UNIQUEMENT avec un objet JSON valide, sans formatage supplémentaire (pas de backticks, pas de "```json", etc.) :',
+        'Format de réponse JSON attendu :',
         '{',
-        '  "categorie": "DATABASE|SEARCH|KNOWLEDGE|WORKFLOW|GENERAL",',
-        '  "explication": "Explique pourquoi cette catégorie",',
-        '  "tables_concernees": ["nom_table1", "nom_table2"],',
-        '  "intention": "Description de l\'intention",',
-        '  "entites": ["entité1", "entité2"],',
-        '  "periode_temporelle": {',
-        '    "debut": "YYYY-MM-DD",',
-        '    "fin": "YYYY-MM-DD",',
-        '    "precision": "JOUR|SEMAINE|MOIS"',
+        '  "questionCorrigee": "...",',
+        '  "intention": "verifier_disponibilite|consulter_planning|...",',
+        '  "categorie": "DATABASE",',
+        '  "metadonnees": {',
+        '    "tablesIdentifiees": {',
+        '      "principales": [{"nom": "staff"}],',
+        '      "jointures": [{"nom": "project_staff"}, {"nom": "calendar_events"}],',
+        '      "conditions": ["staff.is_available = true"]',
+        '    },',
+        '    "periodeTemporelle": {',
+        '      "debut": "YYYY-MM-DD",',
+        '      "fin": "YYYY-MM-DD",',
+        '      "precision": "JOUR|SEMAINE|MOIS",',
+        '      "type": "DYNAMIQUE|FIXE"',
+        '    }',
         '  }',
         '}',
       ].join('\n');
 
-      const response = await axios.post<OpenAIResponse>(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content:
-                "Tu es un assistant spécialisé dans l'analyse de questions pour une entreprise de bâtiment. Tu réponds UNIQUEMENT avec un objet JSON valide, sans formatage supplémentaire.",
-            },
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: 0.2,
-          max_tokens: 1000,
-          response_format: { type: 'json_object' },
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.openaiApiKey}`,
+      const completion = await this.openaiService.createCompletion({
+        model:
+          this.configService.get<string>('OPENAI_MODEL') ||
+          'gpt-4-turbo-preview',
+        messages: [
+          {
+            role: 'system',
+            content: prompt,
           },
-          timeout: 15000,
-        },
-      );
+          {
+            role: 'user',
+            content: question,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+      });
 
-      if (!response.data?.choices?.[0]?.message?.content) {
+      if (!completion?.choices?.[0]?.message?.content) {
         throw new Error('Format de réponse OpenAI invalide');
       }
 
       const analysedResponse = JSON.parse(
-        response.data.choices[0].message.content,
-      ) as AnalyseAIResponse;
+        completion.choices[0].message.content,
+      ) as {
+        questionCorrigee: string;
+        intention: string;
+        categorie: QuestionCategory;
+        metadonnees: {
+          tablesIdentifiees: {
+            principales: Array<{ nom: string }>;
+            jointures: Array<{ nom: string }>;
+            conditions: string[];
+          };
+          periodeTemporelle?: {
+            debut: string;
+            fin: string;
+            precision: string;
+          };
+        };
+      };
+
+      // Calculer les dates dynamiques si nécessaire
+      if (analysedResponse.metadonnees.periodeTemporelle) {
+        const periodeAvecType = {
+          ...analysedResponse.metadonnees.periodeTemporelle,
+          type: 'DYNAMIQUE' as const,
+          precision: analysedResponse.metadonnees.periodeTemporelle.precision as 'JOUR' | 'SEMAINE' | 'MOIS',
+        };
+        const dates = this.calculerDatesDynamiques(periodeAvecType);
+        analysedResponse.metadonnees.periodeTemporelle.debut = dates.debut;
+        analysedResponse.metadonnees.periodeTemporelle.fin = dates.fin;
+      }
 
       return {
         questionCorrigee: question,
@@ -506,17 +539,14 @@ Tables principales:
         categorie: analysedResponse.categorie,
         agentCible: this.determinerAgent(analysedResponse.categorie),
         priorite: PrioriteType.NORMAL,
-        entites: analysedResponse.entites,
-        contexte: analysedResponse.explication,
+        entites: [],
+        contexte: '',
         metadonnees: {
-          tablesConcernees: analysedResponse.tables_concernees,
-          tablesIdentifiees: {
-            principales: analysedResponse.tables_concernees.map((table) => ({
-              nom: table,
-            })),
-            jointures: [],
-            conditions: [],
-          },
+          tablesConcernees:
+            analysedResponse.metadonnees.tablesIdentifiees.principales.map(
+              (t) => t.nom,
+            ),
+          tablesIdentifiees: analysedResponse.metadonnees.tablesIdentifiees,
           champsRequis: {
             selection: [],
             filtres: [],
@@ -526,7 +556,7 @@ Tables principales:
             temporels: [],
             logiques: [],
           },
-          periodeTemporelle: analysedResponse.periode_temporelle || {},
+          periodeTemporelle: analysedResponse.metadonnees.periodeTemporelle,
           parametresRequete: {
             tri: [],
             limite: 100,
@@ -535,17 +565,9 @@ Tables principales:
       };
     } catch (error) {
       this.logger.error(
-        `Erreur lors de l'analyse de la question: ${(error as Error).message}`,
+        `Erreur lors de l'analyse de la question: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
-      return {
-        questionCorrigee: question,
-        intention: 'obtenir_information',
-        categorie: QuestionCategory.GENERAL,
-        agentCible: AgentType.GENERAL,
-        priorite: PrioriteType.NORMAL,
-        entites: [],
-        contexte: '',
-      };
+      throw error;
     }
   }
 

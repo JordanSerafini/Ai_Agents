@@ -46,7 +46,9 @@ export class QueryBuilderService {
         questionText = parsedQuestion.questionCorrigee;
         this.logger.log('Métadonnées structurées détectées dans la question');
       } catch (error) {
-        this.logger.warn('Question reçue sans métadonnées structurées');
+        this.logger.warn(
+          `Question reçue sans métadonnées structurées: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
       }
 
       // Résultat par défaut en cas d'échec
@@ -119,37 +121,10 @@ export class QueryBuilderService {
           temporalConditions = this.processTemporalFilters(
             metadata.filtres.temporels,
             metadata.periodeTemporelle,
-            questionText,
           );
         }
 
-        // Ajouter des conditions temporelles basées sur le texte de la question
-        if (
-          questionText.toLowerCase().includes('semaine pro') ||
-          questionText.toLowerCase().includes('semaine prochaine')
-        ) {
-          const today = new Date();
-          const nextMonday = new Date(today);
-          nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
-
-          const nextSunday = new Date(nextMonday);
-          nextSunday.setDate(nextMonday.getDate() + 6);
-
-          const mondayStr = nextMonday.toISOString().split('T')[0];
-          const sundayStr = nextSunday.toISOString().split('T')[0];
-
-          temporalConditions.push(`(
-            calendar_events.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR 
-            calendar_events.end_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
-            project_staff.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
-            project_staff.end_date BETWEEN '${mondayStr}' AND '${sundayStr}'
-          )`);
-
-          this.logger.log(
-            `Ajout de condition temporelle pour la semaine prochaine: ${mondayStr} à ${sundayStr}`,
-          );
-        }
-
+        // Suppression de la duplication des conditions temporelles ici
         conditions = [...conditions, ...temporalConditions];
 
         this.logger.log(`Tables identifiées: ${tables.join(', ')}`);
@@ -552,11 +527,10 @@ export class QueryBuilderService {
       fin?: string;
       precision?: string;
     },
-    question?: string,
   ): string[] {
     const conditions: string[] = [];
 
-    // Ajouter les filtres temporels explicites, mais filtrer ceux qui contiennent "date" générique
+    // Ajouter les filtres temporels explicites fournis par l'agent d'analyse
     if (temporalFilters && temporalFilters.length > 0) {
       const validFilters = temporalFilters.filter(
         (filter) =>
@@ -565,7 +539,7 @@ export class QueryBuilderService {
       conditions.push(...validFilters);
     }
 
-    // Traiter la période temporelle si elle est définie
+    // Utiliser la période temporelle fournie par l'agent d'analyse
     if (periodInfo && periodInfo.debut && periodInfo.fin) {
       // Ne pas ajouter de condition si les dates sont au format YYYY-MM-DD (valeurs par défaut)
       if (
@@ -578,120 +552,6 @@ export class QueryBuilderService {
           project_staff.start_date BETWEEN '${periodInfo.debut}' AND '${periodInfo.fin}' OR
           project_staff.end_date BETWEEN '${periodInfo.debut}' AND '${periodInfo.fin}'
         )`);
-      } else {
-        // Si les dates sont des valeurs par défaut, utiliser les dates calculées
-        if (
-          question &&
-          (question.toLowerCase().includes('semaine pro') ||
-            question.toLowerCase().includes('semaine prochaine'))
-        ) {
-          const today = new Date();
-          const nextMonday = new Date(today);
-          nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
-
-          const nextSunday = new Date(nextMonday);
-          nextSunday.setDate(nextMonday.getDate() + 6);
-
-          const mondayStr = nextMonday.toISOString().split('T')[0];
-          const sundayStr = nextSunday.toISOString().split('T')[0];
-
-          conditions.push(`(
-            calendar_events.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR 
-            calendar_events.end_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
-            project_staff.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
-            project_staff.end_date BETWEEN '${mondayStr}' AND '${sundayStr}'
-          )`);
-
-          this.logger.log(
-            `Ajout de condition temporelle pour la semaine prochaine: ${mondayStr} à ${sundayStr}`,
-          );
-        } else if (
-          question &&
-          question.toLowerCase().includes('mois prochain')
-        ) {
-          const today = new Date();
-          const firstDayNextMonth = new Date(
-            today.getFullYear(),
-            today.getMonth() + 1,
-            1,
-          );
-          const lastDayNextMonth = new Date(
-            today.getFullYear(),
-            today.getMonth() + 2,
-            0,
-          );
-
-          const firstDayStr = firstDayNextMonth.toISOString().split('T')[0];
-          const lastDayStr = lastDayNextMonth.toISOString().split('T')[0];
-
-          conditions.push(`(
-            calendar_events.start_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR 
-            calendar_events.end_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR
-            project_staff.start_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR
-            project_staff.end_date BETWEEN '${firstDayStr}' AND '${lastDayStr}'
-          )`);
-
-          this.logger.log(
-            `Ajout de condition temporelle pour le mois prochain: ${firstDayStr} à ${lastDayStr}`,
-          );
-        }
-      }
-    } else {
-      // Si aucune période n'est définie, détecter les périodes temporelles dans la question
-      if (question) {
-        if (
-          question.toLowerCase().includes('semaine pro') ||
-          question.toLowerCase().includes('semaine prochaine')
-        ) {
-          const today = new Date();
-          const nextMonday = new Date(today);
-          nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7));
-
-          const nextSunday = new Date(nextMonday);
-          nextSunday.setDate(nextMonday.getDate() + 6);
-
-          const mondayStr = nextMonday.toISOString().split('T')[0];
-          const sundayStr = nextSunday.toISOString().split('T')[0];
-
-          conditions.push(`(
-            calendar_events.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR 
-            calendar_events.end_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
-            project_staff.start_date BETWEEN '${mondayStr}' AND '${sundayStr}' OR
-            project_staff.end_date BETWEEN '${mondayStr}' AND '${sundayStr}'
-          )`);
-
-          this.logger.log(
-            `Ajout de condition temporelle pour la semaine prochaine: ${mondayStr} à ${sundayStr}`,
-          );
-        }
-
-        if (question.toLowerCase().includes('mois prochain')) {
-          const today = new Date();
-          const firstDayNextMonth = new Date(
-            today.getFullYear(),
-            today.getMonth() + 1,
-            1,
-          );
-          const lastDayNextMonth = new Date(
-            today.getFullYear(),
-            today.getMonth() + 2,
-            0,
-          );
-
-          const firstDayStr = firstDayNextMonth.toISOString().split('T')[0];
-          const lastDayStr = lastDayNextMonth.toISOString().split('T')[0];
-
-          conditions.push(`(
-            calendar_events.start_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR 
-            calendar_events.end_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR
-            project_staff.start_date BETWEEN '${firstDayStr}' AND '${lastDayStr}' OR
-            project_staff.end_date BETWEEN '${firstDayStr}' AND '${lastDayStr}'
-          )`);
-
-          this.logger.log(
-            `Ajout de condition temporelle pour le mois prochain: ${firstDayStr} à ${lastDayStr}`,
-          );
-        }
       }
     }
 
