@@ -212,13 +212,23 @@ export class RouterService {
         conditions: [
           ...(analyseResult.metadonnees.filtres?.temporels || []).map((filtre) => {
             const periodeTemporelle = analyseResult.metadonnees?.periodeTemporelle;
+            
+            // Extraire les noms des placeholders de l'expression pour garantir la correspondance
+            const placeholderRegex = /:([a-zA-Z0-9_]+)/g;
+            const matches = [...filtre.matchAll(placeholderRegex)];
+            const placeholders = matches.map(match => match[1]);
+            
+            // Créer les paramètres avec les placeholders exacts de l'expression
+            const parametres = {};
+            if (placeholders.length >= 2) {
+              parametres[placeholders[0]] = periodeTemporelle?.debut;
+              parametres[placeholders[1]] = periodeTemporelle?.fin;
+            }
+            
             return {
               type: 'TEMPOREL' as const,
               expression: filtre,
-              parametres: {
-                debut_semaine_prochaine: periodeTemporelle?.debut,
-                fin_semaine_prochaine: periodeTemporelle?.fin
-              },
+              parametres: parametres
             };
           }),
           ...(analyseResult.metadonnees.filtres?.logiques || []).map((filtre) => ({

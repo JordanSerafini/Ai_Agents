@@ -678,6 +678,20 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
             analysisResult.analyse_semantique.temporalite.periode,
           );
 
+          // Déterminer le type de période pour les noms de placeholders
+          let prefixePeriode = 'periode';
+          if (analysisResult.analyse_semantique.temporalite.periode.precision === 'SEMAINE') {
+            prefixePeriode = 'semaine_pro';
+          } else if (analysisResult.analyse_semantique.temporalite.periode.precision === 'MOIS') {
+            prefixePeriode = 'mois_pro';
+          } else if (analysisResult.analyse_semantique.temporalite.periode.precision === 'ANNEE') {
+            prefixePeriode = 'annee';
+          }
+
+          // Créer des noms de placeholders cohérents
+          const debutPlaceholder = `debut_${prefixePeriode}`;
+          const finPlaceholder = `fin_${prefixePeriode}`;
+
           const structuredQuery: AnalyseQueryData = {
             tables: analysisResult.structure_requete.tables.map((table) => ({
               nom: table.nom,
@@ -690,17 +704,17 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
               if (cond.type === 'TEMPOREL') {
                 return {
                   type: 'TEMPOREL',
-                  expression: "ce.start_date >= :debut_semaine_prochaine AND ce.end_date <= :fin_semaine_prochaine",
+                  expression: `ce.start_date >= :${debutPlaceholder} AND ce.end_date <= :${finPlaceholder}`,
                   parametres: {
-                    debut_semaine_prochaine: dates.debut,
-                    fin_semaine_prochaine: dates.fin,
-                  },
+                    [debutPlaceholder]: dates.debut,
+                    [finPlaceholder]: dates.fin
+                  }
                 };
               }
               return {
                 type: 'FILTRE',
                 expression: cond.expression,
-                parametres: cond.parametres,
+                parametres: cond.parametres
               };
             }),
             groupBy: analysisResult.structure_requete.groupements,
