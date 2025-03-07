@@ -34,8 +34,8 @@ function pgTypeToEsType(column) {
         'integer': { type: 'integer' },
         'bigint': { type: 'long' },
         'smallint': { type: 'short' },
-        'decimal': { type: 'double', scaling_factor: 100 },
-        'numeric': { type: 'double', scaling_factor: 100 },
+        'decimal': { type: 'double' },
+        'numeric': { type: 'double' },
         'real': { type: 'float' },
         'double precision': { type: 'double' },
         'serial': { type: 'integer' },
@@ -89,11 +89,11 @@ function pgTypeToEsType(column) {
         // JSON
         'json': { 
             type: 'object',
-            dynamic: true
+            enabled: true
         },
         'jsonb': { 
             type: 'object',
-            dynamic: true
+            enabled: true
         },
 
         // UUID et binaires
@@ -118,11 +118,7 @@ function pgTypeToEsType(column) {
     if (pgType.endsWith('[]')) {
         const baseTypeName = pgType.slice(0, -2);
         const baseMapping = typeConfig[baseTypeName] || { type: 'text' };
-        return {
-            type: 'array',
-            array: true,
-            items: baseMapping
-        };
+        return baseMapping;
     }
 
     // Gestion des types enum personnalisés
@@ -131,6 +127,14 @@ function pgTypeToEsType(column) {
         if (column.udt_name && column.udt_name.endsWith('_enum')) {
             return { type: 'keyword' };
         }
+    }
+
+    // Gestion spéciale des champs numériques avec précision
+    if (column.numeric_precision && (baseType === 'numeric' || baseType === 'decimal')) {
+        return {
+            type: 'double',
+            coerce: true
+        };
     }
 
     return typeConfig[baseType] || { 
@@ -265,8 +269,8 @@ async function createIndices(tables) {
 async function main() {
     try {
         // Attendre que les services soient prêts
-        console.log('Attente de 30 secondes pour que les services soient prêts...');
-        await new Promise(resolve => setTimeout(resolve, 30000));
+        console.log('Attente de 10 secondes pour que les services soient prêts...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
         
         // Vérifier la connexion à Elasticsearch
         await elasticClient.ping();
