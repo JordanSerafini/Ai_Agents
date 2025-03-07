@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { OpenAIService } from './openai.service';
-import { PrioriteType } from '../interfaces/analyse.interface';
+import { PrioriteType, StaffEvent } from '../interfaces/analyse.interface';
 import { RouterService } from './router.service';
 import {
   QueryBuilderClientService,
@@ -11,31 +11,22 @@ import {
   RagClientLocalService,
 } from './clients';
 import { UserQuestionDto } from '../dto/user-question.dto';
-
-interface OpenAIResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
-}
-
-interface AnalyseAIResponse {
-  tables: string[];
-  selects: string[];
-  joins?: Array<{
-    table: string;
-    condition: string;
-  }>;
-  filters?: string[];
-  groupBy?: string[];
-  orderBy?: string[];
-  limit?: number;
-  metadata?: {
-    intention: string;
-    description: string;
-  };
-}
+import {
+  AnalyseResult,
+  AnalyseSemantiqueResponse,
+  QuestionCategory,
+  AgentType,
+  RouterResponse,
+  OpenAIResponse,
+} from '../interfaces/analyse.interface';
+import {
+  CacheService,
+  ConversationService,
+  CategorizationService,
+  TemporalService,
+  FormatterService,
+  QueryAnalysisService,
+} from './analyse';
 
 interface CacheEntry {
   reponse: string;
@@ -50,175 +41,6 @@ interface ConversationHistory {
     timestamp: number;
   }>;
   lastInteraction: number;
-}
-
-// Types de classification des questions
-export enum QuestionCategory {
-  GENERAL = 'GENERAL',
-  DATABASE = 'DATABASE',
-  SEARCH = 'SEARCH',
-  KNOWLEDGE = 'KNOWLEDGE',
-  WORKFLOW = 'WORKFLOW',
-}
-
-// Types d'agents disponibles
-export enum AgentType {
-  GENERAL = 'general',
-  QUERYBUILDER = 'querybuilder',
-  ELASTICSEARCH = 'elasticsearch',
-  RAG = 'rag',
-  WORKFLOW = 'workflow',
-  DATABASE = 'database',
-  SEARCH = 'search',
-}
-
-// Interface pour la réponse d'analyse
-export interface AnalyseResult {
-  questionCorrigee: string;
-  intention: string;
-  categorie: QuestionCategory;
-  agentCible: AgentType;
-  priorite: PrioriteType;
-  entites: string[];
-  contexte: string;
-  informationsManquantes?: string[];
-  questionsComplementaires?: string[];
-  reponseAgent?: any;
-  metadonnees?: {
-    tablesConcernees: string[];
-    periodeTemporelle?: PeriodeTemporelle;
-    tablesIdentifiees?: {
-      principales: Array<{ nom: string; alias?: string; colonnes?: string[] }>;
-      jointures: Array<{
-        nom: string;
-        alias?: string;
-        colonnes?: string[];
-        condition?: string;
-      }>;
-      conditions: string[];
-    };
-    champsRequis?: {
-      selection: string[];
-      filtres: string[];
-      groupement: string[];
-    };
-    filtres?: {
-      temporels: string[];
-      logiques: string[];
-    };
-    parametresRequete?: {
-      tri: string[];
-      limite: number;
-    };
-  };
-}
-
-interface PeriodeTemporelle {
-  debut: string;
-  fin: string;
-  precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
-  type: 'DYNAMIQUE' | 'FIXE';
-}
-
-interface StaffEvent {
-  id: number;
-  firstname: string;
-  lastname: string;
-  title: string;
-  start_date: string;
-  end_date: string;
-  location: string;
-}
-
-interface RouterResponse {
-  reponse: string;
-  resultats?: StaffEvent[];
-}
-
-export interface AnalyseQueryData {
-  tables: Array<{
-    nom: string;
-    alias: string;
-    type: 'PRINCIPALE' | 'JOINTE';
-    colonnes: string[];
-    condition_jointure?: string;
-  }>;
-  conditions?: Array<{
-    type: 'FILTRE' | 'TEMPOREL';
-    expression: string;
-    parametres?: Record<string, unknown>;
-  }>;
-  groupBy?: string[];
-  orderBy?: string[];
-  limit?: number;
-  metadata?: {
-    intention: string;
-    description: string;
-  };
-}
-
-/**
- * Interface pour la réponse d'analyse sémantique structurée
- */
-export interface AnalyseSemantiqueResponse {
-  analyse_semantique: {
-    intention: {
-      action: string;
-      objectif: string;
-    };
-    temporalite: {
-      periode: {
-        type: 'DYNAMIQUE' | 'FIXE';
-        precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
-        reference: 'PASSÉ' | 'PRESENT' | 'FUTUR';
-      };
-      dates: {
-        debut?: string;
-        fin?: string;
-      };
-    };
-    entites: {
-      principale: {
-        nom: string;
-        attributs: string[];
-      };
-      secondaires: Array<{
-        nom: string;
-        relation: string;
-        attributs: string[];
-      }>;
-    };
-    contraintes: {
-      explicites: string[];
-      implicites: string[];
-    };
-    informations_demandees: {
-      champs: string[];
-      agregations: string[];
-      ordre: string[];
-    };
-  };
-  structure_requete: {
-    tables: Array<{
-      nom: string;
-      alias: string;
-      type: 'PRINCIPALE' | 'JOINTE';
-      colonnes: string[];
-      condition_jointure?: string;
-    }>;
-    conditions: Array<{
-      type: 'TEMPOREL' | 'LOGIQUE';
-      expression: string;
-      parametres?: Record<string, unknown>;
-    }>;
-    groupements: string[];
-    ordre: string[];
-  };
-  validation: {
-    colonnes_verifiees: boolean;
-    relations_coherentes: boolean;
-    types_compatibles: boolean;
-  };
 }
 
 @Injectable()
@@ -240,6 +62,12 @@ export class AnalyseService {
     private readonly elasticsearchClient: ElasticsearchClientService,
     private readonly ragClientService: RagClientLocalService,
     private readonly openaiService: OpenAIService,
+    private readonly cacheService: CacheService,
+    private readonly conversationService: ConversationService,
+    private readonly categorizationService: CategorizationService,
+    private readonly temporalService: TemporalService,
+    private readonly formatterService: FormatterService,
+    private readonly queryAnalysisService: QueryAnalysisService,
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
     if (!this.openaiApiKey) {
@@ -426,8 +254,12 @@ export class AnalyseService {
         )) as RouterResponse;
 
         if (useHistory && userId) {
-          this.addToConversationHistory(userId, 'user', question);
-          this.addToConversationHistory(
+          this.conversationService.addToConversationHistory(
+            userId,
+            'user',
+            question,
+          );
+          this.conversationService.addToConversationHistory(
             userId,
             'assistant',
             routedResponse.reponse,
@@ -439,7 +271,7 @@ export class AnalyseService {
           routedResponse.resultats
         ) {
           return {
-            reponse: this.formaterReponseDisponibilite(
+            reponse: this.formatterService.formaterReponseDisponibilite(
               routedResponse.resultats,
             ),
           };
@@ -448,7 +280,7 @@ export class AnalyseService {
         return routedResponse;
       }
 
-      // 4. Pour les questions générales, utiliser OpenAI
+      // Pour les questions générales, utiliser OpenAI
       const messages = [
         {
           role: 'system',
@@ -484,11 +316,19 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
       const reponse = response.data.choices[0].message.content.trim();
 
       // Mettre en cache UNIQUEMENT les réponses générales
-      this.saveToCache(cacheKey, reponse);
+      this.cacheService.saveToCache(cacheKey, reponse);
 
       if (useHistory && userId) {
-        this.addToConversationHistory(userId, 'user', question);
-        this.addToConversationHistory(userId, 'assistant', reponse);
+        this.conversationService.addToConversationHistory(
+          userId,
+          'user',
+          question,
+        );
+        this.conversationService.addToConversationHistory(
+          userId,
+          'assistant',
+          reponse,
+        );
       }
 
       return { reponse };
@@ -672,7 +512,7 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
       'depuis',
       'jusqua',
     ];
-    
+
     // Mots-clés indiquant une recherche
     const searchKeywords = [
       'cherche',
@@ -786,8 +626,10 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
       return enhancedAnalysis;
     } catch (error) {
-      this.logger.error(`Error enhancing analysis with RAG: ${error.message}`);
-      return `Impossible d'améliorer l'analyse avec RAG: ${error.message}`;
+      this.logger.error(
+        `Error enhancing analysis with RAG: ${(error as Error).message}`,
+      );
+      return `Impossible d'améliorer l'analyse avec RAG: ${(error as Error).message}`;
     }
   }
 
@@ -797,23 +639,38 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
       // Vérifier d'abord si la question contient des mots-clés de recherche explicites
       const searchKeywords = [
-        'cherche', 'trouve', 'recherche', 'ou est', 'localise', 'document',
-        'information sur', 'a propos de', 'concernant', 'relatif a',
-        'similaire', 'comme', 'ressemblant a', 'pareil a',
+        'cherche',
+        'trouve',
+        'recherche',
+        'ou est',
+        'localise',
+        'document',
+        'information sur',
+        'a propos de',
+        'concernant',
+        'relatif a',
+        'similaire',
+        'comme',
+        'ressemblant a',
+        'pareil a',
       ];
-      
-      const isExplicitSearch = searchKeywords.some(keyword => 
-        request.question.toLowerCase().includes(keyword.toLowerCase())
+
+      const isExplicitSearch = searchKeywords.some((keyword) =>
+        request.question.toLowerCase().includes(keyword.toLowerCase()),
       );
-      
+
       // Récupérer l'historique des conversations si disponible
       const userId = request.userId || 'anonymous';
       if (request.useHistory) {
-        this.addToConversationHistory(userId, 'user', request.question);
+        this.conversationService.addToConversationHistory(
+          userId,
+          'user',
+          request.question,
+        );
       }
 
       // Vérifier si la réponse est dans le cache
-      const cachedResponse = this.getFromCache(request.question);
+      const cachedResponse = this.cacheService.getFromCache(request.question);
       if (cachedResponse) {
         this.logger.log('Réponse trouvée dans le cache');
         return JSON.parse(cachedResponse);
@@ -821,21 +678,26 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
 
       // Si c'est une recherche explicite, forcer la catégorie SEARCH
       if (isExplicitSearch) {
-        this.logger.log('Mots-clés de recherche détectés, forçage de la catégorie SEARCH');
-        
+        this.logger.log(
+          'Mots-clés de recherche détectés, forçage de la catégorie SEARCH',
+        );
+
         const analyse: AnalyseResult = {
           questionCorrigee: request.question,
-          intention: 'recherche d\'informations',
+          intention: "recherche d'informations",
           categorie: QuestionCategory.SEARCH,
           agentCible: AgentType.ELASTICSEARCH,
           priorite: PrioriteType.NORMAL,
           entites: [],
           contexte: 'Recherche textuelle',
         };
-        
+
         // Sauvegarder dans le cache
-        this.saveToCache(request.question, JSON.stringify(analyse));
-        
+        this.cacheService.saveToCache(
+          request.question,
+          JSON.stringify(analyse),
+        );
+
         return analyse;
       }
 
@@ -848,72 +710,24 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         )) as AnalyseSemantiqueResponse;
 
         // Valider la structure de la réponse
-        if (!this.validerStructureAnalyse(analysisResult)) {
+        if (
+          !this.queryAnalysisService.validerStructureAnalyse(analysisResult)
+        ) {
           throw new Error('Format de réponse invalide');
         }
 
         try {
           // Construire la requête structurée
-          const structuredQuery: AnalyseQueryData = {
-            tables: analysisResult.structure_requete.tables.map((table) => ({
-              nom: table.nom,
-              alias: table.alias || table.nom.toLowerCase(),
-              type: table.type || 'PRINCIPALE',
-              colonnes: Array.isArray(table.colonnes) ? table.colonnes : ['*'],
-              condition_jointure:
-                table.type === 'JOINTE'
-                  ? table.condition_jointure ||
-                    `${table.alias || table.nom.toLowerCase()}.id = principale.${table.nom.toLowerCase()}_id`
-                  : undefined,
-            })),
-            conditions: analysisResult.structure_requete.conditions.map(
-              (cond) => {
-                if (cond.type === 'TEMPOREL') {
-                  return {
-                    type: 'TEMPOREL',
-                    expression:
-                      'EXTRACT(MONTH FROM i.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM i.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)',
-                    parametres: {},
-                  };
-                }
-                // S'assurer que tous les paramètres sont extraits de l'expression
-                const placeholders = this.extractPlaceholders(cond.expression);
-                const parametres = cond.parametres || {};
-
-                // Remplir les paramètres manquants avec des valeurs par défaut
-                placeholders.forEach((placeholder) => {
-                  if (!parametres[placeholder] && placeholder === 'type') {
-                    parametres[placeholder] = 'chantier'; // Valeur par défaut pour le type
-                  }
-                });
-
-                return {
-                  type: 'FILTRE' as const,
-                  expression: cond.expression,
-                  parametres: parametres,
-                };
-              },
-            ),
-            groupBy: analysisResult.structure_requete.groupements || [],
-            orderBy: analysisResult.structure_requete.ordre || [],
-            metadata: {
-              intention:
-                analysisResult.analyse_semantique.intention.action ||
-                'RECHERCHE',
-              description:
-                analysisResult.analyse_semantique.intention.objectif ||
-                'Recherche générale',
-            },
-          };
+          const structuredQuery =
+            this.queryAnalysisService.buildStructuredQuery(analysisResult);
 
           try {
             // Envoyer la requête au QueryBuilder
-            const queryResult =
-              await this.queryBuilderClient.buildQuery(structuredQuery);
+            await this.queryBuilderClient.buildQuery(structuredQuery);
 
-            const result = {
+            const result: AnalyseResult = {
               intention: analysisResult.analyse_semantique.intention.action,
-              categorie: this.determinerCategorie(
+              categorie: this.categorizationService.determinerCategorie(
                 analysisResult.analyse_semantique.intention.action,
                 request.question,
                 analysisResult.analyse_semantique.intention.action,
@@ -928,10 +742,10 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
               metadonnees: {
                 tablesConcernees: structuredQuery.tables.map((t) => t.nom),
                 periodeTemporelle: {
-                  debut: this.calculerDatesDynamiques(
+                  debut: this.temporalService.calculerDatesDynamiques(
                     analysisResult.analyse_semantique.temporalite.periode,
                   ).debut,
-                  fin: this.calculerDatesDynamiques(
+                  fin: this.temporalService.calculerDatesDynamiques(
                     analysisResult.analyse_semantique.temporalite.periode,
                   ).fin,
                   precision:
@@ -986,7 +800,10 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
             };
 
             // Sauvegarder dans le cache
-            this.saveToCache(request.question, JSON.stringify(result));
+            this.cacheService.saveToCache(
+              request.question,
+              JSON.stringify(result),
+            );
 
             return result;
           } catch (error) {
@@ -1013,29 +830,5 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
       );
       throw error;
     }
-  }
-
-  private validerStructureAnalyse(analyse: AnalyseSemantiqueResponse): boolean {
-    if (
-      !analyse?.analyse_semantique?.intention?.action ||
-      !analyse?.analyse_semantique?.intention?.objectif ||
-      !analyse?.analyse_semantique?.temporalite?.periode ||
-      !analyse?.analyse_semantique?.entites?.principale ||
-      !analyse?.structure_requete?.tables ||
-      !Array.isArray(analyse.structure_requete.tables) ||
-      analyse.structure_requete.tables.length === 0
-    ) {
-      return false;
-    }
-
-    // Vérification des tables
-    return analyse.structure_requete.tables.every(
-      (table) =>
-        table.nom &&
-        table.alias &&
-        table.type &&
-        Array.isArray(table.colonnes) &&
-        table.colonnes.length > 0,
-    );
   }
 }
