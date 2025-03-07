@@ -4,6 +4,7 @@ import { ElasticsearchModule as NestElasticsearchModule } from '@nestjs/elastics
 import { ElasticsearchService } from './services/elasticsearch.service';
 import { ElasticsearchController } from './controllers/elasticsearch.controller';
 import { ClientOptions } from '@elastic/elasticsearch';
+import { RagClientModule } from '../../services/rag.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ClientOptions } from '@elastic/elasticsearch';
       },
       inject: [ConfigService],
     }),
+    RagClientModule,
   ],
   controllers: [ElasticsearchController],
   providers: [ElasticsearchService],

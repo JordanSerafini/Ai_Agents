@@ -3,6 +3,9 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AnalyseResult, AnalyseQueryData } from './analyse.service';
+import { RagClientService } from '../../../services/rag.service';
+import { catchError } from 'rxjs/operators';
+import { AxiosError } from 'axios';
 
 interface HealthResponse {
   status: string;
@@ -103,45 +106,50 @@ export class ElasticsearchClientService {
 @Injectable()
 export class RagClientService {
   private readonly logger = new Logger(RagClientService.name);
-  private readonly baseUrl: string;
+  private readonly ragServiceUrl: string;
 
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {
-    this.baseUrl =
-      this.configService.get<string>('RAG_AGENT_URL') ||
-      'http://rag_agent:3004';
-    this.logger.log(`RAG Agent URL: ${this.baseUrl}`);
+    this.ragServiceUrl = this.configService.get<string>('RAG_SERVICE_URL', 'http://rag-agent:3000');
   }
 
-  async getKnowledge(question: string, analyse: AnalyseResult): Promise<any> {
+  async query(query: string): Promise<string> {
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.baseUrl}/rag/knowledge`, {
-          question,
-          contexte: analyse.contexte,
-          entites: analyse.entites,
-        }),
+      const { data } = await firstValueFrom(
+        this.httpService
+          .post(`${this.ragServiceUrl}/rag/query`, { query })
+          .pipe(
+            catchError((error: AxiosError) => {
+              this.logger.error(`Error querying RAG service: ${error.message}`);
+              throw error;
+            }),
+          ),
       );
-      return response.data;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
-      this.logger.error(`Erreur lors de la récupération des connaissances: ${errorMessage}`);
-      throw new Error(`Erreur lors de la récupération des connaissances: ${errorMessage}`);
+      return data;
+    } catch (error) {
+      this.logger.error(`Failed to query RAG service: ${error.message}`);
+      throw error;
     }
   }
 
-  async checkHealth(): Promise<boolean> {
+  async indexAndQuery(document: any, query: string): Promise<string> {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get<HealthResponse>(`${this.baseUrl}/rag/health`),
+      const { data } = await firstValueFrom(
+        this.httpService
+          .post(`${this.ragServiceUrl}/rag/index-and-query`, { document, query })
+          .pipe(
+            catchError((error: AxiosError) => {
+              this.logger.error(`Error in index and query RAG service: ${error.message}`);
+              throw error;
+            }),
+          ),
       );
-      return response.data?.status === 'ok';
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
-      this.logger.error(`Erreur lors de la vérification de la santé du service RAG: ${errorMessage}`);
-      return false;
+      return data;
+    } catch (error) {
+      this.logger.error(`Failed to index and query RAG service: ${error.message}`);
+      throw error;
     }
   }
 }

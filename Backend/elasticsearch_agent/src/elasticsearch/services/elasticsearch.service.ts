@@ -28,6 +28,7 @@ import {
 } from '../dto/response.dto';
 import { SearchRequestDto } from '../dto/request.dto';
 import { SearchTotalHits } from '@elastic/elasticsearch/lib/api/types';
+import { RagClientService } from '../../../services/rag.service';
 
 @Injectable()
 export class ElasticsearchService {
@@ -38,6 +39,7 @@ export class ElasticsearchService {
   constructor(
     private readonly esService: NestElasticsearchService,
     private readonly configService: ConfigService,
+    private readonly ragClientService: RagClientService,
   ) {
     this.defaultIndex = this.configService.get<string>(
       'ELASTICSEARCH_DEFAULT_INDEX',
@@ -368,5 +370,29 @@ export class ElasticsearchService {
         ],
       },
     });
+  }
+
+  async enhanceSearchWithRag(query: string, documents: any[]): Promise<any> {
+    try {
+      this.logger.log(`Enhancing search with RAG: ${query}`);
+      
+      // Convertir les documents en format approprié pour le RAG
+      const document = {
+        content: documents.map(doc => JSON.stringify(doc)).join('\n'),
+        title: `Search results for: ${query}`,
+        timestamp: new Date().toISOString(),
+      };
+      
+      // Utiliser le service RAG pour améliorer les résultats
+      const enhancedResults = await this.ragClientService.indexAndQuery(document, query);
+      
+      return {
+        original_results: documents,
+        enhanced_context: enhancedResults,
+      };
+    } catch (error) {
+      this.logger.error(`Error enhancing search with RAG: ${error.message}`);
+      return { original_results: documents };
+    }
   }
 }

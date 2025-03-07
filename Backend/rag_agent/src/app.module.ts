@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+
 import { DocumentModule } from './document/document.module';
 import { RagModule } from './rag/rag.module';
 
@@ -13,7 +12,7 @@ import { RagModule } from './rag/rag.module';
     DocumentModule,
     RagModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}

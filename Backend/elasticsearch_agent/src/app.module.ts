@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
+import { RagClientModule } from './services/rag.module';
 
 @Module({
   imports: [
@@ -8,6 +9,7 @@ import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
       isGlobal: true,
     }),
     ElasticsearchModule,
+    RagClientModule,
   ],
   controllers: [],
   providers: [],

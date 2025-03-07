@@ -238,7 +238,7 @@ export class AnalyseService {
     private readonly routerService: RouterService,
     private readonly queryBuilderClient: QueryBuilderClientService,
     private readonly elasticsearchClient: ElasticsearchClientService,
-    private readonly ragClient: RagClientService,
+    private readonly ragClientService: RagClientService,
     private readonly openaiService: OpenAIService,
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
@@ -890,6 +890,27 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         return AgentType.WORKFLOW;
       default:
         return AgentType.GENERAL;
+    }
+  }
+
+  async enhanceAnalysisWithRag(query: string, context: any): Promise<string> {
+    try {
+      this.logger.log(`Enhancing analysis with RAG: ${query}`);
+      
+      // Convertir le contexte en format approprié pour le RAG
+      const document = {
+        content: JSON.stringify(context),
+        title: `Analysis context for: ${query}`,
+        timestamp: new Date().toISOString(),
+      };
+      
+      // Utiliser le service RAG pour améliorer l'analyse
+      const enhancedAnalysis = await this.ragClientService.indexAndQuery(document, query);
+      
+      return enhancedAnalysis;
+    } catch (error) {
+      this.logger.error(`Error enhancing analysis with RAG: ${error.message}`);
+      return `Impossible d'améliorer l'analyse avec RAG: ${error.message}`;
     }
   }
 }

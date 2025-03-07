@@ -6,6 +6,7 @@ import {
   AnalyseQueryData,
   QueryBuilderResult,
 } from '../interfaces/query-builder.types';
+import { RagClientService } from '../../services/rag.service';
 
 @Injectable()
 export class QueryBuilderService {
@@ -15,6 +16,7 @@ export class QueryBuilderService {
     private readonly validatorService: QueryValidatorService,
     private readonly configService: QueryConfigService,
     private readonly databaseService: DatabaseService,
+    private readonly ragClientService: RagClientService,
   ) {}
 
   async buildQuery(
@@ -55,12 +57,26 @@ export class QueryBuilderService {
       this.logger.debug('Construction de la requête terminée avec succès');
       return response;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erreur inconnue';
-      this.logger.error(`Erreur lors de la génération de la requête SQL: ${message}`);
+      const message =
+        error instanceof Error ? error.message : 'Erreur inconnue';
+      this.logger.error(
+        `Erreur lors de la génération de la requête SQL: ${message}`,
+      );
       return {
         success: false,
         error: `Erreur lors de la génération de la requête SQL: ${message}`,
       };
+    }
+  }
+
+  async enhanceQueryWithRag(query: string): Promise<string> {
+    try {
+      this.logger.log(`Enhancing query with RAG: ${query}`);
+      const enhancedQuery = await this.ragClientService.query(query);
+      return enhancedQuery;
+    } catch (error) {
+      this.logger.error(`Error enhancing query with RAG: ${error.message}`);
+      return query; // Fallback to original query if RAG fails
     }
   }
 }

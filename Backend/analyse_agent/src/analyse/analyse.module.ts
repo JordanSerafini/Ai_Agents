@@ -12,6 +12,7 @@ import {
   RagClientService,
 } from './services/clients';
 import { OpenAIService } from './services/openai.service';
+import { RagClientModule } from '../../services/rag.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { OpenAIService } from './services/openai.service';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    RagClientModule,
   ],
   controllers: [AnalyseController],
   providers: [
