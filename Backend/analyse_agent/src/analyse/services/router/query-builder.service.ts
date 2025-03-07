@@ -94,9 +94,23 @@ export class QueryBuilderService {
    * Construit les données de requête à partir des métadonnées d'analyse
    */
   private buildQueryData(analyseResult: AnalyseResult): AnalyseQueryData {
+    // S'assurer que les métadonnées et les tables identifiées existent
+    if (!analyseResult.metadonnees || !analyseResult.metadonnees.tablesIdentifiees) {
+      return {
+        tables: [],
+        metadata: {
+          intention: analyseResult.intention || '',
+          description: analyseResult.contexte || '',
+        },
+      };
+    }
+
+    const metadonnees = analyseResult.metadonnees;
+    const tablesIdentifiees = metadonnees.tablesIdentifiees;
+
     return {
       tables: [
-        ...analyseResult.metadonnees.tablesIdentifiees.principales.map(
+        ...(tablesIdentifiees.principales || []).map(
           (table) => ({
             nom: table.nom,
             alias: table.alias || table.nom.charAt(0),
@@ -104,7 +118,7 @@ export class QueryBuilderService {
             colonnes: table.colonnes || ['*'],
           }),
         ),
-        ...analyseResult.metadonnees.tablesIdentifiees.jointures.map(
+        ...(tablesIdentifiees.jointures || []).map(
           (table) => ({
             nom: table.nom,
             alias: table.alias || table.nom.charAt(0),
@@ -115,20 +129,20 @@ export class QueryBuilderService {
         ),
       ],
       conditions: [
-        ...(analyseResult.metadonnees.filtres?.temporels || []).map((filtre) =>
-          this.processTemporalFilter(filtre, analyseResult),
-        ),
-        ...(analyseResult.metadonnees.filtres?.logiques || []).map((filtre) =>
-          this.processLogicalFilter(filtre),
-        ),
+        ...((metadonnees.filtres?.temporels || []).map(
+          (filtre) => this.processTemporalFilter(filtre, analyseResult),
+        )),
+        ...((metadonnees.filtres?.logiques || []).map(
+          (filtre) => this.processLogicalFilter(filtre),
+        )),
       ],
       metadata: {
         intention: analyseResult.intention || '',
         description: analyseResult.contexte || '',
-        champsRequis: analyseResult.metadonnees.champsRequis?.selection,
+        champsRequis: metadonnees.champsRequis?.selection,
         parametresRequete: {
-          tri: analyseResult.metadonnees.parametresRequete?.tri,
-          limite: analyseResult.metadonnees.parametresRequete?.limite,
+          tri: metadonnees.parametresRequete?.tri || [],
+          limite: metadonnees.parametresRequete?.limite || 100,
         },
       },
     };
@@ -199,13 +213,16 @@ export class QueryBuilderService {
       if (placeholders.length === 1) {
         // Un seul placeholder, utiliser la même date pour début et fin
         parametres[placeholders[0]] =
-          periodeTemporelle?.debut || new Date().toISOString().split('T')[0];
+          periodeTemporelle?.debut ||
+          new Date().toISOString().split('T')[0];
       } else {
         // Deux placeholders ou plus
         parametres[placeholders[0]] =
-          periodeTemporelle?.debut || new Date().toISOString().split('T')[0];
+          periodeTemporelle?.debut ||
+          new Date().toISOString().split('T')[0];
         parametres[placeholders[1]] =
-          periodeTemporelle?.fin || new Date().toISOString().split('T')[0];
+          periodeTemporelle?.fin ||
+          new Date().toISOString().split('T')[0];
       }
     }
 

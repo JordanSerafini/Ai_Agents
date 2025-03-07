@@ -1,5 +1,3 @@
-import { PrioriteType } from './priorite.interface';
-
 // Types de classification des questions
 export enum QuestionCategory {
   GENERAL = 'GENERAL',
@@ -18,6 +16,14 @@ export enum AgentType {
   WORKFLOW = 'workflow',
   DATABASE = 'database',
   SEARCH = 'search',
+}
+
+// Types de priorité
+export enum PrioriteType {
+  URGENT = 'URGENT',
+  HAUTE = 'HAUTE',
+  NORMAL = 'NORMAL',
+  BASSE = 'BASSE',
 }
 
 // Interface pour la réponse d'analyse
@@ -213,12 +219,6 @@ export interface IntentionConfig {
     parameters?: Record<string, any>;
   }[];
   confiance: number;
-}
-
-export enum PrioriteType {
-  URGENT = 'URGENT',
-  NORMAL = 'NORMAL',
-  BASSE = 'BASSE',
 }
 
 // Configuration de l'entreprise

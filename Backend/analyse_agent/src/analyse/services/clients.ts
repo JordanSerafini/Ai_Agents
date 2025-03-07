@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
-import { AnalyseResult, AnalyseQueryData } from './analyse.service';
+import { AnalyseResult } from '../interfaces/analyse.interface';
+import { AnalyseQueryData } from '../../querybuilder/interfaces/query-builder.types';
 import { catchError } from 'rxjs/operators';
 import { AxiosError } from 'axios';
 
@@ -148,6 +149,36 @@ export class RagClientLocalService {
       return data;
     } catch (error) {
       this.logger.error(`Failed to index and query RAG service: ${error.message}`);
+      throw error;
+    }
+  }
+}
+
+    }
+  }
+
+  async indexAndQuery(document: any, query: string): Promise<string> {
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService
+          .post(`${this.ragServiceUrl}/rag/index-and-query`, {
+            document,
+            query,
+          })
+          .pipe(
+            catchError((error: AxiosError) => {
+              this.logger.error(
+                `Error in index and query RAG service: ${error.message}`,
+              );
+              throw error;
+            }),
+          ),
+      );
+      return data;
+    } catch (error) {
+      this.logger.error(
+        `Failed to index and query RAG service: ${error.message}`,
+      );
       throw error;
     }
   }
