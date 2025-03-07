@@ -1,0 +1,13 @@
+﻿{"create":{"_index":"projects","_id":"_mapping"}}
+{"settings":{"number_of_shards":1},"mappings":{"properties":{"id":{"type":"integer"},"name":{"type":"text","fields":{"keyword":{"type":"keyword"}}},"description":{"type":"text"},"status":{"type":"keyword"},"start_date":{"type":"date"},"end_date":{"type":"date"},"city":{"type":"keyword"},"client":{"properties":{"firstname":{"type":"text"},"lastname":{"type":"text"},"email":{"type":"keyword"}}}}}}
+{"create":{"_index":"materials","_id":"_mapping"}}
+{"settings":{"number_of_shards":1},"mappings":{"properties":{"id":{"type":"integer"},"name":{"type":"text","fields":{"keyword":{"type":"keyword"}}},"description":{"type":"text"},"unit":{"type":"keyword"},"price":{"type":"float"},"quantity":{"type":"integer"}}}}
+{"create":{"_index":"staff","_id":"_mapping"}}
+{"settings":{"number_of_shards":1},"mappings":{"properties":{"id":{"type":"integer"},"firstname":{"type":"text"},"lastname":{"type":"text"},"email":{"type":"keyword"},"role":{"type":"keyword"},"phone":{"type":"keyword"},"is_available":{"type":"boolean"}}}}
+{"create":{"_index":"clients","_id":"_mapping"}}
+{"settings":{"number_of_shards":1},"mappings":{"properties":{"id":{"type":"integer"},"firstname":{"type":"text"},"lastname":{"type":"text"},"email":{"type":"keyword"},"phone":{"type":"keyword"},"address":{"properties":{"street_number":{"type":"keyword"},"street_name":{"type":"text"},"zip_code":{"type":"keyword"},"city":{"type":"keyword"}}}}}}
+{"create":{"_index":"quotations","_id":"_mapping"}}
+{"settings":{"number_of_shards":1},"mappings":{"properties":{"id":{"type":"integer"},"reference":{"type":"keyword"},"total":{"type":"float"},"status":{"type":"keyword"},"project_id":{"type":"integer"},"tva_rate":{"type":"float"},"created_date":{"type":"date"},"validity_date":{"type":"date"},"payment_conditions":{"type":"text"}}}}
+{"create":{"_index":"knowledge_base","_id":"_mapping"}}
+{"settings":{"number_of_shards":1},"mappings":{"properties":{"id":{"type":"integer"},"question":{"type":"text"},"answer":{"type":"text"},"category":{"type":"keyword"},"tags":{"type":"keyword"}}}} 
+

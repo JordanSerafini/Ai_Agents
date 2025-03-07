@@ -683,69 +683,50 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
               alias: table.alias || table.nom.toLowerCase(),
               type: table.type || 'PRINCIPALE',
               colonnes: Array.isArray(table.colonnes) ? table.colonnes : ['*'],
-              condition_jointure: table.type === 'JOINTE' ? (table.condition_jointure || `${table.alias || table.nom.toLowerCase()}.id = principale.${table.nom.toLowerCase()}_id`) : undefined
+              condition_jointure:
+                table.type === 'JOINTE'
+                  ? table.condition_jointure ||
+                    `${table.alias || table.nom.toLowerCase()}.id = principale.${table.nom.toLowerCase()}_id`
+                  : undefined,
             })),
-            conditions: analysisResult.structure_requete.conditions.map((cond) => {
-              if (cond.type === 'TEMPOREL') {
-                const debutParam = 'debut_periode';
-                const finParam = 'fin_periode';
-                const dates = this.calculerDatesDynamiques(
-                  analysisResult.analyse_semantique.temporalite.periode,
-                );
-                
-                // Vérifier si l'expression contient déjà une référence à CURRENT_DATE ou une date spécifique
-                if (cond.expression.includes('CURDATE()')) {
-                  // Corriger la syntaxe pour PostgreSQL
+            conditions: analysisResult.structure_requete.conditions.map(
+              (cond) => {
+                if (cond.type === 'TEMPOREL') {
                   return {
-                    type: 'TEMPOREL' as const,
-                    expression: cond.expression.replace('CURDATE()', 'CURRENT_DATE')
-                                       .replace('INTERVAL 1 DAY', "INTERVAL '1 day'")
-                                       .replace('INTERVAL 1 MONTH', "INTERVAL '1 month'")
-                                       .replace('INTERVAL 1 WEEK', "INTERVAL '1 week'"),
-                    parametres: {}
-                  };
-                } else if (cond.expression.includes('CURRENT_DATE')) {
-                  // Déjà au format PostgreSQL
-                  return {
-                    type: 'TEMPOREL' as const,
-                    expression: cond.expression,
-                    parametres: {}
-                  };
-                } else {
-                  // Utiliser les paramètres de date standard
-                  return {
-                    type: 'TEMPOREL' as const,
-                    expression: `ce.start_date >= :${debutParam} AND ce.end_date <= :${finParam}`,
-                    parametres: {
-                      [debutParam]: dates.debut,
-                      [finParam]: dates.fin
-                    }
+                    type: 'TEMPOREL',
+                    expression:
+                      'EXTRACT(MONTH FROM i.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM i.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)',
+                    parametres: {},
                   };
                 }
-              }
-              // S'assurer que tous les paramètres sont extraits de l'expression
-              const placeholders = this.extractPlaceholders(cond.expression);
-              const parametres = cond.parametres || {};
-              
-              // Remplir les paramètres manquants avec des valeurs par défaut
-              placeholders.forEach(placeholder => {
-                if (!parametres[placeholder] && placeholder === 'type') {
-                  parametres[placeholder] = 'chantier'; // Valeur par défaut pour le type
-                }
-              });
-              
-              return {
-                type: 'FILTRE' as const,
-                expression: cond.expression,
-                parametres: parametres
-              };
-            }),
+                // S'assurer que tous les paramètres sont extraits de l'expression
+                const placeholders = this.extractPlaceholders(cond.expression);
+                const parametres = cond.parametres || {};
+
+                // Remplir les paramètres manquants avec des valeurs par défaut
+                placeholders.forEach((placeholder) => {
+                  if (!parametres[placeholder] && placeholder === 'type') {
+                    parametres[placeholder] = 'chantier'; // Valeur par défaut pour le type
+                  }
+                });
+
+                return {
+                  type: 'FILTRE' as const,
+                  expression: cond.expression,
+                  parametres: parametres,
+                };
+              },
+            ),
             groupBy: analysisResult.structure_requete.groupements || [],
             orderBy: analysisResult.structure_requete.ordre || [],
             metadata: {
-              intention: analysisResult.analyse_semantique.intention.action || 'RECHERCHE',
-              description: analysisResult.analyse_semantique.intention.objectif || 'Recherche générale'
-            }
+              intention:
+                analysisResult.analyse_semantique.intention.action ||
+                'RECHERCHE',
+              description:
+                analysisResult.analyse_semantique.intention.objectif ||
+                'Recherche générale',
+            },
           };
 
           try {
@@ -766,12 +747,19 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
               contexte: analysisResult.analyse_semantique.intention.objectif,
               questionCorrigee: request.question,
               metadonnees: {
-                tablesConcernees: structuredQuery.tables.map(t => t.nom),
+                tablesConcernees: structuredQuery.tables.map((t) => t.nom),
                 periodeTemporelle: {
-                  debut: this.calculerDatesDynamiques(analysisResult.analyse_semantique.temporalite.periode).debut,
-                  fin: this.calculerDatesDynamiques(analysisResult.analyse_semantique.temporalite.periode).fin,
-                  precision: analysisResult.analyse_semantique.temporalite.periode.precision,
-                  type: analysisResult.analyse_semantique.temporalite.periode.type,
+                  debut: this.calculerDatesDynamiques(
+                    analysisResult.analyse_semantique.temporalite.periode,
+                  ).debut,
+                  fin: this.calculerDatesDynamiques(
+                    analysisResult.analyse_semantique.temporalite.periode,
+                  ).fin,
+                  precision:
+                    analysisResult.analyse_semantique.temporalite.periode
+                      .precision,
+                  type: analysisResult.analyse_semantique.temporalite.periode
+                    .type,
                 },
                 tablesIdentifiees: {
                   principales: analysisResult.structure_requete.tables
