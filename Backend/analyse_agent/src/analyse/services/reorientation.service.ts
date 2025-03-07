@@ -1,263 +1,129 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 import {
-  AnalyseService,
-  AnalyseResult,
   AgentType,
   QuestionCategory,
-} from './analyse.service';
-import { ReorientationRequestDto } from '../dto/reorientation-request.dto';
+  AnalyseResult,
+} from '../interfaces/analyse.interface';
+import { OpenAIService } from './openai.service';
 
 interface ReorientationResponse {
-  questionOriginale: string;
-  questionReformulée: string;
-  intention: string;
-  catégorie: string;
-  agentCible: string;
-  priorité: string;
-  entités: string[];
-  contexte: string;
-  informationsManquantes?: string[];
-  questionsComplémentaires?: string[];
-  réponseAgent?: string;
-}
-
-interface OpenAIResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
+  newCategory: QuestionCategory;
+  newAgent: AgentType;
+  explanation: string;
+  confidence: number;
 }
 
 @Injectable()
 export class ReorientationService {
   private readonly logger = new Logger(ReorientationService.name);
-  private readonly openaiApiKey: string;
 
   constructor(
-    private readonly analyseService: AnalyseService,
+    private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-  ) {
-    this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
-    this.logger.log(
-      `Service de réorientation initialisé avec OpenAI${
-        this.openaiApiKey ? '' : ' (clé API manquante)'
-      }`,
-    );
-  }
+    private readonly openaiService: OpenAIService,
+  ) {}
 
   /**
-   * Réoriente une question d'utilisateur en l'analysant en profondeur
-   * et en la reformulant pour extraire l'intention réelle.
+   * Réoriente une analyse vers un agent plus approprié si nécessaire
    */
-  async reorienterQuestion(
-    request: ReorientationRequestDto,
-  ): Promise<{ reponse: string }> {
+  async reorient(
+    request: AnalyseRequestDto,
+    analyse: AnalyseResult,
+  ): Promise<AnalyseResult> {
     try {
-      const userId = request.userId || 'anonymous';
       this.logger.log(
-        `Réorientation de question pour l'utilisateur ${userId}: "${request.question}"`,
+        `Vérification de la réorientation pour la question: ${request.question}`,
       );
 
-      // Utiliser le service d'analyse pour analyser la question
-      const analyseResult = await this.analyseService.analyserQuestion({
-        question: request.question,
-        userId: request.userId,
-        useHistory: false,
-      });
-
-      // Améliorer la reformulation de la question avec GPT-3.5/4
-      const questionAméliorée = await this.améliorerReformulation(
-        request.question,
-        analyseResult,
-        request.contexteOriginal,
-      );
-
-      // Construire une réponse détaillée avec la question reformulée et l'analyse
-      const reponse: ReorientationResponse = {
-        questionOriginale: request.question,
-        questionReformulée: questionAméliorée || analyseResult.questionCorrigee,
-        intention: analyseResult.intention,
-        catégorie: this.catégorieToString(analyseResult.categorie),
-        agentCible: this.agentToString(analyseResult.agentCible),
-        priorité: analyseResult.priorite,
-        entités: analyseResult.entites,
-        contexte: analyseResult.contexte,
-        informationsManquantes: analyseResult.informationsManquantes || [],
-        questionsComplémentaires: analyseResult.questionsComplementaires || [],
-      };
-
-      // Si un contexte original est fourni, l'enrichir dans l'analyse
-      if (request.contexteOriginal) {
+      // Si la confiance est élevée, pas besoin de réorienter
+      if (analyse.priorite === 'HAUTE') {
         this.logger.log(
-          `Contexte original fourni pour la réorientation: "${request.contexteOriginal}"`,
+          `Confiance élevée, pas de réorientation nécessaire pour l'agent ${analyse.agentCible}`,
         );
-        // On pourrait ici faire une analyse supplémentaire du contexte
+        return analyse;
       }
 
-      const reponseJSON = JSON.stringify(reponse, null, 2);
+      // Construire le prompt pour la réorientation
+      const prompt = `
+Tu es un expert en analyse et classification de requêtes utilisateur. 
+Ta tâche est d'évaluer si l'agent actuellement sélectionné est le plus approprié pour traiter cette requête.
 
-      return {
-        reponse: `Analyse et réorientation de la question:\n${reponseJSON}`,
-      };
+Question de l'utilisateur: "${request.question}"
+
+Analyse actuelle:
+- Catégorie: ${analyse.categorie}
+- Agent cible: ${analyse.agentCible}
+- Intention détectée: ${analyse.intention}
+- Contexte: ${analyse.contexte}
+
+Les agents disponibles sont:
+- QUERYBUILDER: Pour les requêtes nécessitant des données structurées de la base de données (SQL)
+- ELASTICSEARCH: Pour les recherches textuelles dans les documents
+- RAG: Pour les questions nécessitant des connaissances spécifiques
+- WORKFLOW: Pour les demandes de processus métier
+- GENERAL: Pour les questions générales
+
+Détermine si l'agent actuellement sélectionné est le plus approprié. Si non, indique quel agent serait plus adapté.
+Réponds au format JSON avec les champs suivants:
+{
+  "newCategory": "DATABASE|SEARCH|KNOWLEDGE|WORKFLOW|GENERAL",
+  "newAgent": "querybuilder|elasticsearch|rag|workflow|general",
+  "explanation": "Explication de ton choix",
+  "confidence": 0.X (entre 0 et 1)
+}
+`;
+
+      // Appeler OpenAI pour la réorientation
+      const reorientationResponse = await this.openaiService.sendMessage(
+        prompt,
+        {
+          temperature: 0.2,
+          max_tokens: 500,
+        },
+      );
+
+      try {
+        const reorientation = JSON.parse(
+          reorientationResponse,
+        ) as ReorientationResponse;
+
+        // Si la confiance est suffisante et l'agent est différent, réorienter
+        if (
+          reorientation.confidence > 0.7 &&
+          reorientation.newAgent !== analyse.agentCible
+        ) {
+          this.logger.log(
+            `Réorientation de ${analyse.agentCible} vers ${reorientation.newAgent} (confiance: ${reorientation.confidence})`,
+          );
+
+          // Mettre à jour l'analyse
+          return {
+            ...analyse,
+            categorie: reorientation.newCategory,
+            agentCible: reorientation.newAgent as AgentType,
+            contexte: `${analyse.contexte} | Réorienté: ${reorientation.explanation}`,
+          };
+        }
+      } catch (parseError) {
+        this.logger.error(
+          `Erreur lors du parsing de la réponse de réorientation: ${
+            parseError instanceof Error ? parseError.message : 'Erreur inconnue'
+          }`,
+        );
+      }
+
+      // Par défaut, retourner l'analyse originale
+      return analyse;
     } catch (error) {
       this.logger.error(
         `Erreur lors de la réorientation: ${
           error instanceof Error ? error.message : 'Erreur inconnue'
         }`,
       );
-      return {
-        reponse: `Erreur lors de la réorientation: ${
-          error instanceof Error ? error.message : 'Une erreur est survenue'
-        }`,
-      };
-    }
-  }
-
-  /**
-   * Améliore la reformulation d'une question en utilisant le modèle de langage
-   * en tenant compte du contexte original et de l'analyse préliminaire.
-   */
-  private async améliorerReformulation(
-    questionOriginale: string,
-    analyse: AnalyseResult,
-    contexteOriginal?: string,
-  ): Promise<string | null> {
-    try {
-      if (!this.openaiApiKey) {
-        this.logger.warn(
-          "Pas de clé API OpenAI - impossible d'améliorer la reformulation",
-        );
-        return null;
-      }
-
-      const systemPrompt = `
-Tu es un assistant spécialisé dans l'analyse et la reformulation de questions pour une entreprise de bâtiment (Technidalle).
-
-Question originale: "${questionOriginale}"
-
-Analyse préliminaire:
-- Intention détectée: ${analyse.intention}
-- Catégorie: ${this.catégorieToString(analyse.categorie)}
-- Agent cible: ${this.agentToString(analyse.agentCible)}
-- Entités identifiées: ${analyse.entites.join(', ')}
-${contexteOriginal ? `\nContexte additionnel fourni:\n${contexteOriginal}` : ''}
-
-Tâche: Reformule cette question pour la rendre plus précise, claire et complète. Extrais l'intention réelle derrière la formulation initiale.
-La reformulation doit :
-1. Corriger les erreurs grammaticales ou orthographiques
-2. Clarifier les ambiguïtés
-3. Ajouter le contexte implicite
-4. Restructurer la question pour faciliter son traitement automatique
-
-Retourne uniquement la question reformulée, sans commentaires ni explications.
-`;
-
-      const userPrompt = `
-Question originale: "${questionOriginale}"
-
-Analyse préliminaire:
-- Intention détectée: ${analyse.intention}
-- Catégorie: ${this.catégorieToString(analyse.categorie)}
-- Agent cible: ${this.agentToString(analyse.agentCible)}
-- Entités identifiées: ${analyse.entites.join(', ')}
-${contexteOriginal ? `\nContexte additionnel fourni:\n${contexteOriginal}` : ''}
-
-Tâche: Reformule cette question pour la rendre plus précise, claire et complète. Extrais l'intention réelle derrière la formulation initiale.
-La reformulation doit :
-1. Corriger les erreurs grammaticales ou orthographiques
-2. Clarifier les ambiguïtés
-3. Ajouter le contexte implicite
-4. Restructurer la question pour faciliter son traitement automatique
-
-Retourne uniquement la question reformulée, sans commentaires ni explications.
-`;
-
-      const response = await axios.post<OpenAIResponse>(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt,
-            },
-            {
-              role: 'user',
-              content: userPrompt,
-            },
-          ],
-          temperature: 0.2,
-          max_tokens: 1000,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.openaiApiKey}`,
-          },
-          timeout: 15000,
-        },
-      );
-
-      if (!response.data?.choices?.[0]?.message?.content) {
-        throw new Error('Format de réponse OpenAI invalide');
-      }
-
-      const reformulation = response.data.choices[0].message.content.trim();
-
-      if (!reformulation || reformulation.length < 10) {
-        throw new Error('Reformulation invalide ou trop courte');
-      }
-
-      this.logger.log(`Question reformulée: "${reformulation}"`);
-      return reformulation;
-    } catch (error) {
-      this.logger.error(
-        `Erreur lors de l'amélioration de la reformulation: ${
-          error instanceof Error ? error.message : 'Erreur inconnue'
-        }`,
-      );
-      return null;
-    }
-  }
-
-  /**
-   * Convertit l'enum de catégorie en chaîne de caractères
-   */
-  private catégorieToString(categorie: QuestionCategory): string {
-    switch (categorie) {
-      case QuestionCategory.GENERAL:
-        return 'GENERAL';
-      case QuestionCategory.DATABASE:
-        return 'DATABASE';
-      case QuestionCategory.SEARCH:
-        return 'SEARCH';
-      case QuestionCategory.KNOWLEDGE:
-        return 'KNOWLEDGE';
-      case QuestionCategory.WORKFLOW:
-        return 'WORKFLOW';
-      default:
-        return 'GENERAL';
-    }
-  }
-
-  /**
-   * Convertit l'enum d'agent en chaîne de caractères
-   */
-  private agentToString(agent: AgentType): string {
-    switch (agent) {
-      case AgentType.QUERYBUILDER:
-        return 'querybuilder';
-      case AgentType.ELASTICSEARCH:
-        return 'elasticsearch';
-      case AgentType.RAG:
-        return 'rag';
-      case AgentType.GENERAL:
-        return 'general';
-      default:
-        return 'general';
+      return analyse;
     }
   }
 }
