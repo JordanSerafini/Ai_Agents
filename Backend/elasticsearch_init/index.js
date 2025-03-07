@@ -23,64 +23,168 @@ const pgPool = new Pool({
     database: process.env.PG_DATABASE
 });
 
-// Fonction pour convertir le type PostgreSQL en type Elasticsearch
-function pgTypeToEsType(pgType) {
-    const typeMapping = {
-        'integer': 'integer',
-        'bigint': 'long',
-        'numeric': 'double',
-        'decimal': 'double',
-        'real': 'float',
-        'double precision': 'double',
-        'smallint': 'short',
-        'character varying': 'text',
-        'varchar': 'text',
-        'text': 'text',
-        'char': 'keyword',
-        'boolean': 'boolean',
-        'date': 'date',
-        'timestamp': 'date',
-        'timestamp with time zone': 'date',
-        'timestamp without time zone': 'date',
-        'jsonb': 'object',
-        'json': 'object',
-        'uuid': 'keyword',
-        'bytea': 'binary',
-        'point': 'geo_point',
-        'time': 'text',
-        'interval': 'text',
-        'array': 'array'
+// Fonction pour convertir le type PostgreSQL en type Elasticsearch avec options avancées
+function pgTypeToEsType(column) {
+    const pgType = column.data_type.toLowerCase();
+    const baseType = pgType.split('(')[0]; // Gestion des types avec précision comme varchar(255)
+    
+    // Configuration de base pour les types
+    const typeConfig = {
+        // Nombres
+        'integer': { type: 'integer' },
+        'bigint': { type: 'long' },
+        'smallint': { type: 'short' },
+        'decimal': { type: 'double', scaling_factor: 100 },
+        'numeric': { type: 'double', scaling_factor: 100 },
+        'real': { type: 'float' },
+        'double precision': { type: 'double' },
+        'serial': { type: 'integer' },
+        'bigserial': { type: 'long' },
+
+        // Texte
+        'character varying': { 
+            type: 'text',
+            analyzer: 'french_analyzer',
+            fields: {
+                keyword: { type: 'keyword', ignore_above: 256 }
+            }
+        },
+        'varchar': { 
+            type: 'text',
+            analyzer: 'french_analyzer',
+            fields: {
+                keyword: { type: 'keyword', ignore_above: 256 }
+            }
+        },
+        'text': { 
+            type: 'text',
+            analyzer: 'french_analyzer',
+            fields: {
+                keyword: { type: 'keyword', ignore_above: 256 }
+            }
+        },
+        'char': { type: 'keyword' },
+        'character': { type: 'keyword' },
+
+        // Dates et temps
+        'timestamp': { 
+            type: 'date',
+            format: 'strict_date_optional_time||epoch_millis'
+        },
+        'timestamp with time zone': { 
+            type: 'date',
+            format: 'strict_date_optional_time||epoch_millis'
+        },
+        'timestamp without time zone': { 
+            type: 'date',
+            format: 'strict_date_optional_time||epoch_millis'
+        },
+        'date': { type: 'date' },
+        'time': { type: 'keyword' },
+        'interval': { type: 'keyword' },
+
+        // Booléens
+        'boolean': { type: 'boolean' },
+
+        // JSON
+        'json': { 
+            type: 'object',
+            dynamic: true
+        },
+        'jsonb': { 
+            type: 'object',
+            dynamic: true
+        },
+
+        // UUID et binaires
+        'uuid': { type: 'keyword' },
+        'bytea': { type: 'binary' },
+
+        // Géométrie
+        'point': { type: 'geo_point' },
+
+        // Types spéciaux
+        'enum': { type: 'keyword' },
+        'citext': { 
+            type: 'text',
+            analyzer: 'french_analyzer',
+            fields: {
+                keyword: { type: 'keyword', ignore_above: 256 }
+            }
+        }
     };
 
-    // Si le type contient "[]", c'est un tableau
+    // Gestion des tableaux
     if (pgType.endsWith('[]')) {
+        const baseTypeName = pgType.slice(0, -2);
+        const baseMapping = typeConfig[baseTypeName] || { type: 'text' };
         return {
-            type: 'array'
+            type: 'array',
+            array: true,
+            items: baseMapping
         };
     }
 
-    return {
-        type: typeMapping[pgType] || 'text'
+    // Gestion des types enum personnalisés
+    if (!typeConfig[baseType]) {
+        // Si c'est probablement un type enum personnalisé
+        if (column.udt_name && column.udt_name.endsWith('_enum')) {
+            return { type: 'keyword' };
+        }
+    }
+
+    return typeConfig[baseType] || { 
+        type: 'text',
+        analyzer: 'french_analyzer',
+        fields: {
+            keyword: { type: 'keyword', ignore_above: 256 }
+        }
     };
 }
 
-// Fonction pour obtenir la structure de toutes les tables
+// Fonction pour obtenir la structure de toutes les tables avec informations détaillées
 async function getTableStructures() {
     const query = `
+        WITH enum_values AS (
+            SELECT 
+                t.typname,
+                array_agg(e.enumlabel) as enum_values
+            FROM pg_type t 
+            JOIN pg_enum e ON t.oid = e.enumtypid
+            GROUP BY t.typname
+        )
         SELECT 
             t.table_name,
             array_agg(
                 json_build_object(
                     'column_name', c.column_name,
                     'data_type', c.data_type,
-                    'is_nullable', c.is_nullable
+                    'udt_name', c.udt_name,
+                    'is_nullable', c.is_nullable,
+                    'column_default', c.column_default,
+                    'character_maximum_length', c.character_maximum_length,
+                    'numeric_precision', c.numeric_precision,
+                    'numeric_scale', c.numeric_scale,
+                    'datetime_precision', c.datetime_precision,
+                    'enum_values', CASE 
+                        WHEN ev.enum_values IS NOT NULL 
+                        THEN ev.enum_values 
+                        ELSE NULL 
+                    END
                 )
-            ) as columns
+            ) as columns,
+            EXISTS (
+                SELECT 1 
+                FROM information_schema.table_constraints tc 
+                WHERE tc.table_name = t.table_name 
+                AND tc.constraint_type = 'PRIMARY KEY'
+            ) as has_primary_key
         FROM 
             information_schema.tables t
         JOIN 
-            information_schema.columns c 
-            ON t.table_name = c.table_name
+            information_schema.columns c ON t.table_name = c.table_name
+        LEFT JOIN 
+            enum_values ev ON c.udt_name = ev.typname
         WHERE 
             t.table_schema = 'public'
             AND t.table_type = 'BASE TABLE'
@@ -111,7 +215,7 @@ async function createIndices(tables) {
             // Créer le mapping pour la table
             const properties = {};
             for (const column of table.columns) {
-                properties[column.column_name] = pgTypeToEsType(column.data_type);
+                properties[column.column_name] = pgTypeToEsType(column);
             }
 
             // Créer l'index avec le mapping
@@ -122,12 +226,28 @@ async function createIndices(tables) {
                         analysis: {
                             analyzer: {
                                 french_analyzer: {
-                                    type: 'french'
+                                    type: 'french',
+                                    stopwords: '_french_'
+                                },
+                                text_analyzer: {
+                                    type: 'custom',
+                                    tokenizer: 'standard',
+                                    filter: ['lowercase', 'asciifolding']
+                                }
+                            },
+                            normalizer: {
+                                lowercase_normalizer: {
+                                    type: 'custom',
+                                    filter: ['lowercase', 'asciifolding']
                                 }
                             }
-                        }
+                        },
+                        number_of_shards: 1,
+                        number_of_replicas: 1,
+                        refresh_interval: '1s'
                     },
                     mappings: {
+                        dynamic: false, // Désactiver le mapping dynamique
                         properties: properties
                     }
                 }
@@ -136,7 +256,7 @@ async function createIndices(tables) {
             console.log(`Index ${table.table_name} créé avec succès`);
         } catch (error) {
             console.error(`Erreur lors de la création de l'index ${table.table_name}:`, error);
-            throw error; // Propager l'erreur pour arrêter le processus
+            throw error;
         }
     }
 }
