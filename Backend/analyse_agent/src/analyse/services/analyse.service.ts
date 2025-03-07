@@ -795,6 +795,17 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     try {
       this.logger.log(`Analyse de la question: ${request.question}`);
 
+      // Vérifier d'abord si la question contient des mots-clés de recherche explicites
+      const searchKeywords = [
+        'cherche', 'trouve', 'recherche', 'ou est', 'localise', 'document',
+        'information sur', 'a propos de', 'concernant', 'relatif a',
+        'similaire', 'comme', 'ressemblant a', 'pareil a',
+      ];
+      
+      const isExplicitSearch = searchKeywords.some(keyword => 
+        request.question.toLowerCase().includes(keyword.toLowerCase())
+      );
+      
       // Récupérer l'historique des conversations si disponible
       const userId = request.userId || 'anonymous';
       if (request.useHistory) {
@@ -808,6 +819,27 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         return JSON.parse(cachedResponse);
       }
 
+      // Si c'est une recherche explicite, forcer la catégorie SEARCH
+      if (isExplicitSearch) {
+        this.logger.log('Mots-clés de recherche détectés, forçage de la catégorie SEARCH');
+        
+        const analyse: AnalyseResult = {
+          questionCorrigee: request.question,
+          intention: 'recherche d\'informations',
+          categorie: QuestionCategory.SEARCH,
+          agentCible: AgentType.ELASTICSEARCH,
+          priorite: PrioriteType.NORMAL,
+          entites: [],
+          contexte: 'Recherche textuelle',
+        };
+        
+        // Sauvegarder dans le cache
+        this.saveToCache(request.question, JSON.stringify(analyse));
+        
+        return analyse;
+      }
+
+      // Continuer avec l'analyse normale si ce n'est pas une recherche explicite
       try {
         // Utiliser le nouvel OpenAIService avec le prompt externalisé
         const analysisResult = (await this.openaiService.analyseQuestion(

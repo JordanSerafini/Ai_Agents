@@ -1,4 +1,195 @@
-export type AgentType = 'DIRECT' | 'ROUTEUR' | 'WORKFLOW' | 'AUTRE';
+import { PrioriteType } from './priorite.interface';
+
+// Types de classification des questions
+export enum QuestionCategory {
+  GENERAL = 'GENERAL',
+  DATABASE = 'DATABASE',
+  SEARCH = 'SEARCH',
+  KNOWLEDGE = 'KNOWLEDGE',
+  WORKFLOW = 'WORKFLOW',
+}
+
+// Types d'agents disponibles
+export enum AgentType {
+  GENERAL = 'general',
+  QUERYBUILDER = 'querybuilder',
+  ELASTICSEARCH = 'elasticsearch',
+  RAG = 'rag',
+  WORKFLOW = 'workflow',
+  DATABASE = 'database',
+  SEARCH = 'search',
+}
+
+// Interface pour la réponse d'analyse
+export interface AnalyseResult {
+  questionCorrigee: string;
+  intention: string;
+  categorie: QuestionCategory;
+  agentCible: AgentType;
+  priorite: PrioriteType;
+  entites: string[];
+  contexte: string;
+  informationsManquantes?: string[];
+  questionsComplementaires?: string[];
+  reponseAgent?: any;
+  metadonnees?: {
+    tablesConcernees: string[];
+    periodeTemporelle?: PeriodeTemporelle;
+    tablesIdentifiees?: {
+      principales: Array<{ nom: string; alias?: string; colonnes?: string[] }>;
+      jointures: Array<{
+        nom: string;
+        alias?: string;
+        colonnes?: string[];
+        condition?: string;
+      }>;
+      conditions: string[];
+    };
+    champsRequis?: {
+      selection: string[];
+      filtres: string[];
+      groupement: string[];
+    };
+    filtres?: {
+      temporels: string[];
+      logiques: string[];
+    };
+    parametresRequete?: {
+      tri: string[];
+      limite: number;
+    };
+  };
+}
+
+export interface PeriodeTemporelle {
+  debut: string;
+  fin: string;
+  precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
+  type: 'DYNAMIQUE' | 'FIXE';
+}
+
+export interface StaffEvent {
+  id: number;
+  firstname: string;
+  lastname: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  location: string;
+}
+
+export interface RouterResponse {
+  reponse: string;
+  resultats?: StaffEvent[];
+}
+
+export interface AnalyseQueryData {
+  tables: Array<{
+    nom: string;
+    alias: string;
+    type: 'PRINCIPALE' | 'JOINTE';
+    colonnes: string[];
+    condition_jointure?: string;
+  }>;
+  conditions?: Array<{
+    type: 'FILTRE' | 'TEMPOREL';
+    expression: string;
+    parametres?: Record<string, unknown>;
+  }>;
+  groupBy?: string[];
+  orderBy?: string[];
+  limit?: number;
+  metadata?: {
+    intention: string;
+    description: string;
+  };
+}
+
+/**
+ * Interface pour la réponse d'analyse sémantique structurée
+ */
+export interface AnalyseSemantiqueResponse {
+  analyse_semantique: {
+    intention: {
+      action: string;
+      objectif: string;
+    };
+    temporalite: {
+      periode: {
+        type: 'DYNAMIQUE' | 'FIXE';
+        precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
+        reference: 'PASSÉ' | 'PRESENT' | 'FUTUR';
+      };
+      dates: {
+        debut?: string;
+        fin?: string;
+      };
+    };
+    entites: {
+      principale: {
+        nom: string;
+        attributs: string[];
+      };
+      secondaires: Array<{
+        nom: string;
+        relation: string;
+        attributs: string[];
+      }>;
+    };
+    contraintes: {
+      explicites: string[];
+      implicites: string[];
+    };
+    informations_demandees: {
+      champs: string[];
+      agregations: string[];
+      ordre: string[];
+    };
+  };
+  structure_requete: {
+    tables: Array<{
+      nom: string;
+      alias: string;
+      type: 'PRINCIPALE' | 'JOINTE';
+      colonnes: string[];
+      condition_jointure?: string;
+    }>;
+    conditions: Array<{
+      type: 'TEMPOREL' | 'LOGIQUE';
+      expression: string;
+      parametres?: Record<string, unknown>;
+    }>;
+    groupements: string[];
+    ordre: string[];
+  };
+  validation: {
+    colonnes_verifiees: boolean;
+    relations_coherentes: boolean;
+    types_compatibles: boolean;
+  };
+}
+
+export interface CacheEntry {
+  reponse: string;
+  timestamp: number;
+}
+
+export interface ConversationHistory {
+  messages: Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp: number;
+  }>;
+  lastInteraction: number;
+}
+
+export interface OpenAIResponse {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
+}
 
 // Interface générique pour les intentions spécifiques à une entreprise
 export interface IntentionConfig {
@@ -216,12 +407,4 @@ export interface AnalyseRequest {
     trace?: boolean;
     timeout?: number;
   };
-}
-
-export interface PeriodeTemporelle {
-  type: 'DYNAMIQUE' | 'FIXE';
-  precision: 'JOUR' | 'SEMAINE' | 'MOIS' | 'ANNEE';
-  reference?: 'PASSÉ' | 'PRESENT' | 'FUTUR';
-  debut?: string;
-  fin?: string;
 }
