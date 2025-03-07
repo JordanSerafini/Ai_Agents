@@ -175,31 +175,31 @@ export class QueryConfigService {
   generateExplanation(data: AnalyseQueryData): string {
     const mainTable = data.tables.find((t) => t.type === 'PRINCIPALE');
     const joinTables = data.tables.filter((t) => t.type === 'JOINTE');
-    
+
     let explanation = `Cette requête`;
-    
+
     if (data.metadata?.intention) {
       explanation += ` ${data.metadata.intention}`;
     }
-    
+
     explanation += ` les données de ${mainTable?.nom || 'la table principale'}`;
-    
+
     if (joinTables.length > 0) {
-      explanation += ` en joignant avec: ${joinTables.map(t => t.nom).join(', ')}`;
+      explanation += ` en joignant avec: ${joinTables.map((t) => t.nom).join(', ')}`;
     }
-    
+
     if (data.conditions && data.conditions.length > 0) {
-      explanation += `. Avec les filtres: ${data.conditions.map(c => c.expression).join(', ')}`;
+      explanation += `. Avec les filtres: ${data.conditions.map((c) => c.expression).join(', ')}`;
     }
-    
+
     if (data.groupBy && data.groupBy.length > 0) {
       explanation += `. Regroupé par: ${data.groupBy.join(', ')}`;
     }
-    
+
     if (data.orderBy && data.orderBy.length > 0) {
       explanation += `. Trié par: ${data.orderBy.join(', ')}`;
     }
-    
+
     return explanation;
   }
 
@@ -214,8 +214,9 @@ export class QueryConfigService {
         throw new QueryBuilderException('Aucune table principale trouvée');
       }
 
-      const mainAlias = mainTable.alias || mainTable.nom.charAt(0).toLowerCase();
-      
+      const mainAlias =
+        mainTable.alias || mainTable.nom.charAt(0).toLowerCase();
+
       // Construire les selections de colonnes
       const selectParts: string[] = [];
       for (const table of data.tables) {
@@ -224,27 +225,29 @@ export class QueryConfigService {
           selectParts.push(`${alias}.${column}`);
         }
       }
-      
+
       // Construire les jointures
       const joinParts: string[] = [];
       for (const table of data.tables) {
         if (table.type === 'JOINTE') {
           const alias = table.alias || table.nom.charAt(0).toLowerCase();
           if (table.condition_jointure) {
-            joinParts.push(`LEFT JOIN "${table.nom}" "${alias}" ON ${table.condition_jointure}`);
+            joinParts.push(
+              `LEFT JOIN "${table.nom}" "${alias}" ON ${table.condition_jointure}`,
+            );
           }
         }
       }
-      
+
       // Construire les conditions WHERE
       const whereParts: string[] = [];
       const params: any[] = [];
-      
+
       if (data.conditions) {
         for (const condition of data.conditions) {
           // Convertir les expressions avec :param en expressions avec $1, $2, etc.
           let processedExpr = condition.expression;
-          
+
           if (condition.parametres) {
             // Remplacer chaque paramètre nommé par un paramètre positionnel
             const paramNames = Object.keys(condition.parametres);
@@ -256,40 +259,43 @@ export class QueryConfigService {
               processedExpr = processedExpr.replace(regex, `$${paramPosition}`);
             }
           }
-          
+
           whereParts.push(processedExpr);
         }
       }
-      
+
       // Construire la requête SQL
       let sql = `SELECT ${selectParts.join(', ')} FROM "${mainTable.nom}" "${mainAlias}"`;
-      
+
       if (joinParts.length > 0) {
         sql += ` ${joinParts.join(' ')}`;
       }
-      
+
       if (whereParts.length > 0) {
         sql += ` WHERE ${whereParts.join(' AND ')}`;
       }
-      
+
       if (data.groupBy && data.groupBy.length > 0) {
         sql += ` GROUP BY ${data.groupBy.join(', ')}`;
       }
-      
+
       if (data.orderBy && data.orderBy.length > 0) {
         sql += ` ORDER BY ${data.orderBy.join(', ')}`;
       }
-      
+
       if (data.metadata?.parametresRequete?.limite) {
         sql += ` LIMIT ${data.metadata.parametresRequete.limite}`;
       } else {
         sql += ` LIMIT 100`; // Limite par défaut
       }
-      
+
       return { sql, params };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erreur inconnue';
-      throw new QueryBuilderException(`Erreur lors de la génération SQL: ${message}`);
+      const message =
+        error instanceof Error ? error.message : 'Erreur inconnue';
+      throw new QueryBuilderException(
+        `Erreur lors de la génération SQL: ${message}`,
+      );
     }
   }
 
