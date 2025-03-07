@@ -646,6 +646,151 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     };
   }
 
+  /**
+   * Détermine si une question est une requête spécifique qui nécessite QueryBuilder
+   * plutôt qu'une recherche générale qui nécessiterait Elasticsearch
+   */
+  private isSpecificQuery(question: string, intention: string): boolean {
+    // Mots-clés indiquant une requête précise
+    const specificKeywords = [
+      'combien',
+      'nombre',
+      'total',
+      'somme',
+      'moyenne',
+      'liste',
+      'detail',
+      'information',
+      'donnees',
+      'statistique',
+      'pourcentage',
+      'montant',
+      'valeur',
+      'date',
+      'periode',
+      'entre',
+      'depuis',
+      'jusqua',
+    ];
+    
+    // Mots-clés indiquant une recherche
+    const searchKeywords = [
+      'cherche',
+      'trouve',
+      'recherche',
+      'ou est',
+      'localise',
+      'document',
+      'information sur',
+      'a propos de',
+      'concernant',
+      'relatif a',
+      'similaire',
+      'comme',
+      'ressemblant a',
+      'pareil a',
+    ];
+
+    // Vérifier si la question contient des mots-clés spécifiques
+    const hasSpecificKeywords = specificKeywords.some((keyword) =>
+      question.toLowerCase().includes(keyword.toLowerCase()),
+    );
+
+    // Vérifier si la question contient des mots-clés de recherche
+    const hasSearchKeywords = searchKeywords.some((keyword) =>
+      question.toLowerCase().includes(keyword.toLowerCase()),
+    );
+
+    // Si l'intention contient des termes liés à la recherche
+    const isSearchIntention =
+      intention.toLowerCase().includes('recherche') ||
+      intention.toLowerCase().includes('trouver') ||
+      intention.toLowerCase().includes('localiser');
+
+    // Logique de décision:
+    // - Si la question contient des mots-clés spécifiques et pas de mots-clés de recherche -> requête spécifique
+    // - Si l'intention est clairement une recherche -> pas une requête spécifique
+    // - Si la question contient des mots-clés de recherche et pas de mots-clés spécifiques -> pas une requête spécifique
+
+    if (hasSpecificKeywords && !hasSearchKeywords) {
+      return true;
+    }
+
+    if (isSearchIntention || (hasSearchKeywords && !hasSpecificKeywords)) {
+      return false;
+    }
+
+    // Par défaut, considérer comme une requête spécifique (QueryBuilder)
+    return true;
+  }
+
+  private determinerCategorie(
+    domaine: string,
+    question: string = '',
+    intention: string = '',
+  ): QuestionCategory {
+    // Vérifier d'abord si c'est une recherche générale plutôt qu'une requête spécifique
+    if (!this.isSpecificQuery(question, intention)) {
+      return QuestionCategory.SEARCH;
+    }
+
+    // Sinon, appliquer la logique existante basée sur le domaine
+    switch (domaine.toUpperCase()) {
+      case 'CHANTIERS':
+      case 'FINANCES':
+      case 'CLIENTS':
+        return QuestionCategory.DATABASE;
+      case 'PERSONNEL':
+        return this.requiresKnowledge({
+          questionCorrigee: '',
+          categorie: QuestionCategory.DATABASE,
+        } as AnalyseResult)
+          ? QuestionCategory.KNOWLEDGE
+          : QuestionCategory.DATABASE;
+      default:
+        return QuestionCategory.GENERAL;
+    }
+  }
+
+  private determinerAgent(categorie: QuestionCategory): AgentType {
+    switch (categorie) {
+      case QuestionCategory.DATABASE:
+        return AgentType.QUERYBUILDER;
+      case QuestionCategory.SEARCH:
+        return AgentType.ELASTICSEARCH;
+      case QuestionCategory.KNOWLEDGE:
+        return AgentType.RAG;
+      case QuestionCategory.WORKFLOW:
+        return AgentType.WORKFLOW;
+      default:
+        return AgentType.GENERAL;
+    }
+  }
+
+  async enhanceAnalysisWithRag(query: string, context: any): Promise<string> {
+    try {
+      this.logger.log(`Enhancing analysis with RAG: ${query}`);
+
+      // Convertir le contexte en format approprié pour le RAG
+      const document = {
+        content: JSON.stringify(context),
+        title: `Analysis context for: ${query}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Utiliser le service RAG pour améliorer l'analyse
+      const enhancedAnalysis = await this.ragClientService.indexAndQuery(
+        document,
+        query,
+      );
+
+      return enhancedAnalysis;
+    } catch (error) {
+      this.logger.error(`Error enhancing analysis with RAG: ${error.message}`);
+      return `Impossible d'améliorer l'analyse avec RAG: ${error.message}`;
+    }
+  }
+
   async analyserQuestion(request: UserQuestionDto): Promise<AnalyseResult> {
     try {
       this.logger.log(`Analyse de la question: ${request.question}`);
@@ -737,6 +882,8 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
             const result = {
               intention: analysisResult.analyse_semantique.intention.action,
               categorie: this.determinerCategorie(
+                analysisResult.analyse_semantique.intention.action,
+                request.question,
                 analysisResult.analyse_semantique.intention.action,
               ),
               agentCible: AgentType.QUERYBUILDER,
@@ -858,59 +1005,5 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
         Array.isArray(table.colonnes) &&
         table.colonnes.length > 0,
     );
-  }
-
-  private determinerCategorie(domaine: string): QuestionCategory {
-    switch (domaine.toUpperCase()) {
-      case 'CHANTIERS':
-      case 'FINANCES':
-      case 'CLIENTS':
-        return QuestionCategory.DATABASE;
-      case 'PERSONNEL':
-        return this.requiresKnowledge({
-          questionCorrigee: '',
-          categorie: QuestionCategory.DATABASE,
-        } as AnalyseResult)
-          ? QuestionCategory.KNOWLEDGE
-          : QuestionCategory.DATABASE;
-      default:
-        return QuestionCategory.GENERAL;
-    }
-  }
-
-  private determinerAgent(categorie: QuestionCategory): AgentType {
-    switch (categorie) {
-      case QuestionCategory.DATABASE:
-        return AgentType.QUERYBUILDER;
-      case QuestionCategory.SEARCH:
-        return AgentType.ELASTICSEARCH;
-      case QuestionCategory.KNOWLEDGE:
-        return AgentType.RAG;
-      case QuestionCategory.WORKFLOW:
-        return AgentType.WORKFLOW;
-      default:
-        return AgentType.GENERAL;
-    }
-  }
-
-  async enhanceAnalysisWithRag(query: string, context: any): Promise<string> {
-    try {
-      this.logger.log(`Enhancing analysis with RAG: ${query}`);
-      
-      // Convertir le contexte en format approprié pour le RAG
-      const document = {
-        content: JSON.stringify(context),
-        title: `Analysis context for: ${query}`,
-        timestamp: new Date().toISOString(),
-      };
-      
-      // Utiliser le service RAG pour améliorer l'analyse
-      const enhancedAnalysis = await this.ragClientService.indexAndQuery(document, query);
-      
-      return enhancedAnalysis;
-    } catch (error) {
-      this.logger.error(`Error enhancing analysis with RAG: ${error.message}`);
-      return `Impossible d'améliorer l'analyse avec RAG: ${error.message}`;
-    }
   }
 }

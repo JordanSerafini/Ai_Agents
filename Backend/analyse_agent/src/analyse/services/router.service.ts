@@ -5,7 +5,11 @@ import { AnalyseRequestDto } from '../dto/analyse-request.dto';
 import { AnalyseResult, AgentType } from './analyse.service';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import { AnalyseQueryData, QueryBuilderResult, QueryConditionParameters } from '../../querybuilder/interfaces/query-builder.types';
+import {
+  AnalyseQueryData,
+  QueryBuilderResult,
+  QueryConditionParameters,
+} from '../../querybuilder/interfaces/query-builder.types';
 
 interface RouterResponse {
   reponse: string;
@@ -195,102 +199,135 @@ export class RouterService {
       // Construire l'objet AnalyseQueryData à partir des métadonnées
       const queryData: AnalyseQueryData = {
         tables: [
-          ...analyseResult.metadonnees.tablesIdentifiees.principales.map((table) => ({
-            nom: table.nom,
-            alias: table.alias || table.nom.charAt(0),
-            type: 'PRINCIPALE' as const,
-            colonnes: table.colonnes || ['*'],
-          })),
-          ...analyseResult.metadonnees.tablesIdentifiees.jointures.map((table) => ({
-            nom: table.nom,
-            alias: table.alias || table.nom.charAt(0),
-            type: 'JOINTE' as const,
-            colonnes: table.colonnes || ['*'],
-            condition_jointure: table.condition,
-          })),
+          ...analyseResult.metadonnees.tablesIdentifiees.principales.map(
+            (table) => ({
+              nom: table.nom,
+              alias: table.alias || table.nom.charAt(0),
+              type: 'PRINCIPALE' as const,
+              colonnes: table.colonnes || ['*'],
+            }),
+          ),
+          ...analyseResult.metadonnees.tablesIdentifiees.jointures.map(
+            (table) => ({
+              nom: table.nom,
+              alias: table.alias || table.nom.charAt(0),
+              type: 'JOINTE' as const,
+              colonnes: table.colonnes || ['*'],
+              condition_jointure: table.condition,
+            }),
+          ),
         ],
         conditions: [
-          ...(analyseResult.metadonnees.filtres?.temporels || []).map((filtre) => {
-            const periodeTemporelle = analyseResult.metadonnees?.periodeTemporelle;
-            
-            // Correction pour PostgreSQL: Remplacer CURDATE() par CURRENT_DATE
-            let expression = filtre;
-            if (expression.includes('CURDATE()')) {
-              expression = expression.replace('CURDATE()', 'CURRENT_DATE');
-            }
-            
-            // Correction pour PostgreSQL: Corriger la syntaxe des intervalles
-            const intervalPatterns = [
-              { pattern: /INTERVAL (\d+) DAY/g, replacement: "INTERVAL '$1 day'" },
-              { pattern: /INTERVAL (\d+) MONTH/g, replacement: "INTERVAL '$1 month'" },
-              { pattern: /INTERVAL (\d+) WEEK/g, replacement: "INTERVAL '$1 week'" },
-              { pattern: /INTERVAL (\d+) YEAR/g, replacement: "INTERVAL '$1 year'" }
-            ];
-            
-            intervalPatterns.forEach(({ pattern, replacement }) => {
-              if (pattern.test(expression)) {
-                expression = expression.replace(pattern, replacement);
-              }
-            });
-            
-            // Ne pas ajouter de filtre sur event_type si la question concerne les chantiers/projets
-            const isProjectQuery = 
-              analyseResult.contexte?.toLowerCase().includes('chantier') || 
-              analyseResult.contexte?.toLowerCase().includes('projet');
-              
-            if (isProjectQuery && expression.includes("ce.event_type = 'reunion_chantier'")) {
-              // Supprimer la condition sur event_type
-              expression = expression.replace(" AND ce.event_type = 'reunion_chantier'", '');
-            }
-            
-            // Extraire les noms des placeholders de l'expression pour garantir la correspondance
-            const placeholderRegex = /:([a-zA-Z0-9_]+)/g;
-            const matches = [...expression.matchAll(placeholderRegex)];
-            const placeholders = matches.map(match => match[1]);
-            
-            // Créer les paramètres avec les placeholders exacts de l'expression
-            const parametres = {};
-            if (placeholders.length > 0) {
-              if (placeholders.length === 1) {
-                // Un seul placeholder, utiliser la même date pour début et fin
-                parametres[placeholders[0]] = periodeTemporelle?.debut || new Date().toISOString().split('T')[0];
-              } else {
-                // Deux placeholders ou plus
-                parametres[placeholders[0]] = periodeTemporelle?.debut || new Date().toISOString().split('T')[0];
-                parametres[placeholders[1]] = periodeTemporelle?.fin || new Date().toISOString().split('T')[0];
-              }
-            }
-            
-            return {
-              type: 'TEMPOREL' as const,
-              expression: expression,
-              parametres: parametres
-            };
-          }),
-          ...(analyseResult.metadonnees.filtres?.logiques || []).map((filtre) => {
-            // Extraire les noms des placeholders de l'expression pour garantir la correspondance
-            const placeholderRegex = /:([a-zA-Z0-9_]+)/g;
-            const matches = [...filtre.matchAll(placeholderRegex)];
-            const placeholders = matches.map(match => match[1]);
-            
-            // Créer les paramètres avec des valeurs par défaut
-            const parametres = {};
-            placeholders.forEach(placeholder => {
-              if (placeholder === 'status') {
-                parametres[placeholder] = 'en_cours';
-              } else if (placeholder === 'type') {
-                parametres[placeholder] = 'chantier';
-              } else {
-                parametres[placeholder] = 'valeur_par_defaut';
-              }
-            });
+          ...(analyseResult.metadonnees.filtres?.temporels || []).map(
+            (filtre) => {
+              const periodeTemporelle =
+                analyseResult.metadonnees?.periodeTemporelle;
 
-            return {
-              type: 'FILTRE' as const,
-              expression: filtre,
-              parametres: parametres
-            };
-          }),
+              // Correction pour PostgreSQL: Remplacer CURDATE() par CURRENT_DATE
+              let expression = filtre;
+              if (expression.includes('CURDATE()')) {
+                expression = expression.replace('CURDATE()', 'CURRENT_DATE');
+              }
+
+              // Correction pour PostgreSQL: Corriger la syntaxe des intervalles
+              const intervalPatterns = [
+                {
+                  pattern: /INTERVAL (\d+) DAY/g,
+                  replacement: "INTERVAL '$1 day'",
+                },
+                {
+                  pattern: /INTERVAL (\d+) MONTH/g,
+                  replacement: "INTERVAL '$1 month'",
+                },
+                {
+                  pattern: /INTERVAL (\d+) WEEK/g,
+                  replacement: "INTERVAL '$1 week'",
+                },
+                {
+                  pattern: /INTERVAL (\d+) YEAR/g,
+                  replacement: "INTERVAL '$1 year'",
+                },
+              ];
+
+              intervalPatterns.forEach(({ pattern, replacement }) => {
+                if (pattern.test(expression)) {
+                  expression = expression.replace(pattern, replacement);
+                }
+              });
+
+              // Ne pas ajouter de filtre sur event_type si la question concerne les chantiers/projets
+              const isProjectQuery =
+                analyseResult.contexte?.toLowerCase().includes('chantier') ||
+                analyseResult.contexte?.toLowerCase().includes('projet');
+
+              if (
+                isProjectQuery &&
+                expression.includes("ce.event_type = 'reunion_chantier'")
+              ) {
+                // Supprimer la condition sur event_type
+                expression = expression.replace(
+                  " AND ce.event_type = 'reunion_chantier'",
+                  '',
+                );
+              }
+
+              // Extraire les noms des placeholders de l'expression pour garantir la correspondance
+              const placeholderRegex = /:([a-zA-Z0-9_]+)/g;
+              const matches = [...expression.matchAll(placeholderRegex)];
+              const placeholders = matches.map((match) => match[1]);
+
+              // Créer les paramètres avec les placeholders exacts de l'expression
+              const parametres = {};
+              if (placeholders.length > 0) {
+                if (placeholders.length === 1) {
+                  // Un seul placeholder, utiliser la même date pour début et fin
+                  parametres[placeholders[0]] =
+                    periodeTemporelle?.debut ||
+                    new Date().toISOString().split('T')[0];
+                } else {
+                  // Deux placeholders ou plus
+                  parametres[placeholders[0]] =
+                    periodeTemporelle?.debut ||
+                    new Date().toISOString().split('T')[0];
+                  parametres[placeholders[1]] =
+                    periodeTemporelle?.fin ||
+                    new Date().toISOString().split('T')[0];
+                }
+              }
+
+              return {
+                type: 'TEMPOREL' as const,
+                expression: expression,
+                parametres: parametres,
+              };
+            },
+          ),
+          ...(analyseResult.metadonnees.filtres?.logiques || []).map(
+            (filtre) => {
+              // Extraire les noms des placeholders de l'expression pour garantir la correspondance
+              const placeholderRegex = /:([a-zA-Z0-9_]+)/g;
+              const matches = [...filtre.matchAll(placeholderRegex)];
+              const placeholders = matches.map((match) => match[1]);
+
+              // Créer les paramètres avec des valeurs par défaut
+              const parametres = {};
+              placeholders.forEach((placeholder) => {
+                if (placeholder === 'status') {
+                  parametres[placeholder] = 'en_cours';
+                } else if (placeholder === 'type') {
+                  parametres[placeholder] = 'chantier';
+                } else {
+                  parametres[placeholder] = 'valeur_par_defaut';
+                }
+              });
+
+              return {
+                type: 'FILTRE' as const,
+                expression: filtre,
+                parametres: parametres,
+              };
+            },
+          ),
         ],
         metadata: {
           intention: analyseResult.intention || '',
@@ -304,15 +341,20 @@ export class RouterService {
       };
 
       // Vérifier et désérialiser si nécessaire
-      const questionData = typeof queryData === 'string' ? JSON.parse(queryData) : queryData;
-      
+      const questionData =
+        typeof queryData === 'string' ? JSON.parse(queryData) : queryData;
+
       // Log détaillé des conditions pour débogage
       if (questionData.conditions && questionData.conditions.length > 0) {
         questionData.conditions.forEach((cond, index) => {
           this.logger.debug(`Condition ${index} - Type: ${cond.type}`);
-          this.logger.debug(`Condition ${index} - Expression: ${cond.expression}`);
+          this.logger.debug(
+            `Condition ${index} - Expression: ${cond.expression}`,
+          );
           if (cond.parametres) {
-            this.logger.debug(`Condition ${index} - Paramètres: ${JSON.stringify(cond.parametres)}`);
+            this.logger.debug(
+              `Condition ${index} - Paramètres: ${JSON.stringify(cond.parametres)}`,
+            );
           }
         });
       }
@@ -323,7 +365,9 @@ export class RouterService {
         maxResults: 100,
       };
 
-      this.logger.debug(`Envoi de la requête au QueryBuilder: ${JSON.stringify(questionData)}`);
+      this.logger.debug(
+        `Envoi de la requête au QueryBuilder: ${JSON.stringify(questionData)}`,
+      );
 
       const response = await firstValueFrom(
         this.httpService.post<QueryBuilderResult>(
@@ -331,9 +375,9 @@ export class RouterService {
           questionData,
           {
             params: {
-              options: JSON.stringify(options)
-            }
-          }
+              options: JSON.stringify(options),
+            },
+          },
         ),
       );
 
