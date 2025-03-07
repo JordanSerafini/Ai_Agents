@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestionnaire de Documents RAG</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        .search-container {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            flex-grow: 1;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .document-list {
+            margin-top: 20px;
+        }
+        .document-card {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #fff;
+        }
+        .document-title {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+        .document-content {
+            margin-bottom: 10px;
+            white-space: pre-wrap;
+        }
+        .document-meta {
+            font-size: 12px;
+            color: #777;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .pagination button {
+            margin: 0 5px;
+        }
+        .delete-btn {
+            background-color: #f44336;
+            float: right;
+        }
+        .delete-btn:hover {
+            background-color: #d32f2f;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gestionnaire de Documents RAG</h1>
+        
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Rechercher des documents...">
+            <button onclick="searchDocuments()">Rechercher</button>
+        </div>
+        
+        <div id="documentList" class="document-list">
+            <!-- Les documents seront chargés ici -->
+            <div class="loading">Chargement des documents...</div>
+        </div>
+        
+        <div class="pagination" id="pagination">
+            <!-- La pagination sera générée ici -->
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        const pageSize = 10;
+        let totalPages = 1;
+        let searchQuery = '';
+
+        // Charger les documents au chargement de la page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDocuments();
+        });
+
+        // Fonction pour charger les documents
+        function loadDocuments() {
+            const documentList = document.getElementById('documentList');
+            documentList.innerHTML = '<div class="loading">Chargement des documents...</div>';
+            
+            let url = `/document/list?page=${currentPage}&size=${pageSize}`;
+            if (searchQuery) {
+                url += `&search=${encodeURIComponent(searchQuery)}`;
+            }
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    displayDocuments(data);
+                    updatePagination(data.pagination);
+                })
+                .catch(error => {
+                    documentList.innerHTML = `<div class="error">Erreur lors du chargement des documents: ${error.message}</div>`;
+                });
+        }
+
+        // Fonction pour afficher les documents
+        function displayDocuments(data) {
+            const documentList = document.getElementById('documentList');
+            documentList.innerHTML = '';
+            
+            if (data.documents.length === 0) {
+                documentList.innerHTML = '<div class="loading">Aucun document trouvé</div>';
+                return;
+            }
+            
+            data.documents.forEach(doc => {
+                const docElement = document.createElement('div');
+                docElement.className = 'document-card';
+                docElement.innerHTML = `
+                    <button class="delete-btn" onclick="deleteDocument('${doc.id}')">Supprimer</button>
+                    <div class="document-title">${doc.title}</div>
+                    <div class="document-content">${doc.content}</div>
+                    <div class="document-meta">
+                        ID: ${doc.id} | Date: ${new Date(doc.timestamp).toLocaleString()} | Score: ${doc.score || 'N/A'}
+                    </div>
+                `;
+                documentList.appendChild(docElement);
+            });
+        }
+
+        // Fonction pour mettre à jour la pagination
+        function updatePagination(pagination) {
+            const paginationElement = document.getElementById('pagination');
+            paginationElement.innerHTML = '';
+            
+            totalPages = pagination.totalPages;
+            
+            // Bouton précédent
+            const prevButton = document.createElement('button');
+            prevButton.innerText = 'Précédent';
+            prevButton.disabled = currentPage === 1;
+            prevButton.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    loadDocuments();
+                }
+            };
+            paginationElement.appendChild(prevButton);
+            
+            // Afficher le numéro de page actuelle
+            const pageInfo = document.createElement('span');
+            pageInfo.innerText = ` Page ${currentPage} sur ${totalPages} `;
+            paginationElement.appendChild(pageInfo);
+            
+            // Bouton suivant
+            const nextButton = document.createElement('button');
+            nextButton.innerText = 'Suivant';
+            nextButton.disabled = currentPage === totalPages;
+            nextButton.onclick = () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    loadDocuments();
+                }
+            };
+            paginationElement.appendChild(nextButton);
+        }
+
+        // Fonction pour rechercher des documents
+        function searchDocuments() {
+            searchQuery = document.getElementById('searchInput').value.trim();
+            currentPage = 1; // Réinitialiser à la première page
+            loadDocuments();
+        }
+
+        // Fonction pour supprimer un document
+        function deleteDocument(id) {
+            if (confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) {
+                fetch(`/document/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Document supprimé avec succès');
+                        loadDocuments(); // Recharger la liste
+                    } else {
+                        alert('Erreur lors de la suppression du document');
+                    }
+                })
+                .catch(error => {
+                    alert(`Erreur: ${error.message}`);
+                });
+            }
+        }
+
+        // Permettre la recherche en appuyant sur Entrée
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchDocuments();
+            }
+        });
+    </script>
+</body>
+</html> 

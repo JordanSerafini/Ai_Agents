@@ -8,7 +8,7 @@ import { RouterService } from './router.service';
 import {
   QueryBuilderClientService,
   ElasticsearchClientService,
-  RagClientService,
+  RagClientLocalService,
 } from './clients';
 import { UserQuestionDto } from '../dto/user-question.dto';
 
@@ -238,7 +238,7 @@ export class AnalyseService {
     private readonly routerService: RouterService,
     private readonly queryBuilderClient: QueryBuilderClientService,
     private readonly elasticsearchClient: ElasticsearchClientService,
-    private readonly ragClientService: RagClientService,
+    private readonly ragClientService: RagClientLocalService,
     private readonly openaiService: OpenAIService,
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';

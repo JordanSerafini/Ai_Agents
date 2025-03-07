@@ -76,7 +76,7 @@ export class QueryBuilderService {
       return enhancedQuery;
     } catch (error) {
       this.logger.error(`Error enhancing query with RAG: ${error.message}`);
-      return query; // Fallback to original query if RAG fails
+      return query;
     }
   }
 }

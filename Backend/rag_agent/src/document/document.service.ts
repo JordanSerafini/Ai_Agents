@@ -91,4 +91,69 @@ export class DocumentService {
       return false;
     }
   }
+
+  async listDocuments(page: number = 1, size: number = 10, search?: string): Promise<any> {
+    try {
+      const from = (page - 1) * size;
+      
+      let query: any = { match_all: {} };
+      if (search) {
+        query = {
+          multi_match: {
+            query: search,
+            fields: ['content', 'title']
+          }
+        };
+      }
+      
+      const response = await this.elasticsearchService.search({
+        index: this.indexName,
+        body: {
+          from,
+          size,
+          query,
+          sort: [{ timestamp: { order: 'desc' } }]
+        }
+      });
+      
+      let total = 0;
+      if (typeof response.hits.total === 'number') {
+        total = response.hits.total;
+      } else if (response.hits.total && typeof response.hits.total === 'object' && 'value' in response.hits.total) {
+        total = response.hits.total.value;
+      }
+      
+      const documents = response.hits.hits.map(hit => ({
+        id: hit._id,
+        score: hit._score,
+        ...(hit._source as DocumentSource)
+      }));
+      
+      return {
+        documents,
+        pagination: {
+          total,
+          page,
+          size,
+          totalPages: Math.ceil(total / size)
+        }
+      };
+    } catch (error) {
+      this.logger.error(`Error listing documents: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async deleteDocument(id: string): Promise<any> {
+    try {
+      const response = await this.elasticsearchService.delete({
+        index: this.indexName,
+        id
+      });
+      return response;
+    } catch (error) {
+      this.logger.error(`Error deleting document: ${error.message}`);
+      throw error;
+    }
+  }
 } 

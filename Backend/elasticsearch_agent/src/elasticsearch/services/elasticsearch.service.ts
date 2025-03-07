@@ -28,7 +28,7 @@ import {
 } from '../dto/response.dto';
 import { SearchRequestDto } from '../dto/request.dto';
 import { SearchTotalHits } from '@elastic/elasticsearch/lib/api/types';
-import { RagClientService } from '../../../services/rag.service';
+import { RagClientService } from '../../services/rag.service';
 
 @Injectable()
 export class ElasticsearchService {

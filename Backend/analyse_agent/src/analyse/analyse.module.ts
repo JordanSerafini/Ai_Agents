@@ -9,10 +9,10 @@ import { ReorientationService } from './services/reorientation.service';
 import {
   QueryBuilderClientService,
   ElasticsearchClientService,
-  RagClientService,
+  RagClientLocalService,
 } from './services/clients';
 import { OpenAIService } from './services/openai.service';
-import { RagClientModule } from '../../services/rag.module';
+import { RagClientModule } from '../services/rag.module';
 
 @Module({
   imports: [
@@ -30,7 +30,7 @@ import { RagClientModule } from '../../services/rag.module';
     ReorientationService,
     QueryBuilderClientService,
     ElasticsearchClientService,
-    RagClientService,
+    RagClientLocalService,
     OpenAIService,
   ],
   exports: [AnalyseService],

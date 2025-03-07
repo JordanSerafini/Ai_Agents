@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
+# Installation standard des dépendances
 RUN npm install
 
 COPY . .

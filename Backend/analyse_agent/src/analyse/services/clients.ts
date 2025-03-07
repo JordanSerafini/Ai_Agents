@@ -3,7 +3,6 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AnalyseResult, AnalyseQueryData } from './analyse.service';
-import { RagClientService } from '../../../services/rag.service';
 import { catchError } from 'rxjs/operators';
 import { AxiosError } from 'axios';
 
@@ -104,8 +103,8 @@ export class ElasticsearchClientService {
 }
 
 @Injectable()
-export class RagClientService {
-  private readonly logger = new Logger(RagClientService.name);
+export class RagClientLocalService {
+  private readonly logger = new Logger(RagClientLocalService.name);
   private readonly ragServiceUrl: string;
 
   constructor(
