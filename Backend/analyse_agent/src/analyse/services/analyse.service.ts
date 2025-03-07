@@ -387,3 +387,4 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
     }
   }
 }
+export { AgentType, AnalyseResult };
