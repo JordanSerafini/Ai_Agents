@@ -6,6 +6,7 @@ import {
   AgentType,
   QuestionCategory,
   AnalyseResult,
+  PrioriteType,
 } from '../interfaces/analyse.interface';
 import { OpenAIService } from './openai.service';
 
@@ -39,7 +40,7 @@ export class ReorientationService {
       );
 
       // Si la confiance est élevée, pas besoin de réorienter
-      if (analyse.priorite === 'HAUTE') {
+      if (analyse.priorite === PrioriteType.HAUTE) {
         this.logger.log(
           `Confiance élevée, pas de réorientation nécessaire pour l'agent ${analyse.agentCible}`,
         );
@@ -103,7 +104,7 @@ Réponds au format JSON avec les champs suivants:
           return {
             ...analyse,
             categorie: reorientation.newCategory,
-            agentCible: reorientation.newAgent as AgentType,
+            agentCible: reorientation.newAgent,
             contexte: `${analyse.contexte} | Réorienté: ${reorientation.explanation}`,
           };
         }
