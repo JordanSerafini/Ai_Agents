@@ -13,6 +13,21 @@ import {
 } from './services/clients';
 import { OpenAIService } from './services/openai.service';
 import { RagClientModule } from '../services/rag.module';
+import {
+  CacheService,
+  ConversationService,
+  CategorizationService,
+  TemporalService,
+  FormatterService,
+  QueryAnalysisService,
+} from './services/analyse';
+import {
+  RouterConfigService,
+  QueryBuilderService,
+  ElasticsearchService,
+  RagService,
+  WorkflowService,
+} from './services/router';
 
 @Module({
   imports: [
@@ -32,6 +47,17 @@ import { RagClientModule } from '../services/rag.module';
     ElasticsearchClientService,
     RagClientLocalService,
     OpenAIService,
+    CacheService,
+    ConversationService,
+    CategorizationService,
+    TemporalService,
+    FormatterService,
+    QueryAnalysisService,
+    RouterConfigService,
+    QueryBuilderService,
+    ElasticsearchService,
+    RagService,
+    WorkflowService,
   ],
   exports: [AnalyseService],
 })

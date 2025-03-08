@@ -94,8 +94,11 @@ export class QueryBuilderService {
    * Construit les données de requête à partir des métadonnées d'analyse
    */
   private buildQueryData(analyseResult: AnalyseResult): AnalyseQueryData {
-    // S'assurer que les métadonnées et les tables identifiées existent
-    if (!analyseResult.metadonnees || !analyseResult.metadonnees.tablesIdentifiees) {
+    const metadonnees = analyseResult.metadonnees;
+    const tablesIdentifiees = metadonnees?.tablesIdentifiees;
+
+    // Si tablesIdentifiees est undefined, retourner une structure vide
+    if (!tablesIdentifiees) {
       return {
         tables: [],
         metadata: {
@@ -104,9 +107,6 @@ export class QueryBuilderService {
         },
       };
     }
-
-    const metadonnees = analyseResult.metadonnees;
-    const tablesIdentifiees = metadonnees.tablesIdentifiees;
 
     return {
       tables: [

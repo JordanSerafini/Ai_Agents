@@ -9,6 +9,7 @@ import {
   PrioriteType,
 } from '../interfaces/analyse.interface';
 import { OpenAIService } from './openai.service';
+import { ReorientationRequestDto } from '../dto/reorientation-request.dto';
 
 interface ReorientationResponse {
   newCategory: QuestionCategory;
@@ -125,6 +126,50 @@ Réponds au format JSON avec les champs suivants:
         }`,
       );
       return analyse;
+    }
+  }
+
+  /**
+   * Réoriente une question directement à partir d'une requête de réorientation
+   */
+  async reorienterQuestion(request: ReorientationRequestDto): Promise<{ reponse: string }> {
+    try {
+      this.logger.log(`Réorientation directe pour la question: ${request.question}`);
+      
+      // Créer une requête d'analyse à partir de la requête de réorientation
+      const analyseRequest: AnalyseRequestDto = {
+        question: request.question,
+        userId: request.userId,
+        useHistory: false,
+      };
+      
+      // Créer une analyse factice pour la réorientation
+      const fakeAnalyse: AnalyseResult = {
+        questionCorrigee: request.question,
+        intention: 'non_determinee',
+        categorie: QuestionCategory.GENERAL,
+        agentCible: AgentType.GENERAL,
+        priorite: PrioriteType.BASSE,
+        entites: [],
+        contexte: request.contexteOriginal || 'Réorientation directe',
+      };
+      
+      // Réorienter l'analyse
+      const reorientedAnalyse = await this.reorient(analyseRequest, fakeAnalyse);
+      
+      // Retourner la réponse
+      return {
+        reponse: `Question réorientée vers l'agent ${reorientedAnalyse.agentCible} (catégorie: ${reorientedAnalyse.categorie})`,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la réorientation directe: ${
+          error instanceof Error ? error.message : 'Erreur inconnue'
+        }`,
+      );
+      return {
+        reponse: "Une erreur s'est produite lors de la réorientation de la question.",
+      };
     }
   }
 }
