@@ -84,6 +84,10 @@ services:
       - RAG_AGENT_URL=http://rag_agent:3004
       - WORKFLOW_AGENT_URL=http://workflow_agent:3005
       - API_AGENT_URL=http://api_agent:3006
+      - MODEL_TYPE=mistral
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN:-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}
+      - HUGGINGFACE_MODEL=${HUGGINGFACE_MODEL:-Jordans74/analyse_agent}
+      - MISTRAL_SYSTEM_PROMPT=Tu es un assistant IA expert en analyse de documents pour une entreprise de construction.
     networks:
       - ai_network
     depends_on:

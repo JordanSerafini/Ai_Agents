@@ -1,8 +1,12 @@
-.PHONY: help build up down restart logs ps clean prune pull-mistral
+.PHONY: help build up down restart logs ps clean prune pull-mistral mistral-api mistral-api-cpu mistral-api-8bit mistral-api-int8 mistral-api-no-quant mistral-finetune mistral-inference mistral-fix-bnb
 
 # Variables
 DOCKER_COMPOSE = docker-compose
 OLLAMA_CONTAINER = ollama
+MISTRAL_DIR = Mistral_Fine_Tuning/python
+MISTRAL_MODEL_PATH ?= jordanS/analyse_agent
+MISTRAL_BASE_MODEL ?= mistralai/Mistral-7B-v0.1
+MISTRAL_PORT ?= 8000
 
 # Couleurs pour les messages (compatible avec Windows)
 GREEN = \033[0;32m
@@ -23,6 +27,16 @@ help:
 	@echo "  $(YELLOW)make prune$(NC)        - Nettoie les ressources Docker non utilisées"
 	@echo "  $(YELLOW)make pull-mistral$(NC) - Télécharge le modèle Mistral dans Ollama"
 	@echo "  $(YELLOW)make setup$(NC)        - Configuration complète (build, up, pull-mistral)"
+	@echo ""
+	@echo "$(GREEN)Commandes Mistral Fine-Tuning:$(NC)"
+	@echo "  $(YELLOW)make mistral-api$(NC)          - Lancer l'API Mistral"
+	@echo "  $(YELLOW)make mistral-api-cpu$(NC)      - Lancer l'API Mistral en forçant l'utilisation du CPU"
+	@echo "  $(YELLOW)make mistral-api-8bit$(NC)     - Lancer l'API Mistral avec quantification 8-bit"
+	@echo "  $(YELLOW)make mistral-api-int8$(NC)     - Lancer l'API Mistral avec quantification int8 et offload CPU"
+	@echo "  $(YELLOW)make mistral-api-no-quant$(NC) - Lancer l'API Mistral sans quantification"
+	@echo "  $(YELLOW)make mistral-fix-bnb$(NC)      - Réparer bitsandbytes et lancer l'API Mistral"
+	@echo "  $(YELLOW)make mistral-finetune$(NC)     - Lancer le fine-tuning du modèle Mistral"
+	@echo "  $(YELLOW)make mistral-inference$(NC)    - Lancer l'inférence interactive avec Mistral"
 
 build:
 	@echo "$(GREEN)Construction des images Docker...$(NC)"
@@ -81,4 +95,6 @@ setup: build up pull-mistral
 	@echo "$(GREEN)Services disponibles :$(NC)"
 	@echo "$(GREEN)- Analyse Agent: http://localhost:3001$(NC)"
 	@echo "$(GREEN)- Ollama API: http://localhost:11434$(NC)"
-	@echo "$(GREEN)- MongoDB: mongodb://localhost:27017$(NC)" 
+	@echo "$(GREEN)- MongoDB: mongodb://localhost:27017$(NC)"
+
+# Cibles pour Mistral Fine-Tuning

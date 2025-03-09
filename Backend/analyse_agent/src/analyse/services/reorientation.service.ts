@@ -9,7 +9,9 @@ import {
   PrioriteType,
 } from '../interfaces/analyse.interface';
 import { OpenAIService } from './openai.service';
+import { MistralService } from './mistral.service';
 import { ReorientationRequestDto } from '../dto/reorientation-request.dto';
+import { ModelType } from './analyse.service';
 
 interface ReorientationResponse {
   newCategory: QuestionCategory;
@@ -21,12 +23,22 @@ interface ReorientationResponse {
 @Injectable()
 export class ReorientationService {
   private readonly logger = new Logger(ReorientationService.name);
+  private readonly modelType: ModelType;
 
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
     private readonly openaiService: OpenAIService,
-  ) {}
+    private readonly mistralService: MistralService,
+  ) {
+    this.modelType = (this.configService.get<string>('MODEL_TYPE', 'mistral') as ModelType) || ModelType.MISTRAL;
+    this.logger.log(`Service de réorientation initialisé avec le modèle: ${this.modelType}`);
+  }
+
+  // Méthode pour obtenir le service de modèle approprié
+  private getModelService() {
+    return this.modelType === ModelType.OPENAI ? this.openaiService : this.mistralService;
+  }
 
   /**
    * Réoriente une analyse vers un agent plus approprié si nécessaire
@@ -79,7 +91,7 @@ Réponds au format JSON avec les champs suivants:
 `;
 
       // Appeler OpenAI pour la réorientation
-      const reorientationResponse = await this.openaiService.sendMessage(
+      const reorientationResponse = await this.getModelService().sendMessage(
         prompt,
         {
           temperature: 0.2,

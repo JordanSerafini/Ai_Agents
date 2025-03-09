@@ -9,3 +9,7 @@
 *.{ttf,otf,woff,woff2} binary
 *.{json,yml,yaml,md,txt,env} text eol=lf
 *.{ts,js,jsx,tsx,css,scss,html} text eol=lf 
+*.safetensors filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text
+*.pt filter=lfs diff=lfs merge=lfs -text
+*.pth filter=lfs diff=lfs merge=lfs -text

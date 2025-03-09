@@ -3,6 +3,7 @@ import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { AnalyseService } from './analyse.service';
 import { OpenAIService } from './openai.service';
+import { MistralService } from './mistral.service';
 import { RouterService } from './router.service';
 import {
   QueryBuilderClientService,
@@ -23,6 +24,7 @@ import {
   providers: [
     AnalyseService,
     OpenAIService,
+    MistralService,
     RouterService,
     QueryBuilderClientService,
     ElasticsearchClientService,
@@ -34,6 +36,6 @@ import {
     FormatterService,
     QueryAnalysisService,
   ],
-  exports: [AnalyseService, OpenAIService, RouterService],
+  exports: [AnalyseService, OpenAIService, MistralService, RouterService],
 })
 export class AnalyseModule {}

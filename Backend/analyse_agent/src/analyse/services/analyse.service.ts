@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { OpenAIService } from './openai.service';
+import { MistralService } from './mistral.service';
 import { RouterService } from './router.service';
 import {
   QueryBuilderClientService,
@@ -28,10 +29,17 @@ import {
   QueryAnalysisService,
 } from './analyse';
 
+// Type de modèle à utiliser
+export enum ModelType {
+  OPENAI = 'openai',
+  MISTRAL = 'mistral',
+}
+
 @Injectable()
 export class AnalyseService {
   private readonly logger = new Logger(AnalyseService.name);
   private readonly openaiApiKey: string;
+  private readonly modelType: ModelType;
 
   constructor(
     private readonly httpService: HttpService,
@@ -41,6 +49,7 @@ export class AnalyseService {
     private readonly elasticsearchClient: ElasticsearchClientService,
     private readonly ragClientService: RagClientLocalService,
     private readonly openaiService: OpenAIService,
+    private readonly mistralService: MistralService,
     private readonly cacheService: CacheService,
     private readonly conversationService: ConversationService,
     private readonly categorizationService: CategorizationService,
@@ -48,10 +57,14 @@ export class AnalyseService {
     private readonly formatterService: FormatterService,
     private readonly queryAnalysisService: QueryAnalysisService,
   ) {
-    this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
-    if (!this.openaiApiKey) {
-      this.logger.error('OPENAI_API_KEY non défini dans la configuration');
-    }
+    this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY', '');
+    this.modelType = (this.configService.get<string>('MODEL_TYPE', 'mistral') as ModelType) || ModelType.MISTRAL;
+    this.logger.log(`Service d'analyse initialisé avec le modèle: ${this.modelType}`);
+  }
+
+  // Méthode pour obtenir le service de modèle approprié
+  private getModelService() {
+    return this.modelType === ModelType.OPENAI ? this.openaiService : this.mistralService;
   }
 
   async analyser(request: UserQuestionDto): Promise<{ reponse: string }> {
@@ -259,7 +272,7 @@ Utilise un ton professionnel et adapté au secteur du bâtiment.`,
       // Continuer avec l'analyse normale si ce n'est pas une recherche explicite
       try {
         // Utiliser le nouvel OpenAIService avec le prompt externalisé
-        const analysisResult = (await this.openaiService.analyseQuestion(
+        const analysisResult = (await this.getModelService().analyseQuestion(
           request.question,
           'semantic-analysis',
         )) as AnalyseSemantiqueResponse;
