@@ -12,6 +12,7 @@ import {
   RagClientLocalService,
 } from './services/clients';
 import { OpenAIService } from './services/openai.service';
+import { MistralService } from './services/mistral.service';
 import { RagClientModule } from '../services/rag.module';
 import {
   CacheService,
@@ -47,6 +48,7 @@ import {
     ElasticsearchClientService,
     RagClientLocalService,
     OpenAIService,
+    MistralService,
     CacheService,
     ConversationService,
     CategorizationService,

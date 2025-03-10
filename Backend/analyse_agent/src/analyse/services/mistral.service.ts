@@ -184,29 +184,87 @@ export class MistralService implements OnModuleInit {
     // Formater le prompt pour Mistral
     const formattedPrompt = `<s>[INST] ${this.systemPrompt}\n\n${content} [/INST]`;
 
-    const response = await axios.post(
-      `https://api-inference.huggingface.co/models/${this.huggingFaceModel}`,
-      {
-        inputs: formattedPrompt,
-        parameters: {
-          max_new_tokens: options.max_tokens || 1024,
-          temperature: options.temperature || 0.7,
-          return_full_text: false,
+    try {
+      // Utiliser l'endpoint spécifique pour la génération de texte avec pipeline
+      const response = await axios.post(
+        `https://api-inference.huggingface.co/pipeline/text-generation/${this.huggingFaceModel}`,
+        {
+          inputs: formattedPrompt,
+          parameters: {
+            max_new_tokens: options.max_tokens || 1024,
+            temperature: options.temperature || 0.7,
+            do_sample: true,
+            return_full_text: false
+          }
         },
-      },
-      {
-        timeout: options.timeout || 60000,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.huggingFaceToken}`,
+        {
+          timeout: options.timeout || 120000,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.huggingFaceToken}`,
+          },
         },
-      },
-    );
+      );
 
-    if (response.data && response.data[0] && response.data[0].generated_text) {
-      return response.data[0].generated_text;
-    } else {
-      throw new Error('Format de réponse Hugging Face invalide');
+      this.logger.debug(`Réponse brute de Hugging Face: ${JSON.stringify(response.data)}`);
+
+      // Gérer différents formats de réponse possibles
+      if (response.data) {
+        // Format 1: Tableau d'objets avec generated_text
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          if (response.data[0].generated_text) {
+            return response.data[0].generated_text;
+          }
+        }
+        
+        // Format 2: Tableau de chaînes
+        if (Array.isArray(response.data) && typeof response.data[0] === 'string') {
+          return response.data[0];
+        }
+        
+        // Format 3: Objet avec generated_text
+        if (response.data.generated_text) {
+          return response.data.generated_text;
+        }
+        
+        // Format 4: Chaîne simple
+        if (typeof response.data === 'string') {
+          return response.data;
+        }
+      }
+
+      throw new Error('Format de réponse inattendu');
+    } catch (error) {
+      if (error.response?.data?.error?.includes('currently loading')) {
+        this.logger.log('Le modèle est en cours de chargement, attente...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        return this.sendMessageToHuggingFace(content, options);
+      }
+
+      // Si l'erreur est "Task not found", essayons avec l'endpoint standard
+      if (error.response?.data?.error?.includes('Task not found')) {
+        this.logger.log("Erreur 'Task not found', tentative avec l'endpoint standard...");
+        
+        const standardResponse = await axios.post(
+          `https://api-inference.huggingface.co/models/${this.huggingFaceModel}`,
+          {
+            inputs: formattedPrompt
+          },
+          {
+            timeout: options.timeout || 120000,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.huggingFaceToken}`,
+            },
+          }
+        );
+
+        if (standardResponse.data && Array.isArray(standardResponse.data)) {
+          return standardResponse.data[0].generated_text || standardResponse.data[0];
+        }
+      }
+
+      throw error;
     }
   }
 
