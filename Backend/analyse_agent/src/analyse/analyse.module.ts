@@ -63,4 +63,5 @@ import {
   ],
   exports: [AnalyseService],
 })
+
 export class AnalyseModule {}
