@@ -74,7 +74,6 @@ export class QueryConfigService {
       );
     }
   }
-
   /**
    * Applique un groupe de conditions à la requête
    */
