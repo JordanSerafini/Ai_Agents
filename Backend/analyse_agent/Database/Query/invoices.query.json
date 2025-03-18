@@ -347,6 +347,18 @@
       ],
       "sql": "SELECT client_name, SUM(current_due) AS current_due, SUM(days_1_30) AS days_1_30, SUM(days_31_60) AS days_31_60, SUM(days_61_90) AS days_61_90, SUM(days_over_90) AS days_over_90, SUM(current_due + days_1_30 + days_31_60 + days_61_90 + days_over_90) AS total_due FROM (SELECT c.firstname || ' ' || c.lastname AS client_name, CASE WHEN CURRENT_DATE - i.due_date < 0 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS current_due, CASE WHEN CURRENT_DATE - i.due_date BETWEEN 0 AND 30 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS days_1_30, CASE WHEN CURRENT_DATE - i.due_date BETWEEN 31 AND 60 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS days_31_60, CASE WHEN CURRENT_DATE - i.due_date BETWEEN 61 AND 90 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS days_61_90, CASE WHEN CURRENT_DATE - i.due_date > 90 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS days_over_90 FROM invoices i JOIN projects pr ON i.project_id = pr.id JOIN clients c ON pr.client_id = c.id JOIN ref_status rs ON i.status = rs.id LEFT JOIN payments p ON i.id = p.invoice_id WHERE rs.entity_type = 'invoice' AND rs.code NOT IN ('payée', 'annulée') GROUP BY c.firstname, c.lastname, i.id, i.total_ttc, i.due_date HAVING i.total_ttc - COALESCE(SUM(p.amount), 0) > 0) AS aging GROUP BY client_name ORDER BY SUM(days_over_90) DESC, SUM(days_61_90) DESC",
       "description": "Balance âgée des factures impayées par client et par tranche d'ancienneté"
+    },
+    {
+      "id": "invoices_revenue_forecast",
+      "questions": [
+        "Quelle est la prévision de revenus pour les prochains mois ?",
+        "Prévision de trésorerie des factures",
+        "Revenus prévisionnels des factures",
+        "Encaissements prévisionnels",
+        "Prévisions d'encaissement par mois"
+      ],
+      "sql": "SELECT DATE_TRUNC('month', i.due_date) AS month, TO_CHAR(DATE_TRUNC('month', i.due_date), 'Month YYYY') AS month_name, COUNT(*) AS invoice_count, ROUND(SUM(i.total_ttc), 2) AS expected_amount FROM invoices i JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND rs.code NOT IN ('payée', 'annulée') AND i.due_date >= CURRENT_DATE GROUP BY DATE_TRUNC('month', i.due_date), TO_CHAR(DATE_TRUNC('month', i.due_date), 'Month YYYY') ORDER BY DATE_TRUNC('month', i.due_date)",
+      "description": "Prévision des encaissements de factures pour les prochains mois basée sur les dates d'échéance"
     }
   ]
 }

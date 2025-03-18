@@ -124,7 +124,6 @@ export class PredefinedQueriesService {
         // Vérifier si l'entrée a un ID
         if (!metadata || !metadata.id) continue;
 
-        const entryMatched = false;
         let bestMatchingQuestion = '';
         let entrySimilarity = 0;
 
@@ -323,7 +322,7 @@ export class PredefinedQueriesService {
       if (a.length === 0) return b.length;
       if (b.length === 0) return a.length;
 
-      const matrix = [];
+      const matrix: number[][] = [];
 
       // Initialiser la matrice
       for (let i = 0; i <= b.length; i++) {
