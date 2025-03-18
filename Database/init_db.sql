@@ -9,6 +9,10 @@ CREATE EXTENSION IF NOT EXISTS "vector";
 -- Ajout de l'extension pg_trgm pour la fonction similarity
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
+-- Suppression des vues matérialisées existantes si elles existent
+DROP MATERIALIZED VIEW IF EXISTS financial_dashboard;
+DROP MATERIALIZED VIEW IF EXISTS project_profitability_report;
+
 -- Création du type ENUM pour la catégorie des produits des devis
 DO $$ 
 BEGIN
