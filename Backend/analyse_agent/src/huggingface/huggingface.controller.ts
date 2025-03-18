@@ -2,6 +2,7 @@ import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { HuggingFaceService, AnalysisResult } from './huggingface.service';
 import { RagService } from '../RAG/rag.service';
 import { PredefinedQueriesService } from '../sql-queries/predefined-queries.service';
+import { QueryBuilderService } from '../querybuilder/querybuilder.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Controller('analyse')
@@ -14,6 +15,7 @@ export class HuggingFaceController {
     private readonly huggingFaceService: HuggingFaceService,
     private readonly ragService: RagService,
     private readonly predefinedQueriesService: PredefinedQueriesService,
+    private readonly queryBuilderService: QueryBuilderService,
   ) {
     // Créer les collections si elles n'existent pas
     void this.initCollections();
@@ -43,10 +45,6 @@ export class HuggingFaceController {
     if (predefinedQuery.found) {
       this.logger.log(`Requête prédéfinie trouvée: ${predefinedQuery.id}`);
 
-      // Si la requête a des paramètres, nous devrions les extraire
-      // Pour cette version, nous allons simplement utiliser la requête sans paramètres
-      // Dans une version future, on pourrait appeler le LLM pour extraire les paramètres
-
       const analysisResult: AnalysisResult = {
         question: question,
         questionReformulated: predefinedQuery.description,
@@ -57,12 +55,30 @@ export class HuggingFaceController {
         conditions: '',
       };
 
-      return {
-        source: 'predefined_query',
-        result: analysisResult,
-        parameters: predefinedQuery.parameters,
-        id: predefinedQuery.id,
-      };
+      // Exécuter la requête SQL
+      try {
+        const queryResult = await this.queryBuilderService.executeQuery(
+          predefinedQuery.query,
+        );
+        return {
+          source: 'predefined_query',
+          result: analysisResult,
+          parameters: predefinedQuery.parameters,
+          id: predefinedQuery.id,
+          data: queryResult.rows,
+          rowCount: queryResult.rowCount,
+          duration: queryResult.duration,
+        };
+      } catch (error) {
+        this.logger.error(
+          `Erreur lors de l'exécution de la requête: ${error.message}`,
+        );
+        return {
+          source: 'predefined_query',
+          result: analysisResult,
+          error: this.queryBuilderService.parsePostgresError(error),
+        };
+      }
     }
 
     // Continuer avec le flux normal si aucune requête prédéfinie n'est trouvée
@@ -73,11 +89,39 @@ export class HuggingFaceController {
       this.logger.log(
         `Requête SQL pré-construite trouvée directement dans le cache`,
       );
-      // Retourner l'analyse avec la requête SQL du cache
-      return {
-        source: 'cache_sql',
-        result: cachedSql.result,
-      };
+
+      // Vérifier que finalQuery existe
+      if (!cachedSql.result.finalQuery) {
+        this.logger.error('Requête SQL finale manquante dans le cache');
+        return {
+          source: 'cache_sql',
+          result: cachedSql.result,
+          error: 'Requête SQL finale manquante',
+        };
+      }
+
+      // Exécuter la requête SQL
+      try {
+        const queryResult = await this.queryBuilderService.executeQuery(
+          cachedSql.result.finalQuery,
+        );
+        return {
+          source: 'cache_sql',
+          result: cachedSql.result,
+          data: queryResult.rows,
+          rowCount: queryResult.rowCount,
+          duration: queryResult.duration,
+        };
+      } catch (error) {
+        this.logger.error(
+          `Erreur lors de l'exécution de la requête: ${error.message}`,
+        );
+        return {
+          source: 'cache_sql',
+          result: cachedSql.result,
+          error: this.queryBuilderService.parsePostgresError(error),
+        };
+      }
     }
 
     // Si pas de SQL direct, vérifier si une question similaire existe déjà
@@ -98,19 +142,78 @@ export class HuggingFaceController {
         this.logger.log(
           'Requête SQL pré-construite trouvée pour question similaire',
         );
-        // Retourner l'analyse avec la requête SQL du cache
-        return {
-          source: 'cache',
-          result: cachedSql.result,
-          similarity: similarResult.similarity,
-        };
+
+        // Vérifier que finalQuery existe
+        if (!cachedSql.result.finalQuery) {
+          this.logger.error('Requête SQL finale manquante dans le cache');
+          return {
+            source: 'cache',
+            result: cachedSql.result,
+            similarity: similarResult.similarity,
+            error: 'Requête SQL finale manquante',
+          };
+        }
+
+        // Exécuter la requête SQL
+        try {
+          const queryResult = await this.queryBuilderService.executeQuery(
+            cachedSql.result.finalQuery,
+          );
+          return {
+            source: 'cache',
+            result: cachedSql.result,
+            similarity: similarResult.similarity,
+            data: queryResult.rows,
+            rowCount: queryResult.rowCount,
+            duration: queryResult.duration,
+          };
+        } catch (error) {
+          this.logger.error(
+            `Erreur lors de l'exécution de la requête: ${error.message}`,
+          );
+          return {
+            source: 'cache',
+            result: cachedSql.result,
+            similarity: similarResult.similarity,
+            error: this.queryBuilderService.parsePostgresError(error),
+          };
+        }
       }
 
       // Sinon, effectuer l'analyse avec la question d'origine
+      const result = await this.huggingFaceService.analyseQuestion(question);
+
+      // Si c'est une requête SQL, l'exécuter
+      if (result.agent === 'querybuilder' && result.finalQuery) {
+        try {
+          const queryResult = await this.queryBuilderService.executeQuery(
+            result.finalQuery,
+          );
+          return {
+            source: 'model',
+            result,
+            similarity: similarResult.similarity,
+            data: queryResult.rows,
+            rowCount: queryResult.rowCount,
+            duration: queryResult.duration,
+          };
+        } catch (error) {
+          this.logger.error(
+            `Erreur lors de l'exécution de la requête: ${error.message}`,
+          );
+          return {
+            source: 'model',
+            result,
+            similarity: similarResult.similarity,
+            error: this.queryBuilderService.parsePostgresError(error),
+          };
+        }
+      }
+
       return {
-        source: 'cache',
+        source: 'model',
+        result,
         similarity: similarResult.similarity,
-        result: await this.huggingFaceService.analyseQuestion(question),
       };
     }
 
@@ -137,9 +240,33 @@ export class HuggingFaceController {
         );
 
         // Si c'est une requête querybuilder valide avec une requête SQL,
-        // la sauvegarder dans le cache de requêtes SQL
+        // la sauvegarder dans le cache de requêtes SQL et l'exécuter
         if (result.agent === 'querybuilder' && result.finalQuery) {
           await this.cacheSqlQuery(question, result);
+
+          try {
+            const queryResult = await this.queryBuilderService.executeQuery(
+              result.finalQuery,
+            );
+            return {
+              source: 'model',
+              result,
+              confidence: validation.confidenceScore,
+              data: queryResult.rows,
+              rowCount: queryResult.rowCount,
+              duration: queryResult.duration,
+            };
+          } catch (error) {
+            this.logger.error(
+              `Erreur lors de l'exécution de la requête: ${error.message}`,
+            );
+            return {
+              source: 'model',
+              result,
+              confidence: validation.confidenceScore,
+              error: this.queryBuilderService.parsePostgresError(error),
+            };
+          }
         }
 
         return {

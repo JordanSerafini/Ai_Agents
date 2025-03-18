@@ -4,9 +4,10 @@ import { HuggingFaceController } from './huggingface.controller';
 import { ConfigModule } from '@nestjs/config';
 import { RagModule } from '../RAG/rag.module';
 import { SqlQueriesModule } from '../sql-queries/sql-queries.module';
+import { QueryBuilderModule } from 'src/querybuilder/querybuilder.module';
 
 @Module({
-  imports: [ConfigModule, RagModule, SqlQueriesModule],
+  imports: [ConfigModule, RagModule, SqlQueriesModule, QueryBuilderModule],
   controllers: [HuggingFaceController],
   providers: [HuggingFaceService],
   exports: [HuggingFaceService],
