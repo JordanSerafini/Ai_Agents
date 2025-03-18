@@ -101,7 +101,7 @@ export class HuggingFaceController {
 
         if (reformulatedPredefinedQuery.found) {
           this.logger.log(
-            `Requête prédéfinie trouvée avec la question reformulée: ${reformulatedPredefinedQuery.id}`,
+            `Requête prédéfinie trouvée avec la question reformulée: ${reformulatedPredefinedQuery.id} (similarité: ${reformulatedPredefinedQuery.similarity})`,
           );
 
           const analysisResult: AnalysisResult = {
@@ -129,6 +129,7 @@ export class HuggingFaceController {
               data: queryResult.rows,
               rowCount: queryResult.rowCount,
               duration: queryResult.duration,
+              similarity: reformulatedPredefinedQuery.similarity,
             };
           } catch (error) {
             this.logger.error(
@@ -140,6 +141,10 @@ export class HuggingFaceController {
               error: this.queryBuilderService.parsePostgresError(error),
             };
           }
+        } else {
+          this.logger.log(
+            `Aucune requête prédéfinie trouvée avec la question reformulée: "${result.questionReformulated}"`,
+          );
         }
       }
 

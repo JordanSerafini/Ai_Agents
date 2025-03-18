@@ -472,8 +472,8 @@
         "Équipe mois en cours",
         "Planning personnel mois"
       ],
-      "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(COUNT(DISTINCT te.date), 0) as days_worked, COALESCE(SUM(te.hours), 0) as total_hours FROM staff s LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND EXTRACT(MONTH FROM te.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE) WHERE s.is_available = true GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY s.lastname, s.firstname",
-      "description": "Planning du personnel pour le mois en cours avec le nombre de jours travaillés et le total des heures",
+      "sql": "SELECT s.firstname, s.lastname, s.role, wws.total_hours as hours_scheduled, wws.schedule FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id WHERE s.is_available = true AND EXTRACT(MONTH FROM wws.week_start_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM wws.week_start_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY s.lastname, s.firstname",
+      "description": "Planning du personnel pour le mois en cours avec les heures programmées",
       "parameters": [
         {
           "name": "MONTH",
@@ -481,6 +481,24 @@
           "default": "EXTRACT(MONTH FROM CURRENT_DATE)"
         }
       ]
+    },
+    {
+      "id": "annual_report",
+      "questions": [
+        "quel bilan pour cette année ?",
+        "bilan annuel",
+        "rapport annuel",
+        "statistiques de l'année",
+        "résumé de l'année",
+        "bilan de l'année",
+        "rapport de l'année",
+        "statistiques annuelles",
+        "résumé annuel",
+        "bilan de l'exercice"
+      ],
+      "sql": "WITH project_stats AS (SELECT COUNT(*) as total_projects, COUNT(CASE WHEN status = (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') THEN 1 END) as completed_projects, COUNT(CASE WHEN status = (SELECT id FROM ref_status WHERE code = 'en_cours' AND entity_type = 'project') THEN 1 END) as active_projects FROM projects WHERE EXTRACT(YEAR FROM start_date) = EXTRACT(YEAR FROM CURRENT_DATE)), staff_stats AS (SELECT COUNT(*) as total_staff, COUNT(CASE WHEN is_available = true THEN 1 END) as available_staff FROM staff), financial_stats AS (SELECT COUNT(*) as total_quotations, SUM(total_ttc) as total_quotation_amount, (SELECT COUNT(*) FROM invoices WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) as total_invoices, (SELECT SUM(total_ttc) FROM invoices WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) as total_invoice_amount FROM quotations WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) SELECT ps.*, ss.*, fs.* FROM project_stats ps CROSS JOIN staff_stats ss CROSS JOIN financial_stats fs",
+      "description": "Bilan complet de l'année en cours avec les statistiques des projets, du personnel et des aspects financiers",
+      "parameters": []
     }
   ]
 }

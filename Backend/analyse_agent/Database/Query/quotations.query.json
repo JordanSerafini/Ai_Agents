@@ -219,6 +219,148 @@
       ],
       "sql": "SELECT q.id, q.reference, q.issue_date, q.validity_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, c.phone AS client_phone, c.email AS client_email, (CURRENT_DATE - q.issue_date) AS days_outstanding FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'en_attente' AND q.validity_date > CURRENT_DATE ORDER BY (CURRENT_DATE - q.issue_date) DESC",
       "description": "Liste des devis en attente de validation et toujours valides avec coordonnées client pour relance"
+    },
+    {
+      "id": "quotations_monthly_summary",
+      "questions": [
+        "Quel est le résumé des devis ce mois-ci ?",
+        "Bilan des devis du mois",
+        "Statistiques des devis du mois",
+        "Résumé des devis du mois en cours",
+        "Bilan mensuel des devis",
+        "Statistiques mensuelles des devis",
+        "Résumé mensuel des devis",
+        "Bilan des devis du mois courant",
+        "Statistiques des devis mensuelles",
+        "Résumé des devis du mois"
+      ],
+      "sql": "SELECT COUNT(*) as total_quotations, COUNT(CASE WHEN rqs.code = 'accepté' THEN 1 END) as accepted_quotations, COUNT(CASE WHEN rqs.code = 'en_attente' THEN 1 END) as pending_quotations, COUNT(CASE WHEN rqs.code = 'refusé' THEN 1 END) as rejected_quotations, SUM(total_ttc) as total_amount, ROUND(AVG(total_ttc), 2) as average_amount FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE EXTRACT(MONTH FROM q.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM q.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)",
+      "description": "Résumé des devis du mois en cours avec statistiques et montants"
+    },
+    {
+      "id": "quotations_by_amount_range",
+      "questions": [
+        "Quels sont les devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€ ?",
+        "Devis dans la fourchette [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Liste des devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Devis avec montant entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Quels devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€ ?",
+        "Devis dans la tranche [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Liste des devis [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Devis montant [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Quels devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Devis fourchette [MIN_AMOUNT]€ - [MAX_AMOUNT]€"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.total_ttc BETWEEN [MIN_AMOUNT] AND [MAX_AMOUNT] ORDER BY q.total_ttc DESC",
+      "description": "Liste des devis dont le montant est compris dans une fourchette spécifique",
+      "parameters": [
+        {
+          "name": "MIN_AMOUNT",
+          "description": "Montant minimum en euros"
+        },
+        {
+          "name": "MAX_AMOUNT",
+          "description": "Montant maximum en euros"
+        }
+      ]
+    },
+    {
+      "id": "quotations_without_products",
+      "questions": [
+        "Quels devis n'ont pas de produits ?",
+        "Devis sans produits",
+        "Liste des devis vides",
+        "Devis sans articles",
+        "Quels devis sont vides ?",
+        "Devis sans lignes",
+        "Devis sans produits",
+        "Liste des devis sans articles",
+        "Devis vides",
+        "Devis sans contenu"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE NOT EXISTS (SELECT 1 FROM quotation_products qp WHERE qp.quotation_id = q.id) ORDER BY q.issue_date DESC",
+      "description": "Liste des devis qui n'ont pas de produits associés"
+    },
+    {
+      "id": "quotations_with_high_discount",
+      "questions": [
+        "Quels devis ont une remise importante ?",
+        "Devis avec forte remise",
+        "Liste des devis avec remise importante",
+        "Devis avec remise significative",
+        "Quels devis ont une grosse remise ?",
+        "Devis avec remise élevée",
+        "Devis avec remise importante",
+        "Liste des devis avec forte remise",
+        "Devis remise importante",
+        "Devis avec remise significative"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, q.discount_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE q.discount_percentage > 10 ORDER BY q.discount_percentage DESC",
+      "description": "Liste des devis avec une remise supérieure à 10%"
+    },
+    {
+      "id": "quotations_by_payment_terms",
+      "questions": [
+        "Quels devis ont des conditions de paiement [TERMS] ?",
+        "Devis avec conditions [TERMS]",
+        "Liste des devis avec paiement [TERMS]",
+        "Devis conditions de paiement [TERMS]",
+        "Quels devis avec paiement [TERMS] ?",
+        "Devis paiement [TERMS]",
+        "Devis avec conditions [TERMS]",
+        "Liste des devis [TERMS]",
+        "Devis conditions [TERMS]",
+        "Devis paiement [TERMS]"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, q.payment_conditions, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE q.payment_conditions ILIKE '%[TERMS]%' ORDER BY q.issue_date DESC",
+      "description": "Liste des devis avec des conditions de paiement spécifiques",
+      "parameters": [
+        {
+          "name": "TERMS",
+          "description": "Conditions de paiement à rechercher"
+        }
+      ]
+    },
+    {
+      "id": "quotations_without_invoice",
+      "questions": [
+        "Quels devis acceptés n'ont pas de facture ?",
+        "Devis acceptés sans facture",
+        "Liste des devis sans facture",
+        "Devis à facturer",
+        "Quels devis à facturer ?",
+        "Devis sans facture",
+        "Devis à facturer",
+        "Liste des devis sans facture",
+        "Devis sans facture",
+        "Devis à facturer"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'accepté' AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.quotation_id = q.id) ORDER BY q.issue_date DESC",
+      "description": "Liste des devis acceptés qui n'ont pas encore de facture associée"
+    },
+    {
+      "id": "quotations_by_product_count",
+      "questions": [
+        "Quels devis ont plus de [COUNT] produits ?",
+        "Devis avec plus de [COUNT] articles",
+        "Liste des devis avec plus de [COUNT] produits",
+        "Devis avec plus de [COUNT] lignes",
+        "Quels devis ont plus de [COUNT] articles ?",
+        "Devis plus de [COUNT] produits",
+        "Devis avec plus de [COUNT] articles",
+        "Liste des devis plus de [COUNT] produits",
+        "Devis plus de [COUNT] articles",
+        "Devis avec plus de [COUNT] lignes"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, COUNT(qp.id) as product_count, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN quotation_products qp ON q.id = qp.quotation_id GROUP BY q.id, q.reference, q.issue_date, q.total_ttc, c.firstname, c.lastname, p.name HAVING COUNT(qp.id) > [COUNT] ORDER BY COUNT(qp.id) DESC",
+      "description": "Liste des devis ayant plus d'un certain nombre de produits",
+      "parameters": [
+        {
+          "name": "COUNT",
+          "description": "Nombre minimum de produits",
+          "default": "5"
+        }
+      ]
     }
   ]
 }

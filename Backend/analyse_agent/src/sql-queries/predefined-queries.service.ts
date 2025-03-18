@@ -17,7 +17,7 @@ export class PredefinedQueriesService {
       const exactResult = await this.ragService.findSimilarPrompt(
         this.sqlQueryCacheName,
         question,
-        0.75, // Seuil de similarité élevé
+        0.85,
       );
 
       if (exactResult.found && exactResult.metadata) {
@@ -144,30 +144,30 @@ export class PredefinedQueriesService {
               };
             }
           }
-        } else {
-          // Sinon, comparer avec le document lui-même (qui est généralement la question)
-          const documentText = allEntries.documents[i];
-          if (!documentText) continue;
+        }
 
-          const normalizedDocument =
-            this.normalizeTextForComparison(documentText);
-          const similarity = this.calculateKeywordSimilarity(
-            questionWords,
-            normalizedDocument,
-          );
+        // Comparer avec le document lui-même (qui est généralement la question)
+        const documentText = allEntries.documents[i];
+        if (!documentText) continue;
 
-          if (similarity > bestSimilarity && similarity > 0.6) {
-            bestSimilarity = similarity;
-            bestMatch = {
-              found: true,
-              query: metadata.finalQuery,
-              description: metadata.questionReformulated || documentText,
-              parameters: this.detectRequiredParameters(metadata.finalQuery),
-              predefinedParameters: metadata.parameters || [],
-              id: metadata.id,
-              similarity: similarity,
-            };
-          }
+        const normalizedDocument =
+          this.normalizeTextForComparison(documentText);
+        const similarity = this.calculateKeywordSimilarity(
+          questionWords,
+          normalizedDocument,
+        );
+
+        if (similarity > bestSimilarity && similarity > 0.6) {
+          bestSimilarity = similarity;
+          bestMatch = {
+            found: true,
+            query: metadata.finalQuery,
+            description: metadata.questionReformulated || documentText,
+            parameters: this.detectRequiredParameters(metadata.finalQuery),
+            predefinedParameters: metadata.parameters || [],
+            id: metadata.id,
+            similarity: similarity,
+          };
         }
       }
 

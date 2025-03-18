@@ -323,6 +323,61 @@
       ],
       "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name FROM projects p JOIN clients c ON p.client_id = c.id WHERE EXTRACT(MONTH FROM p.start_date) = EXTRACT(MONTH FROM CURRENT_DATE + INTERVAL '1 month') AND EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE + INTERVAL '1 month') ORDER BY p.start_date",
       "description": "Liste des projets qui débuteront le mois prochain"
+    },
+    {
+      "id": "projects_budget_overrun",
+      "questions": [
+        "Quels projets ont dépassé leur budget ?",
+        "Projets avec dépassement budgétaire",
+        "Chantiers hors budget",
+        "Liste des projets en dépassement"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, pb.total_budget, COALESCE(SUM(e.amount), 0) AS total_expenses, (COALESCE(SUM(e.amount), 0) - pb.total_budget) AS budget_overrun FROM projects p JOIN clients c ON p.client_id = c.id JOIN project_budgets pb ON p.id = pb.project_id LEFT JOIN expenses e ON p.id = e.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname, pb.total_budget HAVING COALESCE(SUM(e.amount), 0) > pb.total_budget ORDER BY budget_overrun DESC",
+      "description": "Liste des projets ayant dépassé leur budget initial"
+    },
+    {
+      "id": "projects_quality_issues",
+      "questions": [
+        "Quels projets ont des problèmes de qualité ?",
+        "Projets avec contrôles qualité échoués",
+        "Chantiers avec points de contrôle rejetés",
+        "Liste des projets avec problèmes qualité"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(qc.id) AS rejected_checkpoints FROM projects p JOIN clients c ON p.client_id = c.id JOIN stages s ON p.id = s.project_id JOIN quality_checkpoints qc ON s.id = qc.stage_id JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id WHERE rqcs.code = 'rejeté' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY rejected_checkpoints DESC",
+      "description": "Liste des projets ayant des points de contrôle qualité rejetés"
+    },
+    {
+      "id": "projects_equipment_issues",
+      "questions": [
+        "Quels projets ont des équipements en mauvais état ?",
+        "Projets avec équipements défectueux",
+        "Chantiers avec matériel en panne",
+        "Liste des projets avec problèmes d'équipement"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(set.id) AS problematic_equipment FROM projects p JOIN clients c ON p.client_id = c.id JOIN site_equipment_tracking set ON p.id = set.project_id JOIN equipment e ON set.equipment_id = e.id JOIN ref_equipment_status res ON e.status = res.id WHERE res.code IN ('maintenance', 'hors_service') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY problematic_equipment DESC",
+      "description": "Liste des projets avec des équipements en mauvais état ou en maintenance"
+    },
+    {
+      "id": "projects_pending_materials",
+      "questions": [
+        "Quels projets ont des demandes de matériaux en attente ?",
+        "Projets en attente de matériaux",
+        "Chantiers avec demandes de matériaux",
+        "Liste des projets avec demandes de matériaux"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(mr.id) AS pending_requests FROM projects p JOIN clients c ON p.client_id = c.id JOIN material_requests mr ON p.id = mr.project_id JOIN ref_material_request_status rmrs ON mr.status = rmrs.id WHERE rmrs.code = 'en_attente' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY pending_requests DESC",
+      "description": "Liste des projets avec des demandes de matériaux en attente"
+    },
+    {
+      "id": "projects_recent_reports",
+      "questions": [
+        "Quels projets ont des rapports de chantier récents ?",
+        "Projets avec rapports de chantier",
+        "Chantiers avec rapports journaliers",
+        "Liste des projets avec rapports récents"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(dsr.id) AS recent_reports FROM projects p JOIN clients c ON p.client_id = c.id JOIN daily_site_reports dsr ON p.id = dsr.project_id WHERE dsr.report_date >= CURRENT_DATE - INTERVAL '7 days' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY recent_reports DESC",
+      "description": "Liste des projets avec des rapports de chantier récents (7 derniers jours)"
     }
   ]
 }
