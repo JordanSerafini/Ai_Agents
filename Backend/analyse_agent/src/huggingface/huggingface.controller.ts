@@ -108,24 +108,47 @@ export class HuggingFaceController {
       return { isValid: false, confidenceScore: 0 };
     }
 
-    // Vérifier que la reformulation n'est pas identique à la question originale
+    // Vérifier si la question a été correctement reformulée
     if (result.question.trim() === result.questionReformulated.trim()) {
-      confidenceScore -= 0.3; // Pénalité pour non-reformulation
+      confidenceScore -= 0.6; // Pénalité sévère pour non-reformulation
+      this.logger.warn(
+        'Aucune reformulation effectuée, forte pénalité appliquée',
+      );
+    }
+
+    // Vérifier que la reformulation est plus longue pour les questions courtes
+    if (
+      result.question.length < 15 &&
+      result.questionReformulated.length < result.question.length * 2
+    ) {
+      confidenceScore -= 0.4; // Pénalité pour reformulation insuffisante des questions courtes
+      this.logger.warn('Reformulation insuffisante pour une question courte');
     }
 
     // Analyser la pertinence des champs spécifiques à l'agent
     if (result.agent === 'querybuilder') {
       // Vérifier les champs spécifiques au querybuilder
       if (!result.tables || result.tables.length === 0) {
-        confidenceScore -= 0.15; // Pénalité pour absence de tables
+        confidenceScore -= 0.4; // Pénalité sévère pour absence de tables
+        this.logger.warn(
+          'Aucune table spécifiée pour une requête querybuilder',
+        );
       }
 
       if (!result.fields || result.fields.length === 0) {
-        confidenceScore -= 0.15; // Pénalité pour absence de champs à afficher
+        confidenceScore -= 0.3; // Pénalité pour absence de champs à afficher
+        this.logger.warn('Aucun champ à afficher spécifié');
       }
 
-      if (!result.conditions) {
-        confidenceScore -= 0.1; // Pénalité pour absence de conditions
+      if (!result.conditions || result.conditions.trim() === '') {
+        confidenceScore -= 0.3; // Pénalité pour absence de conditions
+        this.logger.warn('Aucune condition spécifiée');
+      }
+
+      // Vérifier si la requête finale a été générée
+      if (!result.finalQuery || result.finalQuery.trim() === '') {
+        confidenceScore -= 0.1; // Légère pénalité
+        this.logger.warn('Requête SQL finale non générée');
       }
     } else if (result.agent === 'workflow') {
       // Vérifier les champs spécifiques au workflow
@@ -159,8 +182,8 @@ export class HuggingFaceController {
     // Limiter le score entre 0 et 1
     confidenceScore = Math.max(0, Math.min(1, confidenceScore));
 
-    // Considérer comme valide si le score est supérieur à un seuil
-    const isValid = confidenceScore >= 0.6;
+    // Considérer comme valide uniquement si le score est supérieur à un seuil plus élevé
+    const isValid = confidenceScore >= 0.7; // Seuil plus strict
 
     return { isValid, confidenceScore };
   }
