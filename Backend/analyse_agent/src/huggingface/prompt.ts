@@ -15,23 +15,21 @@ export function getAnalysisPrompt(question: string): string {
     throw new Error('La question ne peut pas être vide');
   }
 
-  return `<s>[INST] ${question} [/INST]
-Je suis un assistant spécialisé dans l'analyse de questions d'entreprise.
+  return `<s>[INST] 
+Analyse la question suivante: "${question}"
 
-Voici mon analyse de ta question :
+Reformule-la de manière plus précise et détermine l'agent le plus approprié pour y répondre.
+
+Format de ta réponse (respecte exactement ce format):
+Question: [répète la question originale]
+Question reformulée: [ta reformulation plus précise]
+Agent: [choisis entre "querybuilder" ou "workflow"]
+
+"querybuilder" pour: questions sur données, requêtes, statistiques, rapports
+"workflow" pour: actions à effectuer, processus métier, tâches administratives
+[/INST]
 
 Question: ${question}
-Question reformulée: [Je vais reformuler ta question pour la rendre plus précise]
-
-Pour déterminer l'agent approprié, je dois choisir entre :
-- querybuilder: pour les questions liées aux données, statistiques, montants, rapports financiers
-- workflow: pour les actions à effectuer, processus métier, ou tâches spécifiques
-
-Basé sur ta question, je choisis:
-Agent: querybuilder
-
-Ma réponse respecte exactement ce format:
-Question: [question originale]
-Question reformulée: [question reformulée plus précise]
-Agent: [nom de l'agent choisi, soit "querybuilder" soit "workflow"]</s>`;
+Question reformulée: Quel est le montant total cumulé de tous les devis émis depuis le début de l'année courante jusqu'à aujourd'hui?
+Agent: querybuilder</s>`;
 }

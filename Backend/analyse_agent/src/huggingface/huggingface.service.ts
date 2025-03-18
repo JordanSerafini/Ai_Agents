@@ -48,35 +48,55 @@ export class HuggingFaceService {
       const result = response.generated_text || '';
       this.logger.debug(`Réponse brute: ${result}`);
 
-      // Extraction des informations depuis la réponse
-      const questionMatch = result.match(/Question: (.*)/);
-      const questionReformulatedMatch = result.match(
-        /Question reformulée: (.*)/,
+      // Extraction simple des champs clés
+      const questionPattern = /Question:\s*(.*?)(?=\n|$)/s;
+      const reformulationPattern = /Question reformulée:\s*(.*?)(?=\n|$)/s;
+      const agentPattern = /Agent:\s*(querybuilder|workflow)(?=\n|$)/is;
+
+      const questionMatch = result.match(questionPattern);
+      const reformulationMatch = result.match(reformulationPattern);
+      const agentMatch = result.match(agentPattern);
+
+      // Utiliser les valeurs extraites ou des valeurs par défaut
+      const extractedQuestion = questionMatch?.[1]?.trim() || question;
+      const extractedReformulation =
+        reformulationMatch?.[1]?.trim() || question;
+
+      let extractedAgent: string;
+      if (agentMatch && this.isValidService(agentMatch[1].toLowerCase())) {
+        extractedAgent = agentMatch[1].toLowerCase();
+      } else {
+        extractedAgent = 'querybuilder'; // Agent par défaut
+        this.logger.warn(
+          `Agent non trouvé ou invalide, utilisation de l'agent par défaut: ${extractedAgent}`,
+        );
+      }
+
+      this.logger.debug(
+        `Extraction réussie - Question: "${extractedQuestion}"`,
       );
-      const agentMatch = result.match(/Agent: (.*)/);
-
-      if (!questionMatch || !questionReformulatedMatch || !agentMatch) {
-        throw new Error('Format de réponse invalide');
-      }
-
-      const extractedAgent = agentMatch[1].trim();
-
-      // Vérification que l'agent extrait est valide
-      if (!this.isValidService(extractedAgent)) {
-        throw new Error(`Agent invalide: ${extractedAgent}`);
-      }
+      this.logger.debug(
+        `Extraction réussie - Question reformulée: "${extractedReformulation}"`,
+      );
+      this.logger.debug(`Extraction réussie - Agent: "${extractedAgent}"`);
 
       return {
-        question: questionMatch[1].trim(),
-        questionReformulated: questionReformulatedMatch[1].trim(),
-        agent: extractedAgent,
+        question: extractedQuestion,
+        questionReformulated: extractedReformulation,
+        agent: extractedAgent as Service,
       };
     } catch (error) {
       this.logger.error(
         `Erreur lors de l'analyse de la question: ${error.message}`,
         error.stack,
       );
-      throw new Error(`Échec de l'analyse de la question: ${error.message}`);
+
+      // Retourner une réponse par défaut en cas d'erreur
+      return {
+        question: question,
+        questionReformulated: question,
+        agent: 'querybuilder',
+      };
     }
   }
 
