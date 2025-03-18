@@ -364,16 +364,48 @@ export class RagService {
 
     if (words1.length === 0 || words2.length === 0) return 0;
 
+    // Mots-clés discriminants avec leur poids
+    const keywordWeights = {
+      'qui': 2.0,
+      'personne': 2.0,
+      'personnel': 2.0,
+      'staff': 2.0, 
+      'employe': 2.0,
+      'travaille': 1.5,
+      'projet': 1.5, 
+      'quels': 1.5,
+      'quelles': 1.5,
+      'chantier': 1.5,
+      'mois': 1.0,
+      'semaine': 1.0,
+      'prochain': 1.0,
+      'prochaine': 1.0
+    };
+
     let commonWords = 0;
+    let weightedCommonWords = 0;
+    let totalWeight = 0;
+
+    // Calculer les mots communs avec poids
     for (const word of words1) {
+      const wordWeight = keywordWeights[word] || 1.0;
+      totalWeight += wordWeight;
+      
       if (words2.includes(word)) {
         commonWords++;
+        weightedCommonWords += wordWeight;
       }
     }
 
-    // Calculer le score Jaccard (intersection/union)
+    // Calculer le score Jaccard standard (intersection/union)
     const uniqueWords = new Set([...words1, ...words2]);
-    return commonWords / uniqueWords.size;
+    const jaccardScore = commonWords / uniqueWords.size;
+    
+    // Calculer le score pondéré
+    const weightedScore = totalWeight > 0 ? weightedCommonWords / totalWeight : 0;
+    
+    // Combiner les deux scores (70% poids sur le score pondéré, 30% sur Jaccard)
+    return weightedScore * 0.7 + jaccardScore * 0.3;
   }
 
   /**

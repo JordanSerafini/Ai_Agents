@@ -451,6 +451,44 @@
           "description": "Date de fin de la deuxième période (YYYY-MM-DD)"
         }
       ]
+    },
+    {
+      "id": "quotations_total_accepted",
+      "questions": [
+        "Quel est le montant total des devis acceptés ?",
+        "Montant total cumulé des devis acceptés",
+        "Somme totale des devis acceptés",
+        "Total global des devis validés",
+        "Valeur totale des devis acceptés",
+        "Montant total des devis acceptés",
+        "Quel est le montant des devis acceptés ?",
+        "Combien représentent tous les devis acceptés ?",
+        "Montant total des devis accepté",
+        "Quel est le montant des devis accepté ?",
+        "Montant des devis accepté",
+        "Total des devis accepté"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté'",
+      "description": "Montant total cumulé de tous les devis acceptés dans la base de données"
+    },
+    {
+      "id": "quotations_total_accepted_current_month",
+      "questions": [
+        "Quel est le montant des devis acceptés du mois en cours ?",
+        "Montant des devis acceptés du mois",
+        "Quel est le montant des devis acceptés du mois en cours ?",
+        "Montant cumulé des devis acceptés ce mois-ci",
+        "Somme des devis acceptés du mois",
+        "Total des devis validés ce mois",
+        "Valeur des devis acceptés ce mois-ci",
+        "Combien représentent les devis acceptés du mois ?",
+        "Montant des devis acceptés ce mois",
+        "Total des devis acceptés du mois en cours",
+        "Devis acceptés du mois montant",
+        "Montant mensuel des devis acceptés"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.updated_at) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM quotations.updated_at) = EXTRACT(YEAR FROM CURRENT_DATE)",
+      "description": "Montant total cumulé des devis acceptés pendant le mois en cours uniquement"
     }
   ]
 }

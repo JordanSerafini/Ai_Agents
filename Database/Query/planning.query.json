@@ -1,0 +1,33 @@
+{
+  "queries": [
+    {
+      "id": "staff_schedule_next_week",
+      "questions": [
+        "Qui travaille la semaine prochaine ?",
+        "Planning des employés pour la semaine prochaine",
+        "Personnel programmé semaine pro",
+        "Équipe de travail semaine prochaine"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, wws.week_start_date, wws.total_hours, wws.schedule FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id WHERE wws.week_start_date = date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date ORDER BY s.lastname, s.firstname",
+      "description": "Planning du personnel pour la semaine prochaine avec leur nombre d'heures programmées"
+    },
+    
+    // ... existing code ...
+    
+    // Ajout d'une nouvelle requête pour "qui travaille le mois prochain"
+    {
+      "id": "staff_working_next_month",
+      "questions": [
+        "Qui travaille le mois prochain ?",
+        "Personnel programmé pour le mois prochain",
+        "Équipe du mois prochain",
+        "Qui va travailler le mois prochain"
+      ],
+      "sql": "SELECT DISTINCT s.firstname, s.lastname, s.role, p.name as project_name, p.start_date, p.end_date FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id WHERE (p.start_date <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' + INTERVAL '1 month - 1 day')::date) AND (p.end_date >= date_trunc('month', CURRENT_DATE + INTERVAL '1 month')::date) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel qui travaillera sur des projets actifs le mois prochain"
+    },
+    
+    // ... existing code ...
+    
+  ]
+} 

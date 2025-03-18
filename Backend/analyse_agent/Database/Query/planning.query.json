@@ -18,6 +18,17 @@
       "description": "Planning du personnel pour la semaine prochaine avec leur nombre d'heures programmées"
     },
     {
+      "id": "staff_working_next_month",
+      "questions": [
+        "Qui travaille le mois prochain ?",
+        "Personnel programmé pour le mois prochain",
+        "Équipe du mois prochain",
+        "Qui va travailler le mois prochain"
+      ],
+      "sql": "SELECT DISTINCT s.firstname, s.lastname, s.role, p.name as project_name, p.start_date, p.end_date FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id WHERE (p.start_date <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' + INTERVAL '1 month - 1 day')::date) AND (p.end_date >= date_trunc('month', CURRENT_DATE + INTERVAL '1 month')::date) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel qui travaillera sur des projets actifs le mois prochain"
+    },
+    {
       "id": "staff_schedule_by_date",
       "questions": [
         "Qui travaille le [DATE] ?",

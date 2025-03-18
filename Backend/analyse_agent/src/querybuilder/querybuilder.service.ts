@@ -16,10 +16,10 @@ export class QueryBuilderService implements OnModuleInit {
   private async initDatabaseConnection() {
     try {
       this.pool = new Pool({
-        user: this.configService.get<string>('DB_USERNAME'),
+        user: this.configService.get<string>('POSTGRES_USER'),
         host: 'postgres',
-        database: this.configService.get<string>('DB_DATABASE'),
-        password: this.configService.get<string>('DB_PASSWORD'),
+        database: this.configService.get<string>('POSTGRES_DB'),
+        password: this.configService.get<string>('POSTGRES_PASSWORD'),
         port: parseInt(
           this.configService.get<string>('POSTGRES_PORT') || '5432',
         ),
