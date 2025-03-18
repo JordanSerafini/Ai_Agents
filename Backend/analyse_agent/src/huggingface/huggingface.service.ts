@@ -49,9 +49,11 @@ export class HuggingFaceService {
       this.logger.debug(`Réponse brute: ${result}`);
 
       // Extraction simple des champs clés
-      const questionPattern = /Question:\s*(.*?)(?=\n|$)/s;
-      const reformulationPattern = /Question reformulée:\s*(.*?)(?=\n|$)/s;
-      const agentPattern = /Agent:\s*(querybuilder|workflow)(?=\n|$)/is;
+      const questionPattern = /(?:Question:|I\.\s*Question:)\s*(.*?)(?=\n|$)/s;
+      const reformulationPattern =
+        /(?:Question reformulée:|II\.\s*Question reformulée:)\s*(.*?)(?=\n|$|III)/s;
+      const agentPattern =
+        /(?:Agent:|III\.\s*Agent:)\s*(querybuilder|workflow)(?=\n|$|\.)/is;
 
       const questionMatch = result.match(questionPattern);
       const reformulationMatch = result.match(reformulationPattern);
@@ -62,11 +64,22 @@ export class HuggingFaceService {
       const extractedReformulation =
         reformulationMatch?.[1]?.trim() || question;
 
+      // Vérifier si la reformulation contient un placeholder explicite
+      const isPlaceholder =
+        extractedReformulation.includes('[') &&
+        (extractedReformulation.includes('reformuler') ||
+          extractedReformulation.includes('précise'));
+
+      // Si c'est un placeholder, utiliser la question originale
+      const finalReformulation = isPlaceholder
+        ? question
+        : extractedReformulation;
+
       let extractedAgent: string;
       if (agentMatch && this.isValidService(agentMatch[1].toLowerCase())) {
         extractedAgent = agentMatch[1].toLowerCase();
       } else {
-        extractedAgent = 'querybuilder'; // Agent par défaut
+        extractedAgent = 'querybuilder';
         this.logger.warn(
           `Agent non trouvé ou invalide, utilisation de l'agent par défaut: ${extractedAgent}`,
         );
@@ -76,13 +89,13 @@ export class HuggingFaceService {
         `Extraction réussie - Question: "${extractedQuestion}"`,
       );
       this.logger.debug(
-        `Extraction réussie - Question reformulée: "${extractedReformulation}"`,
+        `Extraction réussie - Question reformulée: "${finalReformulation}"`,
       );
       this.logger.debug(`Extraction réussie - Agent: "${extractedAgent}"`);
 
       return {
         question: extractedQuestion,
-        questionReformulated: extractedReformulation,
+        questionReformulated: finalReformulation,
         agent: extractedAgent as Service,
       };
     } catch (error) {
