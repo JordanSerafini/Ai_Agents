@@ -59,7 +59,9 @@ export class HuggingFaceService {
       });
 
       const result = response.generated_text || '';
-      this.logger.debug(`Réponse brute: ${result}`);
+      this.logger.debug(
+        `Réponse reçue du modèle (${result.length} caractères)`,
+      );
 
       // Essayer d'extraire le JSON de la réponse
       const jsonContent = this.extractJsonFromText(result);
@@ -67,7 +69,7 @@ export class HuggingFaceService {
       if (jsonContent) {
         try {
           const parsedJson = JSON.parse(jsonContent);
-          this.logger.debug('JSON extrait avec succès:', parsedJson);
+          this.logger.debug('JSON extrait avec succès');
 
           const agent =
             (parsedJson['Agent']?.toLowerCase() as Service) || 'querybuilder';
@@ -120,13 +122,10 @@ export class HuggingFaceService {
       let extractedReformulation = question;
       let extractedAgent = 'querybuilder';
 
-      // Pour le débogage
-      this.logger.debug('Lignes de la réponse:');
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim()) {
-          this.logger.debug(`[${i}] ${lines[i]}`);
-        }
-      }
+      // Pour le débogage - supprimer les logs ligne par ligne
+      this.logger.debug(
+        "JSON non trouvé, tentative d'extraction ligne par ligne",
+      );
 
       // Parcourir les lignes pour trouver les informations
       for (let i = 0; i < lines.length; i++) {
@@ -137,53 +136,36 @@ export class HuggingFaceService {
           extractedQuestion = line
             .substring('Question originale:'.length)
             .trim();
-          this.logger.debug(`Trouvé question: "${extractedQuestion}"`);
         } else if (line.includes('Question originale:')) {
           // Format alternatif avec liste numérotée (1. Question originale:)
           const colonIndex = line.indexOf(':');
           if (colonIndex > 0) {
             extractedQuestion = line.substring(colonIndex + 1).trim();
-            this.logger.debug(
-              `Trouvé question (format alternatif): "${extractedQuestion}"`,
-            );
           }
         } else if (line.match(/^I+\.\s+Question originale:/i)) {
           // Format avec numérotation romaine (I. Question originale:)
           const colonIndex = line.indexOf(':');
           if (colonIndex > 0) {
             extractedQuestion = line.substring(colonIndex + 1).trim();
-            this.logger.debug(
-              `Trouvé question (format romain): "${extractedQuestion}"`,
-            );
           }
         } else if (line.startsWith('Question reformulée:')) {
           extractedReformulation = line
             .substring('Question reformulée:'.length)
             .trim();
-          this.logger.debug(
-            `Trouvé reformulation: "${extractedReformulation}"`,
-          );
         } else if (line.includes('Question reformulée:')) {
           // Format alternatif avec liste numérotée
           const colonIndex = line.indexOf(':');
           if (colonIndex > 0) {
             extractedReformulation = line.substring(colonIndex + 1).trim();
-            this.logger.debug(
-              `Trouvé reformulation (format alternatif): "${extractedReformulation}"`,
-            );
           }
         } else if (line.match(/^II+\.\s+Question reformulée:/i)) {
           // Format avec numérotation romaine (II. Question reformulée:)
           const colonIndex = line.indexOf(':');
           if (colonIndex > 0) {
             extractedReformulation = line.substring(colonIndex + 1).trim();
-            this.logger.debug(
-              `Trouvé reformulation (format romain): "${extractedReformulation}"`,
-            );
           }
         } else if (line.startsWith('Agent:')) {
           const agentValue = line.substring('Agent:'.length).trim();
-          this.logger.debug(`Trouvé agent: "${agentValue}"`);
 
           if (this.isValidService(agentValue.toLowerCase())) {
             extractedAgent = agentValue.toLowerCase();
@@ -197,9 +179,6 @@ export class HuggingFaceService {
           const colonIndex = line.indexOf(':');
           if (colonIndex > 0) {
             const agentValue = line.substring(colonIndex + 1).trim();
-            this.logger.debug(
-              `Trouvé agent (format alternatif): "${agentValue}"`,
-            );
 
             if (this.isValidService(agentValue.toLowerCase())) {
               extractedAgent = agentValue.toLowerCase();
@@ -210,7 +189,6 @@ export class HuggingFaceService {
           const colonIndex = line.indexOf(':');
           if (colonIndex > 0) {
             const agentValue = line.substring(colonIndex + 1).trim();
-            this.logger.debug(`Trouvé agent (format romain): "${agentValue}"`);
 
             if (this.isValidService(agentValue.toLowerCase())) {
               extractedAgent = agentValue.toLowerCase();
@@ -351,20 +329,151 @@ export class HuggingFaceService {
     // Utiliser un champ par défaut si aucun champ n'est spécifié
     const selectFields = fields.length > 0 ? fields.join(', ') : '*';
 
-    // Construire la requête de base
-    let query = `SELECT ${selectFields} FROM ${tables.join(', ')}`;
+    // Si nous avons plus d'une table, nous devons ajouter des relations de jointure
+    if (tables.length > 1) {
+      // Construire la requête avec des JOINs appropriés
+      const primaryTable = tables[0]; // La première table est considérée comme principale
 
-    // Ajouter les conditions si elles existent
-    if (conditions && conditions.trim() !== '') {
-      // Si la condition ne commence pas par WHERE, l'ajouter
-      if (!conditions.trim().toUpperCase().startsWith('WHERE')) {
-        query += ' WHERE ';
-      } else {
-        query += ' ';
+      // Commencer la requête avec la table principale
+      let query = `SELECT ${selectFields} FROM ${primaryTable}`;
+
+      // Ajouter les jointures en fonction des relations connues dans le schéma
+      for (let i = 1; i < tables.length; i++) {
+        const secondaryTable = tables[i];
+
+        // Déterminer la relation appropriée entre les tables
+        const joinClause = this.determineJoinClause(
+          primaryTable,
+          secondaryTable,
+        );
+
+        if (joinClause) {
+          query += ` ${joinClause}`;
+        } else {
+          // Si aucune relation directe n'est trouvée, utiliser CROSS JOIN avec avertissement
+          this.logger.warn(
+            `Aucune relation connue entre ${primaryTable} et ${secondaryTable}, utilisation de CROSS JOIN`,
+          );
+          query += ` CROSS JOIN ${secondaryTable}`;
+        }
       }
-      query += conditions;
+
+      // Ajouter les conditions si elles existent
+      if (conditions && conditions.trim() !== '') {
+        // Si la condition ne commence pas par WHERE, l'ajouter
+        if (!conditions.trim().toUpperCase().startsWith('WHERE')) {
+          query += ' WHERE ';
+        } else {
+          query += ' ';
+        }
+        query += conditions;
+      }
+
+      return query;
+    } else {
+      // Traitement simple pour une seule table
+      let query = `SELECT ${selectFields} FROM ${tables.join(', ')}`;
+
+      // Ajouter les conditions si elles existent
+      if (conditions && conditions.trim() !== '') {
+        // Si la condition ne commence pas par WHERE, l'ajouter
+        if (!conditions.trim().toUpperCase().startsWith('WHERE')) {
+          query += ' WHERE ';
+        } else {
+          query += ' ';
+        }
+        query += conditions;
+      }
+
+      return query;
+    }
+  }
+
+  /**
+   * Détermine la clause JOIN appropriée entre deux tables
+   * @param primaryTable La table principale
+   * @param secondaryTable La table secondaire
+   * @returns Une clause JOIN complète ou null si aucune relation n'est trouvée
+   */
+  private determineJoinClause(
+    primaryTable: string,
+    secondaryTable: string,
+  ): string | null {
+    // Définir les relations connues entre les tables
+    const tableRelations: Record<string, Record<string, string>> = {
+      projects: {
+        stages: 'JOIN stages ON projects.id = stages.project_id',
+        clients: 'JOIN clients ON projects.client_id = clients.id',
+        ref_status: 'JOIN ref_status ON projects.status = ref_status.id',
+        quotations: 'JOIN quotations ON projects.id = quotations.project_id',
+        invoices: 'JOIN invoices ON projects.id = invoices.project_id',
+        addresses: 'JOIN addresses ON projects.address_id = addresses.id',
+        timesheet_entries:
+          'JOIN timesheet_entries ON projects.id = timesheet_entries.project_id',
+      },
+      clients: {
+        projects: 'JOIN projects ON clients.id = projects.client_id',
+        addresses: 'JOIN addresses ON clients.address_id = addresses.id',
+      },
+      quotations: {
+        projects: 'JOIN projects ON quotations.project_id = projects.id',
+        ref_quotation_status:
+          'JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id',
+        quotation_products:
+          'JOIN quotation_products ON quotations.id = quotation_products.quotation_id',
+      },
+      invoices: {
+        projects: 'JOIN projects ON invoices.project_id = projects.id',
+        ref_status: 'JOIN ref_status ON invoices.status = ref_status.id',
+        payments: 'JOIN payments ON invoices.id = payments.invoice_id',
+        invoice_items:
+          'JOIN invoice_items ON invoices.id = invoice_items.invoice_id',
+      },
+      stages: {
+        projects: 'JOIN projects ON stages.project_id = projects.id',
+        ref_status: 'JOIN ref_status ON stages.status = ref_status.id',
+      },
+      staff: {
+        timesheet_entries:
+          'JOIN timesheet_entries ON staff.id = timesheet_entries.staff_id',
+      },
+      timesheet_entries: {
+        staff: 'JOIN staff ON timesheet_entries.staff_id = staff.id',
+        projects: 'JOIN projects ON timesheet_entries.project_id = projects.id',
+      },
+      ref_status: {
+        projects: 'JOIN projects ON ref_status.id = projects.status',
+        invoices: 'JOIN invoices ON ref_status.id = invoices.status',
+        stages: 'JOIN stages ON ref_status.id = stages.status',
+      },
+      addresses: {
+        clients: 'JOIN clients ON addresses.id = clients.address_id',
+        projects: 'JOIN projects ON addresses.id = projects.address_id',
+      },
+    };
+
+    // Vérifier si nous avons une relation directe
+    if (
+      tableRelations[primaryTable] &&
+      tableRelations[primaryTable][secondaryTable]
+    ) {
+      return tableRelations[primaryTable][secondaryTable];
     }
 
-    return query;
+    // Vérifier la relation inverse et l'adapter si nécessaire
+    if (
+      tableRelations[secondaryTable] &&
+      tableRelations[secondaryTable][primaryTable]
+    ) {
+      // Extraire la relation inverse et l'adapter pour notre ordre de tables
+      const inverseRelation = tableRelations[secondaryTable][primaryTable];
+      // Remplacer "JOIN primaryTable ON" par "JOIN secondaryTable ON"
+      return inverseRelation.replace(
+        `JOIN ${primaryTable} ON`,
+        `JOIN ${secondaryTable} ON`,
+      );
+    }
+
+    return null;
   }
 }

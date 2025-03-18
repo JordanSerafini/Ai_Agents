@@ -3,6 +3,13 @@ import { ChromaClient } from 'chromadb';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 
+interface BestMatch {
+  prompt: string;
+  id: string;
+  similarity: number;
+  metadata?: Record<string, any>;
+}
+
 @Injectable()
 export class RagService {
   private client: ChromaClient;
@@ -136,40 +143,156 @@ export class RagService {
   ) {
     try {
       // Créer la collection si elle n'existe pas déjà
-      await this.getCollection(collectionName);
+      const collection = await this.getCollection(collectionName);
+      const collectionInfo = await collection.count();
+
+      if (collectionInfo === 0) {
+        this.logger.log(
+          `Collection ${collectionName} est vide, aucune recherche possible`,
+        );
+        return { found: false, reason: 'collection_empty' };
+      }
+
+      this.logger.log(
+        `Recherche de similarité dans ${collectionName} avec seuil: ${similarityThreshold}`,
+      );
 
       try {
         const results = await this.findSimilarDocuments(
           collectionName,
           prompt,
-          1,
+          5, // Récupérer 5 résultats pour augmenter les chances de trouver une correspondance
         );
 
+        // Vérifier si des résultats ont été trouvés
         if (
-          results.distances &&
-          results.distances[0] &&
-          results.distances[0][0] &&
-          1 - results.distances[0][0] >= similarityThreshold
+          !results.distances ||
+          !results.distances[0] ||
+          !results.distances[0][0]
         ) {
+          this.logger.warn(
+            `Aucun résultat de similarité trouvé dans ${collectionName}, tentative de récupération directe`,
+          );
+
+          // Tenter de récupérer tous les documents de la collection
+          try {
+            const allDocuments = await collection.get({});
+
+            if (allDocuments.documents && allDocuments.documents.length > 0) {
+              // Vérifier si une correspondance exacte existe
+              for (let i = 0; i < allDocuments.documents.length; i++) {
+                const doc = allDocuments.documents[i];
+                const similarity = this.calculateExactMatchScore(prompt, doc);
+
+                // Si correspondance exacte ou très proche
+                if (similarity >= 0.9) {
+                  this.logger.log(
+                    `Correspondance exacte trouvée via récupération directe: ${similarity}`,
+                  );
+                  return {
+                    found: true,
+                    prompt: doc,
+                    id: allDocuments.ids[i],
+                    similarity: similarity,
+                    metadata: allDocuments.metadatas?.[i],
+                  };
+                }
+              }
+
+              // Vérifier si une correspondance approximative existe
+              let bestMatch: BestMatch | null = null;
+              let bestSimilarity = 0;
+
+              for (let i = 0; i < allDocuments.documents.length; i++) {
+                const doc = allDocuments.documents[i];
+                const similarity = this.calculateSimilarityScore(prompt, doc);
+
+                if (similarity > bestSimilarity) {
+                  bestSimilarity = similarity;
+                  bestMatch = {
+                    prompt: doc,
+                    id: allDocuments.ids[i],
+                    similarity,
+                    metadata: allDocuments.metadatas?.[i],
+                  };
+                }
+              }
+
+              if (bestMatch && bestSimilarity >= similarityThreshold) {
+                this.logger.log(
+                  `Meilleure correspondance trouvée via comparaison directe: ${bestSimilarity}`,
+                );
+                return {
+                  found: true,
+                  ...bestMatch,
+                };
+              } else if (bestMatch) {
+                this.logger.log(
+                  `Meilleure correspondance trouvée mais en dessous du seuil: ${bestSimilarity}`,
+                );
+                return {
+                  found: false,
+                  reason: 'below_threshold',
+                  bestMatch: bestMatch.prompt,
+                  similarity: bestSimilarity,
+                };
+              }
+            }
+
+            this.logger.warn(
+              `Aucune correspondance trouvée parmi ${allDocuments.documents?.length || 0} documents`,
+            );
+            return { found: false, reason: 'no_match_in_collection' };
+          } catch (listError) {
+            this.logger.error(
+              `Erreur lors de la récupération des documents: ${listError.message}`,
+            );
+            return {
+              found: false,
+              reason: 'list_error',
+              error: listError.message,
+            };
+          }
+        }
+
+        const similarity = 1 - results.distances[0][0];
+        this.logger.log(
+          `Prompt trouvé avec similarité: ${similarity} (seuil: ${similarityThreshold})`,
+        );
+
+        if (similarity >= similarityThreshold) {
           return {
             found: true,
             prompt: results.documents?.[0]?.[0],
             id: results.ids?.[0]?.[0],
-            similarity: 1 - results.distances[0][0],
+            similarity: similarity,
             metadata: results.metadatas?.[0]?.[0],
+          };
+        } else {
+          this.logger.log(
+            `Similarité ${similarity} inférieure au seuil ${similarityThreshold}`,
+          );
+          return {
+            found: false,
+            reason: 'below_threshold',
+            similarity: similarity,
+            bestMatch: results.documents?.[0]?.[0],
           };
         }
       } catch (queryError) {
-        // Si la recherche échoue (par exemple, collection vide), simplement continuer
+        // Si la recherche échoue, tenter une approche différente
         this.logger.warn(`Recherche similaire échouée: ${queryError.message}`);
+        return {
+          found: false,
+          reason: 'query_error',
+          error: queryError.message,
+        };
       }
-
-      return { found: false };
     } catch (error) {
       this.logger.error(
         `Erreur lors de la recherche de prompt similaire: ${error.message}`,
       );
-      return { found: false, error: error.message };
+      return { found: false, reason: 'general_error', error: error.message };
     }
   }
 
@@ -222,5 +345,63 @@ export class RagService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Calcule un score de similarité entre deux chaînes
+   * Méthode simple pour la correspondance approximative
+   */
+  private calculateSimilarityScore(str1: string, str2: string): number {
+    // Convertir en minuscules et supprimer la ponctuation
+    const normalize = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, '');
+
+    const s1 = normalize(str1);
+    const s2 = normalize(str2);
+
+    // Compter les mots communs
+    const words1 = s1.split(/\s+/).filter((w) => w.length > 2); // Ignorer les mots très courts
+    const words2 = s2.split(/\s+/).filter((w) => w.length > 2);
+
+    if (words1.length === 0 || words2.length === 0) return 0;
+
+    let commonWords = 0;
+    for (const word of words1) {
+      if (words2.includes(word)) {
+        commonWords++;
+      }
+    }
+
+    // Calculer le score Jaccard (intersection/union)
+    const uniqueWords = new Set([...words1, ...words2]);
+    return commonWords / uniqueWords.size;
+  }
+
+  /**
+   * Vérifie si deux chaînes sont identiques ou très similaires
+   */
+  private calculateExactMatchScore(str1: string, str2: string): number {
+    // Normaliser les chaînes pour la comparaison
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const s1 = normalize(str1);
+    const s2 = normalize(str2);
+
+    // Vérifier si les chaînes sont identiques
+    if (s1 === s2) return 1.0;
+
+    // Vérifier si l'une contient l'autre
+    if (s1.includes(s2) || s2.includes(s1)) {
+      const ratio =
+        Math.min(s1.length, s2.length) / Math.max(s1.length, s2.length);
+      // Si le ratio de longueur est élevé, c'est probablement la même question
+      return ratio >= 0.8 ? 0.95 : 0.85;
+    }
+
+    return 0;
   }
 }

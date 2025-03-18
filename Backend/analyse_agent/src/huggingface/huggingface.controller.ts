@@ -7,22 +7,24 @@ import { v4 as uuidv4 } from 'uuid';
 export class HuggingFaceController {
   private readonly logger = new Logger(HuggingFaceController.name);
   private readonly promptCollectionName = 'user_prompts';
+  private readonly sqlQueryCacheName = 'sql_queries';
 
   constructor(
     private readonly huggingFaceService: HuggingFaceService,
     private readonly ragService: RagService,
   ) {
-    // Créer la collection pour les prompts si elle n'existe pas
-    void this.initPromptCollection();
+    // Créer les collections si elles n'existent pas
+    void this.initCollections();
   }
 
-  private async initPromptCollection() {
+  private async initCollections() {
     try {
       await this.ragService.getOrCreateCollection(this.promptCollectionName);
-      this.logger.log(`Collection ${this.promptCollectionName} initialisée`);
+      await this.ragService.getOrCreateCollection(this.sqlQueryCacheName);
+      this.logger.log(`Collections initialisées`);
     } catch (error) {
       this.logger.error(
-        `Erreur lors de l'initialisation de la collection: ${error.message}`,
+        `Erreur lors de l'initialisation des collections: ${error.message}`,
       );
     }
   }
@@ -31,7 +33,21 @@ export class HuggingFaceController {
   async analyseQuestion(@Body() body: { question: string }) {
     const { question } = body;
 
-    // Vérifier si une question similaire existe déjà
+    this.logger.log(`Recherche directe dans le cache SQL pour: "${question}"`);
+    const cachedSql = await this.findCachedSqlQuery(question);
+
+    if (cachedSql) {
+      this.logger.log(
+        `Requête SQL pré-construite trouvée directement dans le cache`,
+      );
+      // Retourner l'analyse avec la requête SQL du cache
+      return {
+        source: 'cache_sql',
+        result: cachedSql.result,
+      };
+    }
+
+    // Si pas de SQL direct, vérifier si une question similaire existe déjà
     const similarResult = await this.ragService.findSimilarPrompt(
       this.promptCollectionName,
       question,
@@ -41,9 +57,25 @@ export class HuggingFaceController {
       this.logger.log(
         `Question similaire trouvée avec score: ${similarResult.similarity}`,
       );
+
+      // Vérifier si nous avons une requête SQL pré-construite pour cette question similaire
+      const cachedSql = await this.findCachedSqlQuery(similarResult.prompt);
+
+      if (cachedSql) {
+        this.logger.log(
+          'Requête SQL pré-construite trouvée pour question similaire',
+        );
+        // Retourner l'analyse avec la requête SQL du cache
+        return {
+          source: 'cache',
+          result: cachedSql.result,
+          similarity: similarResult.similarity,
+        };
+      }
+
+      // Sinon, effectuer l'analyse avec la question d'origine
       return {
         source: 'cache',
-        original: similarResult.prompt,
         similarity: similarResult.similarity,
         result: await this.huggingFaceService.analyseQuestion(question),
       };
@@ -71,6 +103,12 @@ export class HuggingFaceController {
           ],
         );
 
+        // Si c'est une requête querybuilder valide avec une requête SQL,
+        // la sauvegarder dans le cache de requêtes SQL
+        if (result.agent === 'querybuilder' && result.finalQuery) {
+          await this.cacheSqlQuery(question, result);
+        }
+
         return {
           source: 'model',
           result,
@@ -91,6 +129,110 @@ export class HuggingFaceController {
     } catch (error) {
       this.logger.error(`Erreur lors de l'analyse: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Recherche une requête SQL pré-construite dans le cache
+   * @param question La question à rechercher
+   * @returns La requête SQL ou null si non trouvée
+   */
+  private async findCachedSqlQuery(
+    question: string,
+  ): Promise<{ result: AnalysisResult } | null> {
+    try {
+      this.logger.log(
+        `Recherche dans le cache SQL pour la question: "${question}"`,
+      );
+
+      const result = await this.ragService.findSimilarPrompt(
+        this.sqlQueryCacheName,
+        question,
+        0.9,
+      );
+
+      this.logger.log(
+        `Résultat de la recherche dans le cache SQL - Trouvé: ${result.found}, Similarité: ${result.similarity || 'N/A'}`,
+      );
+
+      if (result.found && result.metadata) {
+        this.logger.log(
+          `Requête SQL trouvée en cache avec score de similarité: ${result.similarity}`,
+        );
+
+        // Transformer les données du cache en AnalysisResult
+        const cacheData = result.metadata;
+        const analysisResult: AnalysisResult = {
+          question: cacheData.question,
+          questionReformulated: cacheData.questionReformulated,
+          agent: cacheData.agent || 'querybuilder',
+          finalQuery: cacheData.finalQuery,
+          // Ajouter des valeurs par défaut pour les autres champs requis par AnalysisResult
+          tables: [],
+          fields: [],
+          conditions: '',
+        };
+
+        return { result: analysisResult };
+      }
+
+      if (result.reason) {
+        this.logger.log(
+          `Aucune requête SQL trouvée en cache pour: "${question}" (Raison: ${result.reason})`,
+        );
+      } else {
+        this.logger.log(
+          `Aucune requête SQL trouvée en cache pour: "${question}"`,
+        );
+      }
+      return null;
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la recherche en cache: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Cache la requête SQL pour la question donnée
+   */
+  private async cacheSqlQuery(
+    question: string,
+    sqlResult: any,
+  ): Promise<boolean> {
+    try {
+      if (!sqlResult || !sqlResult.finalQuery) {
+        this.logger.warn(
+          `Impossible de mettre en cache une requête SQL invalide pour: "${question}"`,
+        );
+        return false;
+      }
+
+      // Ne sauvegarder que les informations essentielles pour le cache
+      const cacheData = {
+        question: question,
+        questionReformulated: sqlResult.questionReformulated || '',
+        finalQuery: sqlResult.finalQuery,
+        agent: sqlResult.agent || 'querybuilder',
+      };
+
+      await this.ragService.upsertDocuments(
+        'sql_queries',
+        [question],
+        [uuidv4()],
+        [cacheData],
+      );
+
+      this.logger.log(
+        `Requête SQL mise en cache avec succès pour: "${question}"`,
+      );
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la mise en cache de la requête SQL: ${error.message}`,
+      );
+      return false;
     }
   }
 
