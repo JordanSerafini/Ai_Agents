@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 
 @Injectable()
 export class QueryBuilderService implements OnModuleInit {
@@ -17,7 +17,7 @@ export class QueryBuilderService implements OnModuleInit {
     try {
       this.pool = new Pool({
         user: this.configService.get<string>('DB_USERNAME'),
-        host: 'postgres', // Nom du service dans docker-compose
+        host: 'postgres',
         database: this.configService.get<string>('DB_DATABASE'),
         password: this.configService.get<string>('DB_PASSWORD'),
         port: parseInt(
@@ -57,21 +57,21 @@ export class QueryBuilderService implements OnModuleInit {
     rowCount: number;
     duration: number;
   }> {
-    let client: PoolClient | null = null;
+    const client = await this.pool.connect();
+
     try {
       this.logger.debug(`Exécution de la requête SQL: ${query}`);
 
-      client = await this.pool.connect();
       const start = Date.now();
       const result = await client.query(query, params);
       const duration = Date.now() - start;
 
       this.logger.debug(
-        `Requête exécutée en ${duration}ms, ${result.rowCount} lignes retournées`,
+        `Requête exécutée en ${duration}ms, ${result.rowCount || 0} lignes retournées`,
       );
       return {
         rows: result.rows,
-        rowCount: result.rowCount,
+        rowCount: result.rowCount || 0,
         duration: duration,
       };
     } catch (error) {
@@ -81,9 +81,7 @@ export class QueryBuilderService implements OnModuleInit {
       );
       throw new Error(`Erreur d'exécution de la requête SQL: ${error.message}`);
     } finally {
-      if (client) {
-        client.release();
-      }
+      client.release();
     }
   }
 

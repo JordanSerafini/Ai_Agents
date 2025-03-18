@@ -129,6 +129,38 @@ BEGIN
         (uuid_generate_v4(), client_ids[11], 'Construction entrepôt Gennevilliers', 'Construction d''un entrepôt logistique de 1200m² à Gennevilliers', '2023-03-15', '2024-05-30', status_ids.en_cours_id, address_ids[13], true, '{"type": "industrial", "surface": 1200, "secteur": "logistique"}'),
         (uuid_generate_v4(), client_ids[12], 'Réhabilitation usine Saint-Ouen', 'Réhabilitation d''une ancienne usine en espace de coworking à Saint-Ouen', '2023-07-01', '2024-08-31', status_ids.en_cours_id, address_ids[14], true, '{"type": "rehabilitation", "surface": 800, "secteur": "coworking"}');
     
+    -- Mise à jour des dates des projets pour qu'elles soient autour de la date actuelle
+    UPDATE projects 
+    SET 
+        start_date = CASE 
+            WHEN id = (SELECT id FROM projects WHERE name = 'Rénovation appartement Haussmannien') THEN CURRENT_DATE - interval '6 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Construction maison individuelle Clamart') THEN CURRENT_DATE - interval '5 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Aménagement boutique Marais') THEN CURRENT_DATE - interval '4 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Extension villa Neuilly') THEN CURRENT_DATE - interval '3 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Rénovation loft Montreuil') THEN CURRENT_DATE - interval '2 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Aménagement restaurant Montmartre') THEN CURRENT_DATE - interval '1 month'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Construction immeuble Saint-Denis') THEN CURRENT_DATE
+            WHEN id = (SELECT id FROM projects WHERE name = 'Rénovation bureaux La Défense') THEN CURRENT_DATE + interval '1 week'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Aménagement clinique Boulogne') THEN CURRENT_DATE + interval '2 weeks'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Rénovation hôtel particulier') THEN CURRENT_DATE + interval '3 weeks'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Construction entrepôt Gennevilliers') THEN CURRENT_DATE - interval '1 week'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Réhabilitation usine Saint-Ouen') THEN CURRENT_DATE - interval '2 weeks'
+        END,
+        end_date = CASE 
+            WHEN id = (SELECT id FROM projects WHERE name = 'Rénovation appartement Haussmannien') THEN CURRENT_DATE - interval '1 month'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Construction maison individuelle Clamart') THEN CURRENT_DATE + interval '6 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Aménagement boutique Marais') THEN CURRENT_DATE - interval '1 week'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Extension villa Neuilly') THEN CURRENT_DATE + interval '3 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Rénovation loft Montreuil') THEN CURRENT_DATE + interval '4 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Aménagement restaurant Montmartre') THEN CURRENT_DATE + interval '5 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Construction immeuble Saint-Denis') THEN CURRENT_DATE + interval '6 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Rénovation bureaux La Défense') THEN CURRENT_DATE + interval '6 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Aménagement clinique Boulogne') THEN CURRENT_DATE + interval '6 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Rénovation hôtel particulier') THEN CURRENT_DATE + interval '12 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Construction entrepôt Gennevilliers') THEN CURRENT_DATE + interval '6 months'
+            WHEN id = (SELECT id FROM projects WHERE name = 'Réhabilitation usine Saint-Ouen') THEN CURRENT_DATE + interval '6 months'
+        END;
+    
     -- Insertion des affectations de personnel aux projets
     INSERT INTO project_staff (id, project_id, staff_id, role, start_date, end_date)
     WITH roles AS (

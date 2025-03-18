@@ -42,6 +42,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./Database/init_db.sql:/docker-entrypoint-initdb.d/1-init_db.sql
+      - ./Database/seed.sql:/docker-entrypoint-initdb.d/2-seed.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
