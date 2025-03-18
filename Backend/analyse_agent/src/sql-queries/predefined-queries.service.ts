@@ -104,71 +104,97 @@ export class PredefinedQueriesService {
         predefinedParameters: any[];
         id: string;
         similarity: number;
+        matchedQuestion?: string;
       } | null;
 
       // Normaliser la question pour la comparaison
       const normalizedQuestion = this.normalizeTextForComparison(question);
+      const questionWords = this.extractKeywords(normalizedQuestion);
       let bestMatch: MatchResult = null;
       let bestSimilarity = 0;
+
+      this.logger.log(
+        `Recherche de variations pour: "${question}" (mots-clés: ${questionWords.join(', ')})`,
+      );
 
       // Parcourir toutes les entrées et leurs questions associées
       for (let i = 0; i < allEntries.metadatas.length; i++) {
         const metadata = allEntries.metadatas[i];
 
-        // Vérifier si l'entrée a un ID (elle devrait en avoir un)
+        // Vérifier si l'entrée a un ID
         if (!metadata || !metadata.id) continue;
 
-        // Extraire les mots clés de la question
-        const questionWords = this.extractKeywords(normalizedQuestion);
+        const entryMatched = false;
+        let bestMatchingQuestion = '';
+        let entrySimilarity = 0;
 
         // Si l'entrée a des questions associées (dans le cas des requêtes prédéfinies importées)
         if (metadata.questions && Array.isArray(metadata.questions)) {
           for (const variantQuestion of metadata.questions) {
             const normalizedVariant =
               this.normalizeTextForComparison(variantQuestion);
-            const similarity = this.calculateKeywordSimilarity(
+
+            // Calcul de similarité amélioré
+            const wordSimilarity = this.calculateKeywordSimilarity(
               questionWords,
               normalizedVariant,
             );
 
-            if (similarity > bestSimilarity && similarity > 0.6) {
-              bestSimilarity = similarity;
-              bestMatch = {
-                found: true,
-                query: metadata.finalQuery,
-                description: metadata.questionReformulated || variantQuestion,
-                parameters: this.detectRequiredParameters(metadata.finalQuery),
-                predefinedParameters: metadata.parameters || [],
-                id: metadata.id,
-                similarity: similarity,
-              };
+            // Distance de Levenshtein normalisée pour les petites phrases
+            const levenshteinSimilarity = this.calculateLevenshteinSimilarity(
+              normalizedQuestion,
+              normalizedVariant,
+            );
+
+            // Combiner les deux scores avec une pondération
+            const combinedSimilarity =
+              wordSimilarity * 0.7 + levenshteinSimilarity * 0.3;
+
+            if (combinedSimilarity > entrySimilarity) {
+              entrySimilarity = combinedSimilarity;
+              bestMatchingQuestion = variantQuestion;
             }
           }
         }
 
         // Comparer avec le document lui-même (qui est généralement la question)
         const documentText = allEntries.documents[i];
-        if (!documentText) continue;
+        if (documentText) {
+          const normalizedDocument =
+            this.normalizeTextForComparison(documentText);
+          const documentSimilarity = this.calculateKeywordSimilarity(
+            questionWords,
+            normalizedDocument,
+          );
 
-        const normalizedDocument =
-          this.normalizeTextForComparison(documentText);
-        const similarity = this.calculateKeywordSimilarity(
-          questionWords,
-          normalizedDocument,
-        );
+          if (documentSimilarity > entrySimilarity) {
+            entrySimilarity = documentSimilarity;
+            bestMatchingQuestion = documentText;
+          }
+        }
 
-        if (similarity > bestSimilarity && similarity > 0.6) {
-          bestSimilarity = similarity;
+        // Vérifier si cette entrée est meilleure que la précédente
+        if (entrySimilarity > bestSimilarity && entrySimilarity > 0.6) {
+          bestSimilarity = entrySimilarity;
           bestMatch = {
             found: true,
             query: metadata.finalQuery,
-            description: metadata.questionReformulated || documentText,
+            description: metadata.questionReformulated || bestMatchingQuestion,
             parameters: this.detectRequiredParameters(metadata.finalQuery),
             predefinedParameters: metadata.parameters || [],
             id: metadata.id,
-            similarity: similarity,
+            similarity: entrySimilarity,
+            matchedQuestion: bestMatchingQuestion,
           };
         }
+      }
+
+      if (bestMatch) {
+        this.logger.log(
+          `Meilleure correspondance trouvée: ID=${bestMatch.id}, similarité=${bestMatch.similarity.toFixed(2)}, question=${bestMatch.matchedQuestion}`,
+        );
+      } else {
+        this.logger.log(`Aucune correspondance trouvée pour: "${question}"`);
       }
 
       return bestMatch || { found: false };
@@ -286,5 +312,49 @@ export class PredefinedQueriesService {
     }
 
     return processedQuery;
+  }
+
+  /**
+   * Calcule la similarité basée sur la distance de Levenshtein normalisée
+   */
+  private calculateLevenshteinSimilarity(str1: string, str2: string): number {
+    // Fonction pour calculer la distance de Levenshtein
+    function levenshteinDistance(a: string, b: string): number {
+      if (a.length === 0) return b.length;
+      if (b.length === 0) return a.length;
+
+      const matrix = [];
+
+      // Initialiser la matrice
+      for (let i = 0; i <= b.length; i++) {
+        matrix[i] = [i];
+      }
+      for (let j = 0; j <= a.length; j++) {
+        matrix[0][j] = j;
+      }
+
+      // Remplir la matrice
+      for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+          const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1, // suppression
+            matrix[i][j - 1] + 1, // insertion
+            matrix[i - 1][j - 1] + cost, // substitution
+          );
+        }
+      }
+
+      return matrix[b.length][a.length];
+    }
+
+    // Calculer la distance
+    const distance = levenshteinDistance(str1, str2);
+
+    // Normaliser la distance en similarité (1 - distance/longueur_max)
+    const maxLength = Math.max(str1.length, str2.length);
+    if (maxLength === 0) return 1; // Si les deux chaînes sont vides, elles sont identiques
+
+    return 1 - distance / maxLength;
   }
 }

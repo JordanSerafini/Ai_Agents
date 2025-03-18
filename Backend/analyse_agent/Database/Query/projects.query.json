@@ -378,6 +378,17 @@
       ],
       "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(dsr.id) AS recent_reports FROM projects p JOIN clients c ON p.client_id = c.id JOIN daily_site_reports dsr ON p.id = dsr.project_id WHERE dsr.report_date >= CURRENT_DATE - INTERVAL '7 days' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY recent_reports DESC",
       "description": "Liste des projets avec des rapports de chantier récents (7 derniers jours)"
+    },
+    {
+      "id": "projects_with_problems",
+      "questions": [
+        "Quels projets ont rencontré des problèmes ?",
+        "Projets avec des difficultés",
+        "Chantiers problématiques",
+        "Liste des projets avec des problèmes"
+      ],
+      "sql": "WITH problematic_projects AS (SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, CASE WHEN p.end_date < CURRENT_DATE AND rs.code = 'en_cours' THEN 'Retard de livraison' ELSE NULL END AS delay_issue, CASE WHEN COALESCE(SUM(e.amount), 0) > pb.total_budget THEN 'Dépassement budget' ELSE NULL END AS budget_issue, CASE WHEN COUNT(DISTINCT qc.id) FILTER (WHERE rqcs.code = 'rejeté') > 0 THEN 'Problèmes qualité' ELSE NULL END AS quality_issue, CASE WHEN COUNT(DISTINCT sn.id) FILTER (WHERE rnp.code = 'haute' AND rns.code != 'termine') > 0 THEN 'Notes prioritaires non résolues' ELSE NULL END AS notes_issue FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_budgets pb ON p.id = pb.project_id LEFT JOIN expenses e ON p.id = e.project_id LEFT JOIN stages s ON p.id = s.project_id LEFT JOIN quality_checkpoints qc ON s.id = qc.stage_id LEFT JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id LEFT JOIN site_notes sn ON p.id = sn.project_id LEFT JOIN ref_note_priorities rnp ON sn.priority = rnp.id LEFT JOIN ref_note_status rns ON sn.status = rns.id WHERE rs.entity_type = 'project' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname, rs.name, rs.code, pb.total_budget) SELECT id, name, start_date, end_date, client_name, status, string_agg(DISTINCT problem, ', ') AS problemes FROM (SELECT id, name, start_date, end_date, client_name, status, unnest(ARRAY[delay_issue, budget_issue, quality_issue, notes_issue]) AS problem FROM problematic_projects) sub WHERE problem IS NOT NULL GROUP BY id, name, start_date, end_date, client_name, status ORDER BY start_date DESC",
+      "description": "Liste des projets ayant rencontré des problèmes (retard, budget, qualité, notes prioritaires)"
     }
   ]
 }

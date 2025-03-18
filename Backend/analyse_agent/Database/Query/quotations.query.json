@@ -361,6 +361,96 @@
           "default": "5"
         }
       ]
+    },
+    {
+      "id": "quotations_performance_by_month",
+      "questions": [
+        "Quelle est l'évolution des devis par mois ?",
+        "Performance mensuelle des devis",
+        "Évolution des devis dans le temps",
+        "Comparer les devis par mois",
+        "Statistiques mensuelles des devis"
+      ],
+      "sql": "SELECT EXTRACT(YEAR FROM q.issue_date) AS year, EXTRACT(MONTH FROM q.issue_date) AS month, TO_CHAR(q.issue_date, 'Month YYYY') AS month_name, COUNT(*) AS total_count, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_count, SUM(CASE WHEN rqs.code = 'refusé' THEN 1 ELSE 0 END) AS rejected_count, ROUND(AVG(q.total_ttc), 2) AS average_amount, ROUND(SUM(q.total_ttc), 2) AS total_amount, ROUND((SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END)::decimal / NULLIF(COUNT(*), 0)) * 100, 2) AS conversion_rate FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date >= CURRENT_DATE - INTERVAL '12 months' GROUP BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date), TO_CHAR(q.issue_date, 'Month YYYY') ORDER BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date)",
+      "description": "Tableau complet de performance des devis par mois (nombre, montant, taux de conversion)"
+    },
+    {
+      "id": "quotations_most_profitable",
+      "questions": [
+        "Quels sont les devis les plus rentables ?",
+        "Devis avec la meilleure marge",
+        "Devis les plus profitables",
+        "Quels devis ont la plus grande marge ?",
+        "Devis avec meilleur bénéfice"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, ROUND(qp.total_margin, 2) AS total_margin, ROUND((qp.total_margin / NULLIF(q.total_ht, 0)) * 100, 2) AS margin_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN (SELECT quotation_id, SUM((unit_price - unit_cost) * quantity) AS total_margin FROM quotation_products GROUP BY quotation_id) qp ON q.id = qp.quotation_id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id ORDER BY qp.total_margin DESC LIMIT 10",
+      "description": "Liste des 10 devis avec les meilleures marges et pourcentages de rentabilité"
+    },
+    {
+      "id": "quotations_with_low_margin",
+      "questions": [
+        "Quels devis ont une marge faible ?",
+        "Devis peu rentables",
+        "Devis avec marge insuffisante",
+        "Quels devis ont une marge inférieure à [THRESHOLD] % ?",
+        "Devis à faible rentabilité"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, ROUND(qp.total_margin, 2) AS total_margin, ROUND((qp.total_margin / NULLIF(q.total_ht, 0)) * 100, 2) AS margin_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN (SELECT quotation_id, SUM((unit_price - unit_cost) * quantity) AS total_margin FROM quotation_products GROUP BY quotation_id) qp ON q.id = qp.quotation_id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE (qp.total_margin / NULLIF(q.total_ht, 0)) * 100 < [THRESHOLD] AND rqs.code = 'en_attente' ORDER BY (qp.total_margin / NULLIF(q.total_ht, 0)) * 100 ASC",
+      "description": "Liste des devis en attente avec une marge inférieure au seuil défini",
+      "parameters": [
+        {
+          "name": "THRESHOLD",
+          "description": "Seuil de marge minimum en pourcentage",
+          "default": "15"
+        }
+      ]
+    },
+    {
+      "id": "quotations_by_commercial",
+      "questions": [
+        "Quels sont les devis créés par [COMMERCIAL] ?",
+        "Devis du commercial [COMMERCIAL]",
+        "Performance du commercial [COMMERCIAL]",
+        "Devis émis par [COMMERCIAL]",
+        "Statistiques du commercial [COMMERCIAL]"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, rqs.name AS status, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id JOIN users u ON q.created_by = u.id WHERE u.firstname ILIKE '%[COMMERCIAL]%' OR u.lastname ILIKE '%[COMMERCIAL]%' OR (u.firstname || ' ' || u.lastname) ILIKE '%[COMMERCIAL]%' ORDER BY q.issue_date DESC",
+      "description": "Liste des devis créés par un commercial spécifique",
+      "parameters": [
+        {
+          "name": "COMMERCIAL",
+          "description": "Nom ou prénom du commercial"
+        }
+      ]
+    },
+    {
+      "id": "quotations_comparison_by_period",
+      "questions": [
+        "Comment les devis ont évolué entre [PERIOD1] et [PERIOD2] ?",
+        "Comparer les devis entre [PERIOD1] et [PERIOD2]",
+        "Évolution des devis de [PERIOD1] à [PERIOD2]",
+        "Analyse comparative des devis [PERIOD1] vs [PERIOD2]"
+      ],
+      "sql": "WITH period1 AS (SELECT COUNT(*) AS total_count, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_count, SUM(CASE WHEN rqs.code = 'refusé' THEN 1 ELSE 0 END) AS rejected_count, ROUND(AVG(q.total_ttc), 2) AS average_amount, ROUND(SUM(q.total_ttc), 2) AS total_amount FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date BETWEEN '[PERIOD1_START]'::date AND '[PERIOD1_END]'::date), period2 AS (SELECT COUNT(*) AS total_count, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_count, SUM(CASE WHEN rqs.code = 'refusé' THEN 1 ELSE 0 END) AS rejected_count, ROUND(AVG(q.total_ttc), 2) AS average_amount, ROUND(SUM(q.total_ttc), 2) AS total_amount FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date BETWEEN '[PERIOD2_START]'::date AND '[PERIOD2_END]'::date) SELECT p1.total_count AS period1_total, p2.total_count AS period2_total, (p2.total_count - p1.total_count) AS count_diff, ROUND(((p2.total_count - p1.total_count)::decimal / NULLIF(p1.total_count, 0)) * 100, 2) AS count_diff_percent, p1.accepted_count AS period1_accepted, p2.accepted_count AS period2_accepted, p1.rejected_count AS period1_rejected, p2.rejected_count AS period2_rejected, p1.average_amount AS period1_avg, p2.average_amount AS period2_avg, p1.total_amount AS period1_total_amount, p2.total_amount AS period2_total_amount, (p2.total_amount - p1.total_amount) AS amount_diff, ROUND(((p2.total_amount - p1.total_amount)::decimal / NULLIF(p1.total_amount, 0)) * 100, 2) AS amount_diff_percent FROM period1 p1, period2 p2",
+      "description": "Analyse comparative des devis entre deux périodes",
+      "parameters": [
+        {
+          "name": "PERIOD1_START",
+          "description": "Date de début de la première période (YYYY-MM-DD)"
+        },
+        {
+          "name": "PERIOD1_END",
+          "description": "Date de fin de la première période (YYYY-MM-DD)"
+        },
+        {
+          "name": "PERIOD2_START",
+          "description": "Date de début de la deuxième période (YYYY-MM-DD)"
+        },
+        {
+          "name": "PERIOD2_END",
+          "description": "Date de fin de la deuxième période (YYYY-MM-DD)"
+        }
+      ]
     }
   ]
 }

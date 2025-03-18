@@ -230,6 +230,123 @@
       ],
       "sql": "SELECT c.id AS client_id, c.firstname || ' ' || c.lastname AS client_name, COUNT(i.id) AS total_invoices, SUM(i.total_ttc) AS total_invoiced, COALESCE(SUM(pay.amount), 0) AS total_paid, SUM(i.total_ttc) - COALESCE(SUM(pay.amount), 0) AS balance FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN ref_status rs ON i.status = rs.id LEFT JOIN (SELECT invoice_id, SUM(amount) AS amount FROM payments GROUP BY invoice_id) pay ON i.id = pay.invoice_id WHERE rs.code NOT IN ('annulée') AND rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname HAVING SUM(i.total_ttc) - COALESCE(SUM(pay.amount), 0) > 0 ORDER BY (SUM(i.total_ttc) - COALESCE(SUM(pay.amount), 0)) DESC",
       "description": "Solde des factures par client, montrant le total facturé, payé et restant dû"
+    },
+    {
+      "id": "invoices_monthly_summary",
+      "questions": [
+        "Quel est le résumé des factures ce mois-ci ?",
+        "Bilan des factures du mois",
+        "Statistiques des factures du mois",
+        "Résumé des factures du mois en cours",
+        "Bilan mensuel des facturations"
+      ],
+      "sql": "SELECT COUNT(*) as total_invoices, COUNT(CASE WHEN rs.code = 'payée' THEN 1 END) as paid_invoices, COUNT(CASE WHEN rs.code = 'en_retard' THEN 1 END) as overdue_invoices, SUM(i.total_ttc) as total_amount, ROUND(AVG(i.total_ttc), 2) as average_amount FROM invoices i JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND EXTRACT(MONTH FROM i.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM i.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)",
+      "description": "Résumé des factures du mois en cours avec statistiques et montants"
+    },
+    {
+      "id": "invoices_by_period",
+      "questions": [
+        "Quelles factures ont été émises entre le [START_DATE] et le [END_DATE] ?",
+        "Factures de la période [START_DATE] au [END_DATE]",
+        "Factures émises entre [START_DATE] et [END_DATE]",
+        "Liste des factures entre [START_DATE] et [END_DATE]"
+      ],
+      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ht, i.total_ttc, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, p.name AS project_name FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND i.issue_date BETWEEN '[START_DATE]'::date AND '[END_DATE]'::date ORDER BY i.issue_date DESC",
+      "description": "Liste des factures émises dans une période spécifique",
+      "parameters": [
+        {
+          "name": "START_DATE",
+          "description": "Date de début (YYYY-MM-DD)"
+        },
+        {
+          "name": "END_DATE",
+          "description": "Date de fin (YYYY-MM-DD)"
+        }
+      ]
+    },
+    {
+      "id": "invoices_partially_paid",
+      "questions": [
+        "Quelles factures sont partiellement payées ?",
+        "Factures avec paiement partiel",
+        "Liste des factures réglées partiellement",
+        "Factures payées partiellement"
+      ],
+      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ttc, COALESCE(SUM(p.amount), 0) AS paid_amount, (i.total_ttc - COALESCE(SUM(p.amount), 0)) AS remaining_amount, c.firstname || ' ' || c.lastname AS client_name, pr.name AS project_name FROM invoices i JOIN projects pr ON i.project_id = pr.id JOIN clients c ON pr.client_id = c.id JOIN ref_status rs ON i.status = rs.id LEFT JOIN payments p ON i.id = p.invoice_id WHERE rs.entity_type = 'invoice' AND rs.code = 'payée_partiellement' GROUP BY i.id, i.reference, i.issue_date, i.due_date, i.total_ttc, c.firstname, c.lastname, pr.name ORDER BY i.due_date ASC",
+      "description": "Liste des factures partiellement payées avec montant restant dû"
+    },
+    {
+      "id": "invoices_total_by_period",
+      "questions": [
+        "Quel est le total des factures par période ?",
+        "Chiffre d'affaires par [PERIOD]",
+        "Total facturé par [PERIOD]",
+        "Facturations groupées par [PERIOD]",
+        "Montant facturé par [PERIOD]"
+      ],
+      "sql": "SELECT DATE_TRUNC('[PERIOD]', i.issue_date) AS period, COUNT(*) AS invoice_count, ROUND(SUM(i.total_ht), 2) AS total_amount_ht, ROUND(SUM(i.total_ttc), 2) AS total_amount_ttc FROM invoices i JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND rs.code != 'annulée' AND i.issue_date >= CURRENT_DATE - INTERVAL '1 year' GROUP BY DATE_TRUNC('[PERIOD]', i.issue_date) ORDER BY DATE_TRUNC('[PERIOD]', i.issue_date) DESC",
+      "description": "Total des montants facturés groupés par période (mois, trimestre, année)",
+      "parameters": [
+        {
+          "name": "PERIOD",
+          "description": "Période d'agrégation (month, quarter, year)",
+          "default": "month"
+        }
+      ]
+    },
+    {
+      "id": "invoices_with_high_amount",
+      "questions": [
+        "Quelles factures dépassent [AMOUNT]€ ?",
+        "Factures supérieures à [AMOUNT]€",
+        "Liste des factures de plus de [AMOUNT]€",
+        "Factures avec montant supérieur à [AMOUNT]€"
+      ],
+      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ht, i.total_ttc, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, p.name AS project_name FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND i.total_ttc > [AMOUNT] ORDER BY i.total_ttc DESC",
+      "description": "Liste des factures dont le montant dépasse un certain seuil",
+      "parameters": [
+        {
+          "name": "AMOUNT",
+          "description": "Montant seuil en euros",
+          "default": "5000"
+        }
+      ]
+    },
+    {
+      "id": "invoices_performance_by_month",
+      "questions": [
+        "Quelle est l'évolution des factures par mois ?",
+        "Performance mensuelle des factures",
+        "Évolution des facturations dans le temps",
+        "Comparer les factures par mois",
+        "Statistiques mensuelles des factures"
+      ],
+      "sql": "SELECT EXTRACT(YEAR FROM i.issue_date) AS year, EXTRACT(MONTH FROM i.issue_date) AS month, TO_CHAR(i.issue_date, 'Month YYYY') AS month_name, COUNT(*) AS total_count, SUM(CASE WHEN rs.code = 'payée' THEN 1 ELSE 0 END) AS paid_count, SUM(CASE WHEN rs.code = 'en_retard' THEN 1 ELSE 0 END) AS overdue_count, ROUND(AVG(i.total_ttc), 2) AS average_amount, ROUND(SUM(i.total_ttc), 2) AS total_amount, ROUND((SUM(CASE WHEN rs.code = 'payée' THEN 1 ELSE 0 END)::decimal / NULLIF(COUNT(*), 0)) * 100, 2) AS payment_rate FROM invoices i JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND i.issue_date >= CURRENT_DATE - INTERVAL '12 months' GROUP BY EXTRACT(YEAR FROM i.issue_date), EXTRACT(MONTH FROM i.issue_date), TO_CHAR(i.issue_date, 'Month YYYY') ORDER BY EXTRACT(YEAR FROM i.issue_date), EXTRACT(MONTH FROM i.issue_date)",
+      "description": "Tableau complet de performance des factures par mois (nombre, montant, taux de paiement)"
+    },
+    {
+      "id": "invoices_top_clients",
+      "questions": [
+        "Quels sont les clients avec le plus de factures ?",
+        "Clients les plus facturés",
+        "Top clients par facturation",
+        "Classement des clients par montant facturé",
+        "Meilleurs clients par factures"
+      ],
+      "sql": "SELECT c.id, c.firstname || ' ' || c.lastname AS client_name, c.email, COUNT(i.id) AS invoice_count, ROUND(SUM(i.total_ttc), 2) AS total_amount FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND rs.code != 'annulée' GROUP BY c.id, c.firstname, c.lastname, c.email ORDER BY SUM(i.total_ttc) DESC LIMIT 10",
+      "description": "Top 10 des clients avec le plus grand montant total de factures"
+    },
+    {
+      "id": "invoices_payment_aging",
+      "questions": [
+        "Quelle est la balance âgée des factures ?",
+        "Balance âgée des factures",
+        "Âge des factures à recouvrer",
+        "Analyse des impayés par ancienneté",
+        "Répartition des factures non payées par âge"
+      ],
+      "sql": "SELECT client_name, SUM(current_due) AS current_due, SUM(days_1_30) AS days_1_30, SUM(days_31_60) AS days_31_60, SUM(days_61_90) AS days_61_90, SUM(days_over_90) AS days_over_90, SUM(current_due + days_1_30 + days_31_60 + days_61_90 + days_over_90) AS total_due FROM (SELECT c.firstname || ' ' || c.lastname AS client_name, CASE WHEN CURRENT_DATE - i.due_date < 0 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS current_due, CASE WHEN CURRENT_DATE - i.due_date BETWEEN 0 AND 30 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS days_1_30, CASE WHEN CURRENT_DATE - i.due_date BETWEEN 31 AND 60 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS days_31_60, CASE WHEN CURRENT_DATE - i.due_date BETWEEN 61 AND 90 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS days_61_90, CASE WHEN CURRENT_DATE - i.due_date > 90 THEN i.total_ttc - COALESCE(SUM(p.amount), 0) ELSE 0 END AS days_over_90 FROM invoices i JOIN projects pr ON i.project_id = pr.id JOIN clients c ON pr.client_id = c.id JOIN ref_status rs ON i.status = rs.id LEFT JOIN payments p ON i.id = p.invoice_id WHERE rs.entity_type = 'invoice' AND rs.code NOT IN ('payée', 'annulée') GROUP BY c.firstname, c.lastname, i.id, i.total_ttc, i.due_date HAVING i.total_ttc - COALESCE(SUM(p.amount), 0) > 0) AS aging GROUP BY client_name ORDER BY SUM(days_over_90) DESC, SUM(days_61_90) DESC",
+      "description": "Balance âgée des factures impayées par client et par tranche d'ancienneté"
     }
   ]
 }

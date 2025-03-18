@@ -86,64 +86,91 @@ export class HuggingFaceController {
       // Analyser la question avec Hugging Face
       const result = await this.huggingFaceService.analyseQuestion(question);
 
-      // Si nous avons une question reformulée différente, essayer de trouver une requête prédéfinie avec elle
+      // Vérifier si nous avons une requête prédéfinie correspondante avec la question reformulée
       if (
         result.questionReformulated &&
         result.questionReformulated !== question
       ) {
-        this.logger.log(
-          `Recherche de requête prédéfinie avec la question reformulée: "${result.questionReformulated}"`,
-        );
+        const reformulatedQuestion = result.questionReformulated;
+
+        this.logger.log(`Question originale: "${question}"`);
+        this.logger.log(`Question reformulée: "${reformulatedQuestion}"`);
+
+        // Rechercher avec la question reformulée
         const reformulatedPredefinedQuery =
           await this.predefinedQueriesService.findPredefinedQuery(
-            result.questionReformulated,
+            reformulatedQuestion,
           );
 
+        // Créer un log détaillé sur la correspondance trouvée
         if (reformulatedPredefinedQuery.found) {
+          const similarity = reformulatedPredefinedQuery.similarity || 0;
           this.logger.log(
-            `Requête prédéfinie trouvée avec la question reformulée: ${reformulatedPredefinedQuery.id} (similarité: ${reformulatedPredefinedQuery.similarity})`,
+            `Requête prédéfinie trouvée avec question reformulée: ${reformulatedPredefinedQuery.id} (similarité: ${similarity})`,
           );
 
-          const analysisResult: AnalysisResult = {
-            question: question,
-            questionReformulated:
-              reformulatedPredefinedQuery.description ||
-              result.questionReformulated,
-            agent: 'querybuilder',
-            finalQuery: reformulatedPredefinedQuery.query,
-            tables: [],
-            fields: [],
-            conditions: '',
-          };
+          // Afficher les questions associées à cette requête pour debug
+          if (
+            reformulatedPredefinedQuery.predefinedParameters &&
+            reformulatedPredefinedQuery.predefinedParameters.questions
+          ) {
+            this.logger.log(
+              `Questions associées à cette requête: ${JSON.stringify(reformulatedPredefinedQuery.predefinedParameters.questions)}`,
+            );
+          }
 
-          // Exécuter la requête SQL
-          try {
-            const queryResult = await this.queryBuilderService.executeQuery(
-              reformulatedPredefinedQuery.query,
+          // Vérifier si la similarité est suffisante (seuil configurable)
+          const SIMILARITY_THRESHOLD = 0.65;
+          if (similarity >= SIMILARITY_THRESHOLD) {
+            this.logger.log(
+              `Similarité suffisante: ${similarity} >= ${SIMILARITY_THRESHOLD}`,
             );
-            return {
-              source: 'predefined_query_reformulated',
-              result: analysisResult,
-              parameters: reformulatedPredefinedQuery.parameters,
-              id: reformulatedPredefinedQuery.id,
-              data: queryResult.rows,
-              rowCount: queryResult.rowCount,
-              duration: queryResult.duration,
-              similarity: reformulatedPredefinedQuery.similarity,
+
+            const analysisResult: AnalysisResult = {
+              question: question,
+              questionReformulated:
+                reformulatedPredefinedQuery.description || reformulatedQuestion,
+              agent: 'querybuilder',
+              finalQuery: reformulatedPredefinedQuery.query,
+              tables: [],
+              fields: [],
+              conditions: '',
             };
-          } catch (error) {
-            this.logger.error(
-              `Erreur lors de l'exécution de la requête (reformulée): ${error.message}`,
+
+            try {
+              const queryResult = await this.queryBuilderService.executeQuery(
+                reformulatedPredefinedQuery.query,
+              );
+              return {
+                source: 'predefined_query_reformulated',
+                result: analysisResult,
+                parameters: reformulatedPredefinedQuery.parameters,
+                predefinedParameters:
+                  reformulatedPredefinedQuery.predefinedParameters,
+                id: reformulatedPredefinedQuery.id,
+                data: queryResult.rows,
+                rowCount: queryResult.rowCount,
+                duration: queryResult.duration,
+                similarity: similarity,
+              };
+            } catch (error) {
+              this.logger.error(
+                `Erreur lors de l'exécution de la requête (reformulée): ${error.message}`,
+              );
+              return {
+                source: 'predefined_query_reformulated',
+                result: analysisResult,
+                error: this.queryBuilderService.parsePostgresError(error),
+              };
+            }
+          } else {
+            this.logger.log(
+              `Similarité insuffisante: ${similarity} < ${SIMILARITY_THRESHOLD}`,
             );
-            return {
-              source: 'predefined_query_reformulated',
-              result: analysisResult,
-              error: this.queryBuilderService.parsePostgresError(error),
-            };
           }
         } else {
           this.logger.log(
-            `Aucune requête prédéfinie trouvée avec la question reformulée: "${result.questionReformulated}"`,
+            `Aucune requête prédéfinie trouvée pour la question reformulée: "${reformulatedQuestion}"`,
           );
         }
       }
