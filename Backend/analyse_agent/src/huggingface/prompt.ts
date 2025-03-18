@@ -123,8 +123,23 @@ Réponse:
   "Question reformulée": "Quels membres du personnel travailleront la semaine prochaine?",
   "Agent": "querybuilder",
   "Tables concernées": ["staff", "timesheet_entries"],
-  "Conditions et filtres": "WHERE timesheet_entries.date BETWEEN (CURRENT_DATE + INTERVAL '1 DAY' - EXTRACT(DOW FROM CURRENT_DATE) * INTERVAL '1 DAY') AND (CURRENT_DATE + INTERVAL '8 DAY' - EXTRACT(DOW FROM CURRENT_DATE) * INTERVAL '1 DAY')",
-  "Champs à afficher": ["staff.firstname", "staff.lastname", "staff.role"],
+  "Conditions et filtres": "WHERE timesheet_entries.date BETWEEN CURRENT_DATE + INTERVAL '7 days' AND CURRENT_DATE + INTERVAL '14 days'",
+  "Champs à afficher": ["staff.firstname", "staff.lastname", "staff.role", "timesheet_entries.date", "timesheet_entries.start_time", "timesheet_entries.end_time"],
+  "Opérations": []
+}
+\`\`\`
+
+## Exemple 3bis: Question sur le planning du personnel pour une date spécifique
+Question: "qui travaille demain?"
+Réponse:
+\`\`\`json
+{
+  "Question originale": "qui travaille demain?",
+  "Question reformulée": "Quels membres du personnel travailleront demain?",
+  "Agent": "querybuilder",
+  "Tables concernées": ["staff", "timesheet_entries"],
+  "Conditions et filtres": "WHERE timesheet_entries.date = CURRENT_DATE + INTERVAL '1 day'",
+  "Champs à afficher": ["staff.firstname", "staff.lastname", "staff.role", "timesheet_entries.start_time", "timesheet_entries.end_time"],
   "Opérations": []
 }
 \`\`\`
