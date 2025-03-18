@@ -41,7 +41,7 @@ export class PredefinedQueriesService {
       const approximateResult = await this.ragService.findSimilarPrompt(
         this.sqlQueryCacheName,
         question,
-        0.5, // Seuil de similarité plus bas pour les correspondances approximatives
+        0.7,
       );
 
       if (approximateResult.found && approximateResult.metadata) {
