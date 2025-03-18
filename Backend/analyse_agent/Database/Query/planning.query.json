@@ -6,7 +6,13 @@
         "Qui travaille la semaine prochaine ?",
         "Planning des employés pour la semaine prochaine",
         "Personnel programmé semaine pro",
-        "Équipe de travail semaine prochaine"
+        "Équipe de travail semaine prochaine",
+        "Qui est prévu la semaine prochaine ?",
+        "Planning semaine prochaine",
+        "Qui travaille semaine pro ?",
+        "Personnel prévu semaine prochaine",
+        "Équipe semaine prochaine",
+        "Planning personnel semaine prochaine"
       ],
       "sql": "SELECT s.firstname, s.lastname, wws.week_start_date, wws.total_hours, wws.schedule FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id WHERE wws.week_start_date = date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date ORDER BY s.lastname, s.firstname",
       "description": "Planning du personnel pour la semaine prochaine avec leur nombre d'heures programmées"
@@ -17,7 +23,13 @@
         "Qui travaille le [DATE] ?",
         "Personnel présent le [DATE]",
         "Équipe du [DATE]",
-        "Employés programmés pour le [DATE]"
+        "Employés programmés pour le [DATE]",
+        "Qui est prévu le [DATE] ?",
+        "Planning du [DATE]",
+        "Personnel le [DATE]",
+        "Qui travaille le [DATE] ?",
+        "Équipe présente le [DATE]",
+        "Planning pour le [DATE]"
       ],
       "sql": "SELECT s.firstname, s.lastname, s.role, (wws.schedule->>to_char('[DATE]'::date, 'YYYY-MM-DD'))::jsonb->>'hours' AS hours_scheduled, (wws.schedule->>to_char('[DATE]'::date, 'YYYY-MM-DD'))::jsonb->>'project' AS project_name FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id WHERE wws.week_start_date <= '[DATE]'::date AND wws.week_start_date + INTERVAL '6 days' >= '[DATE]'::date AND (wws.schedule->>to_char('[DATE]'::date, 'YYYY-MM-DD')) IS NOT NULL ORDER BY s.lastname, s.firstname",
       "description": "Liste des employés programmés pour travailler à une date spécifique",
@@ -35,7 +47,13 @@
         "Qui travaille sur le projet [PROJECT] ?",
         "Personnel assigné au chantier [PROJECT]",
         "Équipe du projet [PROJECT]",
-        "Employés travaillant sur [PROJECT]"
+        "Employés travaillant sur [PROJECT]",
+        "Qui est sur le projet [PROJECT] ?",
+        "Équipe du chantier [PROJECT]",
+        "Personnel du projet [PROJECT]",
+        "Qui travaille sur [PROJECT] ?",
+        "Staff du projet [PROJECT]",
+        "Planning du projet [PROJECT]"
       ],
       "sql": "SELECT s.firstname, s.lastname, s.role, ps.role AS project_role, ps.start_date, ps.end_date FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id WHERE p.name ILIKE '%[PROJECT]%' OR p.id::text = '[PROJECT]' ORDER BY ps.role, s.lastname, s.firstname",
       "description": "Liste des employés assignés à un projet spécifique avec leur rôle",
@@ -52,7 +70,13 @@
         "Quels sont les événements aujourd'hui ?",
         "Activités du jour",
         "Programme de la journée",
-        "Rendez-vous d'aujourd'hui"
+        "Rendez-vous d'aujourd'hui",
+        "Quoi aujourd'hui ?",
+        "Planning aujourd'hui",
+        "Événements du jour",
+        "Programme aujourd'hui",
+        "Rendez-vous aujourd'hui",
+        "Activités prévues aujourd'hui"
       ],
       "sql": "SELECT ce.title, ce.description, ce.start_date, ce.end_date, ce.location, ret.name AS event_type, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE DATE(ce.start_date) = CURRENT_DATE ORDER BY ce.start_date",
       "description": "Liste de tous les événements programmés pour aujourd'hui"
@@ -63,7 +87,13 @@
         "Quels sont les événements demain ?",
         "Activités de demain",
         "Programme pour demain",
-        "Rendez-vous prévus demain"
+        "Rendez-vous prévus demain",
+        "Quoi demain ?",
+        "Planning demain",
+        "Événements de demain",
+        "Programme demain",
+        "Rendez-vous demain",
+        "Activités prévues demain"
       ],
       "sql": "SELECT ce.title, ce.description, ce.start_date, ce.end_date, ce.location, ret.name AS event_type, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE DATE(ce.start_date) = CURRENT_DATE + INTERVAL '1 day' ORDER BY ce.start_date",
       "description": "Liste de tous les événements programmés pour demain"
@@ -74,7 +104,13 @@
         "Quels sont les événements cette semaine ?",
         "Activités de la semaine",
         "Programme de la semaine en cours",
-        "Rendez-vous de la semaine"
+        "Rendez-vous de la semaine",
+        "Quoi cette semaine ?",
+        "Planning de la semaine",
+        "Événements de la semaine",
+        "Programme semaine",
+        "Rendez-vous semaine",
+        "Activités prévues cette semaine"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id WHERE DATE(ce.start_date) BETWEEN date_trunc('week', CURRENT_DATE)::date AND (date_trunc('week', CURRENT_DATE) + INTERVAL '6 days')::date ORDER BY ce.start_date",
       "description": "Liste de tous les événements programmés pour la semaine en cours"
@@ -85,7 +121,13 @@
         "Quels sont les événements la semaine prochaine ?",
         "Activités de la semaine prochaine",
         "Programme de la semaine pro",
-        "Rendez-vous semaine suivante"
+        "Rendez-vous semaine suivante",
+        "Quoi semaine prochaine ?",
+        "Planning semaine prochaine",
+        "Événements semaine pro",
+        "Programme semaine prochaine",
+        "Rendez-vous semaine prochaine",
+        "Activités prévues semaine prochaine"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id WHERE DATE(ce.start_date) BETWEEN date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date AND (date_trunc('week', CURRENT_DATE + INTERVAL '1 week') + INTERVAL '6 days')::date ORDER BY ce.start_date",
       "description": "Liste de tous les événements programmés pour la semaine prochaine"
@@ -96,7 +138,13 @@
         "Quels sont les événements ce mois-ci ?",
         "Activités du mois",
         "Programme du mois en cours",
-        "Rendez-vous du mois"
+        "Rendez-vous du mois",
+        "Quoi ce mois ?",
+        "Planning du mois",
+        "Événements du mois",
+        "Programme mois",
+        "Rendez-vous mois",
+        "Activités prévues ce mois"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id WHERE EXTRACT(MONTH FROM ce.start_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM ce.start_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY ce.start_date",
       "description": "Liste de tous les événements programmés pour le mois en cours"
@@ -107,7 +155,13 @@
         "Quels sont les événements de type [TYPE] ?",
         "Activités de catégorie [TYPE]",
         "Rendez-vous [TYPE]",
-        "Liste des [TYPE]"
+        "Liste des [TYPE]",
+        "Quoi de type [TYPE] ?",
+        "Planning [TYPE]",
+        "Événements [TYPE]",
+        "Programme [TYPE]",
+        "Rendez-vous type [TYPE]",
+        "Activités [TYPE]"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE ret.name ILIKE '%[TYPE]%' OR ret.code ILIKE '%[TYPE]%' ORDER BY ce.start_date",
       "description": "Liste des événements filtrés par type spécifique",
@@ -124,7 +178,13 @@
         "Quels sont les événements entre [START_DATE] et [END_DATE] ?",
         "Activités programmées du [START_DATE] au [END_DATE]",
         "Rendez-vous dans la période [START_DATE] - [END_DATE]",
-        "Programme entre [START_DATE] et [END_DATE]"
+        "Programme entre [START_DATE] et [END_DATE]",
+        "Quoi du [START_DATE] au [END_DATE] ?",
+        "Planning du [START_DATE] au [END_DATE]",
+        "Événements du [START_DATE] au [END_DATE]",
+        "Programme période [START_DATE] - [END_DATE]",
+        "Rendez-vous période [START_DATE] - [END_DATE]",
+        "Activités prévues du [START_DATE] au [END_DATE]"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id WHERE DATE(ce.start_date) BETWEEN '[START_DATE]'::date AND '[END_DATE]'::date ORDER BY ce.start_date",
       "description": "Liste des événements programmés dans une plage de dates spécifique",
@@ -147,7 +207,13 @@
         "Quels sont les événements pour le projet [PROJECT] ?",
         "Activités liées au chantier [PROJECT]",
         "Rendez-vous concernant [PROJECT]",
-        "Planning du projet [PROJECT]"
+        "Planning du projet [PROJECT]",
+        "Quoi pour [PROJECT] ?",
+        "Événements [PROJECT]",
+        "Programme [PROJECT]",
+        "Rendez-vous [PROJECT]",
+        "Planning chantier [PROJECT]",
+        "Activités projet [PROJECT]"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE p.name ILIKE '%[PROJECT]%' OR p.id::text = '[PROJECT]' ORDER BY ce.start_date",
       "description": "Liste des événements associés à un projet spécifique",
@@ -164,7 +230,13 @@
         "Quels sont les événements pour [STAFF] ?",
         "Activités de [STAFF]",
         "Rendez-vous de [STAFF]",
-        "Planning de [STAFF]"
+        "Planning de [STAFF]",
+        "Quoi pour [STAFF] ?",
+        "Événements [STAFF]",
+        "Programme [STAFF]",
+        "Rendez-vous [STAFF]",
+        "Planning personnel [STAFF]",
+        "Activités [STAFF]"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id JOIN staff s ON ce.staff_id = s.id WHERE (s.firstname || ' ' || s.lastname) ILIKE '%[STAFF]%' OR s.email ILIKE '%[STAFF]%' ORDER BY ce.start_date",
       "description": "Liste des événements associés à un membre du personnel spécifique",
@@ -181,7 +253,13 @@
         "Quels sont les prochains événements ?",
         "Prochains rendez-vous",
         "Activités à venir",
-        "Événements futurs"
+        "Événements futurs",
+        "Quoi à venir ?",
+        "Planning à venir",
+        "Prochains événements",
+        "Programme à venir",
+        "Rendez-vous à venir",
+        "Activités futures"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE ce.start_date > CURRENT_TIMESTAMP ORDER BY ce.start_date LIMIT 10",
       "description": "Liste des 10 prochains événements programmés"
@@ -192,7 +270,13 @@
         "Quels sont les jours les plus chargés ?",
         "Journées avec le plus d'événements",
         "Jours à fort planning",
-        "Journées les plus occupées"
+        "Journées les plus occupées",
+        "Quels jours sont les plus chargés ?",
+        "Jours avec beaucoup d'événements",
+        "Journées chargées",
+        "Jours occupés",
+        "Planning chargé",
+        "Jours à forte activité"
       ],
       "sql": "SELECT DATE(ce.start_date) AS day, COUNT(*) AS event_count FROM calendar_events ce WHERE ce.start_date >= CURRENT_DATE GROUP BY DATE(ce.start_date) ORDER BY COUNT(*) DESC LIMIT 10",
       "description": "Liste des 10 jours avec le plus grand nombre d'événements programmés"
@@ -203,7 +287,13 @@
         "Quelles visites de chantier sont programmées ?",
         "Prochaines visites techniques",
         "Planning des visites sur site",
-        "Visites de chantier à venir"
+        "Visites de chantier à venir",
+        "Quelles visites sont prévues ?",
+        "Prochaines visites",
+        "Visites techniques",
+        "Visites de chantier",
+        "Planning visites",
+        "Visites prévues"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE (ret.code = 'visite_technique' OR ret.code = 'reunion_chantier') AND ce.start_date > CURRENT_TIMESTAMP ORDER BY ce.start_date",
       "description": "Liste des visites de chantier et réunions sur site programmées"
@@ -214,7 +304,13 @@
         "Quels rendez-vous clients sont programmés ?",
         "Prochaines rencontres avec clients",
         "Planning des rendez-vous clients",
-        "Rendez-vous clients à venir"
+        "Rendez-vous clients à venir",
+        "Quels rendez-vous clients ?",
+        "Prochains rendez-vous clients",
+        "Rencontres clients",
+        "Rendez-vous avec clients",
+        "Planning clients",
+        "Visites clients"
       ],
       "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name, c.firstname || ' ' || c.lastname AS client_name FROM calendar_events ce JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id LEFT JOIN clients c ON p.client_id = c.id WHERE ret.code = 'rendez_vous_client' AND ce.start_date > CURRENT_TIMESTAMP ORDER BY ce.start_date",
       "description": "Liste des rendez-vous avec les clients programmés"
@@ -225,7 +321,13 @@
         "Quelles sont les échéances ce mois-ci ?",
         "Dates limites du mois",
         "Deadlines importantes ce mois",
-        "Échéances à respecter ce mois"
+        "Échéances à respecter ce mois",
+        "Quelles échéances ce mois ?",
+        "Deadlines du mois",
+        "Échéances mois",
+        "Dates limites",
+        "Fin de mois",
+        "Échéances importantes"
       ],
       "sql": "SELECT p.name AS project_name, s.name AS stage_name, s.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, CASE WHEN s.end_date < CURRENT_DATE THEN 'En retard' ELSE 'À venir' END AS deadline_status FROM stages s JOIN projects p ON s.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON s.status = rs.id WHERE EXTRACT(MONTH FROM s.end_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM s.end_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY s.end_date",
       "description": "Liste des échéances d'étapes de projets pour le mois courant"
@@ -236,7 +338,13 @@
         "Quels sont les derniers rapports de chantier ?",
         "Rapports journaliers récents",
         "Derniers comptes rendus de chantier",
-        "Rapports d'activité récents"
+        "Rapports d'activité récents",
+        "Derniers rapports",
+        "Rapports chantier",
+        "Comptes rendus récents",
+        "Rapports journaliers",
+        "Rapports activité",
+        "Derniers comptes rendus"
       ],
       "sql": "SELECT dsr.id, dsr.report_date, p.name AS project_name, dsr.weather_conditions, dsr.temperature, dsr.hours_worked, dsr.work_done, s.firstname || ' ' || s.lastname AS reported_by FROM daily_site_reports dsr JOIN projects p ON dsr.project_id = p.id LEFT JOIN staff s ON dsr.staff_id = s.id ORDER BY dsr.report_date DESC LIMIT 10",
       "description": "Liste des 10 derniers rapports journaliers de chantier"
@@ -247,10 +355,132 @@
         "Quels points de contrôle qualité arrivent à échéance ?",
         "Contrôles qualité à effectuer",
         "Prochains points de vérification",
-        "Points de contrôle à faire"
+        "Points de contrôle à faire",
+        "Quels contrôles qualité ?",
+        "Points de contrôle",
+        "Vérifications qualité",
+        "Contrôles à faire",
+        "Points de vérification",
+        "Contrôles qualité"
       ],
       "sql": "SELECT qc.name, qc.description, qc.deadline, p.name AS project_name, s.name AS stage_name, rqcs.name AS status FROM quality_checkpoints qc JOIN projects p ON qc.project_id = p.id JOIN stages s ON qc.stage_id = s.id JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id WHERE qc.deadline BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '14 days') AND rqcs.code != 'validé' ORDER BY qc.deadline",
       "description": "Liste des points de contrôle qualité à effectuer dans les deux prochaines semaines"
+    },
+    {
+      "id": "staff_availability_month",
+      "questions": [
+        "Qui est disponible ce mois ?",
+        "Personnel disponible ce mois",
+        "Membres du staff libres ce mois",
+        "Employés non planifiés ce mois",
+        "Qui est dispo ce mois ?",
+        "Personnel libre ce mois",
+        "Staff disponible",
+        "Employés disponibles",
+        "Qui est libre ce mois ?",
+        "Personnel non planifié"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND EXTRACT(MONTH FROM te.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE)) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour le mois en cours (sans entrées dans le planning)"
+    },
+    {
+      "id": "staff_availability_week",
+      "questions": [
+        "Qui est disponible cette semaine ?",
+        "Personnel disponible cette semaine",
+        "Membres du staff libres cette semaine",
+        "Employés non planifiés pour la semaine en cours",
+        "Qui est dispo cette semaine ?",
+        "Personnel libre cette semaine",
+        "Staff disponible semaine",
+        "Employés disponibles semaine",
+        "Qui est libre cette semaine ?",
+        "Personnel non planifié semaine"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND te.date BETWEEN date_trunc('week', CURRENT_DATE)::date AND (date_trunc('week', CURRENT_DATE) + INTERVAL '6 days')::date) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour la semaine en cours (sans entrées dans le planning)"
+    },
+    {
+      "id": "staff_availability_next_week",
+      "questions": [
+        "Qui est disponible la semaine prochaine ?",
+        "Personnel disponible semaine prochaine",
+        "Membres du staff libres semaine prochaine",
+        "Employés non planifiés la semaine prochaine",
+        "Qui est dispo la semaine prochaine ?",
+        "Personnel libre semaine prochaine",
+        "Staff disponible semaine pro",
+        "Employés disponibles semaine pro",
+        "Qui est libre semaine prochaine ?",
+        "Personnel non planifié semaine pro"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND te.date BETWEEN date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date AND (date_trunc('week', CURRENT_DATE + INTERVAL '1 week') + INTERVAL '6 days')::date) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour la semaine prochaine (sans entrées dans le planning)"
+    },
+    {
+      "id": "staff_availability_tomorrow",
+      "questions": [
+        "Qui est disponible demain ?",
+        "Personnel disponible demain",
+        "Membres du staff libres demain",
+        "Employés non planifiés pour demain",
+        "Qui est dispo demain ?",
+        "Personnel libre demain",
+        "Staff disponible demain",
+        "Employés disponibles demain",
+        "Qui est libre demain ?",
+        "Personnel non planifié demain"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND te.date = CURRENT_DATE + INTERVAL '1 day') ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour demain (sans entrées dans le planning)"
+    },
+    {
+      "id": "staff_schedule_year",
+      "questions": [
+        "Qui travaille cette année ?",
+        "Planning personnel année en cours",
+        "Personnel programmé cette année",
+        "Équipe de travail année en cours",
+        "Qui est prévu cette année ?",
+        "Planning année",
+        "Qui travaille en [YEAR] ?",
+        "Personnel prévu cette année",
+        "Équipe année en cours",
+        "Planning personnel année"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(COUNT(DISTINCT te.date), 0) as days_worked, COALESCE(SUM(te.hours), 0) as total_hours FROM staff s LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE) WHERE s.is_available = true GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY s.lastname, s.firstname",
+      "description": "Planning du personnel pour l'année en cours avec le nombre de jours travaillés et le total des heures",
+      "parameters": [
+        {
+          "name": "YEAR",
+          "description": "Année au format YYYY",
+          "default": "EXTRACT(YEAR FROM CURRENT_DATE)"
+        }
+      ]
+    },
+    {
+      "id": "staff_schedule_month",
+      "questions": [
+        "Qui travaille ce mois ?",
+        "Planning personnel mois en cours",
+        "Personnel programmé ce mois",
+        "Équipe de travail mois en cours",
+        "Qui est prévu ce mois ?",
+        "Planning mois",
+        "Qui travaille en [MONTH] ?",
+        "Personnel prévu ce mois",
+        "Équipe mois en cours",
+        "Planning personnel mois"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(COUNT(DISTINCT te.date), 0) as days_worked, COALESCE(SUM(te.hours), 0) as total_hours FROM staff s LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND EXTRACT(MONTH FROM te.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE) WHERE s.is_available = true GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY s.lastname, s.firstname",
+      "description": "Planning du personnel pour le mois en cours avec le nombre de jours travaillés et le total des heures",
+      "parameters": [
+        {
+          "name": "MONTH",
+          "description": "Mois au format MM",
+          "default": "EXTRACT(MONTH FROM CURRENT_DATE)"
+        }
+      ]
     }
   ]
 }

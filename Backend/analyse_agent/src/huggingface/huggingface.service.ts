@@ -476,4 +476,224 @@ export class HuggingFaceService {
 
     return null;
   }
+
+  /**
+   * Vérifie si une chaîne contient l'un des mots-clés spécifiés
+   * @param text Le texte à vérifier
+   * @param keywords Liste des mots-clés à rechercher
+   * @returns true si l'un des mots-clés est trouvé, false sinon
+   */
+  private containsAny(text: string, keywords: string[]): boolean {
+    if (!text) return false;
+    const lowerText = text.toLowerCase();
+    return keywords.some((keyword) =>
+      lowerText.includes(keyword.toLowerCase()),
+    );
+  }
+
+  /**
+   * Déterminer la condition temporelle basée sur la question
+   */
+  private determineTimeCondition(lowerQuestion: string): string {
+    if (lowerQuestion.includes('demain')) {
+      return "DATE(timesheet_entries.date) = CURRENT_DATE + INTERVAL '1 day'";
+    } else if (this.containsAny(lowerQuestion, ['aujourd', 'ce jour'])) {
+      return 'DATE(timesheet_entries.date) = CURRENT_DATE';
+    } else if (
+      this.containsAny(lowerQuestion, [
+        'semaine prochaine',
+        'prochaine semaine',
+      ])
+    ) {
+      return "DATE(timesheet_entries.date) BETWEEN (CURRENT_DATE + INTERVAL '1 week') AND (CURRENT_DATE + INTERVAL '2 weeks - 1 day')";
+    } else if (this.containsAny(lowerQuestion, ['cette semaine', 'semaine'])) {
+      return "DATE(timesheet_entries.date) BETWEEN date_trunc('week', CURRENT_DATE) AND (date_trunc('week', CURRENT_DATE) + INTERVAL '6 days')";
+    } else if (this.containsAny(lowerQuestion, ['mois prochain'])) {
+      return "DATE(timesheet_entries.date) BETWEEN date_trunc('month', CURRENT_DATE + INTERVAL '1 month') AND (date_trunc('month', CURRENT_DATE + INTERVAL '1 month') + INTERVAL '1 month - 1 day')";
+    } else if (
+      this.containsAny(lowerQuestion, [
+        'ce mois',
+        'mois en cours',
+        'mois actuel',
+        'mois ci',
+      ])
+    ) {
+      return "DATE(timesheet_entries.date) BETWEEN date_trunc('month', CURRENT_DATE) AND (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month - 1 day')";
+    }
+
+    return '';
+  }
+
+  /**
+   * Analyze a question to determine the appropriate availability query
+   */
+  private determineAvailabilityQuery(lowerQuestion: string): {
+    tables: string[];
+    fields: string[];
+    conditions: string;
+  } {
+    const tables = ['staff'];
+    const fields = [
+      'staff.firstname',
+      'staff.lastname',
+      'staff.email',
+      'staff.phone',
+    ];
+    let conditions = 'WHERE staff.is_active = true';
+    let timePeriod = '';
+
+    // Déterminer la période
+    if (lowerQuestion.includes('demain')) {
+      timePeriod = "timesheet_entries.date = CURRENT_DATE + INTERVAL '1 day'";
+      tables.push('timesheet_entries');
+    } else if (this.containsAny(lowerQuestion, ['aujourd', 'ce jour'])) {
+      timePeriod = 'timesheet_entries.date = CURRENT_DATE';
+      tables.push('timesheet_entries');
+    } else if (
+      this.containsAny(lowerQuestion, [
+        'semaine prochaine',
+        'prochaine semaine',
+      ])
+    ) {
+      timePeriod =
+        "timesheet_entries.date BETWEEN date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date AND (date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date + INTERVAL '6 days')";
+      tables.push('timesheet_entries');
+    } else if (this.containsAny(lowerQuestion, ['cette semaine', 'semaine'])) {
+      timePeriod =
+        "timesheet_entries.date BETWEEN date_trunc('week', CURRENT_DATE)::date AND (date_trunc('week', CURRENT_DATE)::date + INTERVAL '6 days')";
+      tables.push('timesheet_entries');
+    } else if (this.containsAny(lowerQuestion, ['mois prochain'])) {
+      timePeriod =
+        "EXTRACT(MONTH FROM timesheet_entries.date) = EXTRACT(MONTH FROM CURRENT_DATE + INTERVAL '1 month') AND EXTRACT(YEAR FROM timesheet_entries.date) = EXTRACT(YEAR FROM CURRENT_DATE + INTERVAL '1 month')";
+      tables.push('timesheet_entries');
+    } else if (
+      this.containsAny(lowerQuestion, [
+        'ce mois',
+        'mois en cours',
+        'mois actuel',
+        'mois ci',
+      ])
+    ) {
+      timePeriod =
+        'EXTRACT(MONTH FROM timesheet_entries.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM timesheet_entries.date) = EXTRACT(YEAR FROM CURRENT_DATE)';
+      tables.push('timesheet_entries');
+    }
+
+    // Si on a une période de temps, construire la requête de disponibilité
+    if (timePeriod) {
+      // Utiliser LEFT JOIN pour trouver les membres du staff sans entrées de planning
+      conditions = `WHERE staff.is_active = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries WHERE timesheet_entries.staff_id = staff.id AND ${timePeriod})`;
+
+      // Retirer timesheet_entries des tables pour utiliser un subquery NOT EXISTS
+      if (tables.includes('timesheet_entries')) {
+        tables.splice(tables.indexOf('timesheet_entries'), 1);
+      }
+    }
+
+    return { tables, fields, conditions };
+  }
+
+  /**
+   * Analyse les mots-clés de la question pour déterminer la configuration de requête
+   */
+  private analyzeQuestionKeywords(lowerQuestion: string): {
+    tables: string[];
+    fields: string[];
+    conditions: string;
+  } | null {
+    // Structure pour stocker le résultat
+    const result: {
+      tables: string[];
+      fields: string[];
+      conditions: string;
+    } = {
+      tables: [],
+      fields: [],
+      conditions: '',
+    };
+
+    // Déterminer les entités concernées (tables)
+    if (this.containsAny(lowerQuestion, ['facture', 'invoice', 'paiement'])) {
+      result.tables = ['invoices', 'ref_status'];
+
+      if (this.containsAny(lowerQuestion, ['total', 'montant', 'somme'])) {
+        result.fields = ['SUM(invoices.total_ttc) as montant_total'];
+
+        if (
+          this.containsAny(lowerQuestion, ['attente', 'en cours', 'non payé'])
+        ) {
+          result.conditions =
+            "ref_status.code = 'en_attente' AND ref_status.entity_type = 'invoice'";
+        }
+      } else {
+        result.fields = [
+          'invoices.id',
+          'invoices.reference',
+          'invoices.issue_date',
+          'invoices.total_ttc',
+          'ref_status.name as status',
+        ];
+      }
+    } else if (this.containsAny(lowerQuestion, ['dispo', 'disponible'])) {
+      // Pour les questions de disponibilité, utiliser une logique spécifique
+      const availabilityQuery = this.determineAvailabilityQuery(lowerQuestion);
+      result.tables = availabilityQuery.tables;
+      result.fields = availabilityQuery.fields;
+      result.conditions = availabilityQuery.conditions;
+    } else if (
+      this.containsAny(lowerQuestion, [
+        'travail',
+        'personnel',
+        'staff',
+        'employé',
+      ])
+    ) {
+      result.tables = ['staff', 'timesheet_entries', 'projects'];
+      result.fields = [
+        'DISTINCT staff.firstname',
+        'staff.lastname',
+        'staff.role',
+        'projects.name as project_name',
+      ];
+
+      // Déterminer la période temporelle
+      const timeCondition = this.determineTimeCondition(lowerQuestion);
+      if (timeCondition) {
+        result.conditions = timeCondition;
+      }
+    } else if (this.containsAny(lowerQuestion, ['projet', 'chantier'])) {
+      result.tables = ['projects', 'clients', 'ref_status'];
+      result.fields = [
+        'projects.id',
+        'projects.name',
+        'projects.start_date',
+        'projects.end_date',
+        "clients.firstname || ' ' || clients.lastname as client_name",
+        'ref_status.name as status',
+      ];
+
+      // Conditions basées sur l'état du projet
+      if (this.containsAny(lowerQuestion, ['en cours', 'actif', 'actuel'])) {
+        result.conditions =
+          "ref_status.code = 'en_cours' AND ref_status.entity_type = 'project'";
+      }
+    } else if (this.containsAny(lowerQuestion, ['client', 'customer'])) {
+      result.tables = ['clients', 'addresses'];
+      result.fields = [
+        'clients.id',
+        'clients.firstname',
+        'clients.lastname',
+        'clients.email',
+        'clients.phone',
+        'addresses.city',
+      ];
+
+      if (this.containsAny(lowerQuestion, ['récent', 'nouveau', 'dernier'])) {
+        result.fields.push('clients.created_at');
+        result.conditions = 'ORDER BY clients.created_at DESC LIMIT 10';
+      }
+    }
+
+    return result.tables.length > 0 ? result : null;
+  }
 }
