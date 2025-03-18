@@ -2,11 +2,13 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RagService } from '../RAG/rag.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as fsSync from 'fs';
 
 @Injectable()
 export class SqlQueriesService implements OnModuleInit {
   private readonly logger = new Logger(SqlQueriesService.name);
   private readonly sqlQueryCacheName = 'sql_queries';
+  private readonly markerFilePath = '/data/sql_queries_initialized.marker';
 
   constructor(private readonly ragService: RagService) {}
 
@@ -17,12 +19,36 @@ export class SqlQueriesService implements OnModuleInit {
     try {
       this.logger.log('Initialisation des requêtes SQL prédéfinies...');
 
+      // Vérifier d'abord si le fichier marqueur existe
+      try {
+        if (fsSync.existsSync(this.markerFilePath)) {
+          this.logger.log(
+            `Fichier marqueur trouvé à ${this.markerFilePath}, on considère que l'initialisation a déjà été faite`,
+          );
+          return;
+        } else {
+          this.logger.log(`Aucun fichier marqueur trouvé à ${this.markerFilePath}, vérification du compteur ChromaDB`);
+        }
+      } catch (fsError) {
+        this.logger.warn(
+          `Erreur lors de la vérification du fichier marqueur: ${fsError.message}, poursuite avec la vérification du compteur`,
+        );
+      }
+
       // Vérifier si la collection existe et a déjà des documents
       const existingEntries = await this.checkExistingEntries();
       if (existingEntries > 0) {
         this.logger.log(
           `${existingEntries} requêtes SQL déjà chargées dans ChromaDB, initialisation ignorée`,
         );
+        // Créer le fichier marqueur puisque des entrées existent
+        try {
+          await this.createMarkerFile();
+        } catch (markerError) {
+          this.logger.warn(
+            `Impossible de créer le fichier marqueur: ${markerError.message}, ce n'est pas bloquant mais l'initialisation pourrait se reproduire au prochain redémarrage`,
+          );
+        }
         return;
       }
 
@@ -56,11 +82,49 @@ export class SqlQueriesService implements OnModuleInit {
         }
       }
 
+      // Créer le fichier marqueur après le chargement réussi
+      try {
+        await this.createMarkerFile();
+      } catch (markerError) {
+        this.logger.warn(
+          `Impossible de créer le fichier marqueur: ${markerError.message}, ce n'est pas bloquant mais l'initialisation pourrait se reproduire au prochain redémarrage`,
+        );
+      }
+
       this.logger.log('Initialisation des requêtes SQL prédéfinies terminée');
     } catch (error) {
       this.logger.error(
         `Erreur lors de l'initialisation des requêtes SQL: ${error.message}`,
       );
+    }
+  }
+
+  /**
+   * Crée un fichier marqueur indiquant que l'initialisation a été effectuée
+   */
+  private async createMarkerFile(): Promise<void> {
+    try {
+      // Vérifier si le répertoire parent existe
+      const dir = path.dirname(this.markerFilePath);
+      try {
+        await fs.mkdir(dir, { recursive: true });
+      } catch (mkdirError) {
+        this.logger.warn(`Impossible de créer le répertoire parent: ${mkdirError.message}`);
+      }
+
+      // Écrire le fichier marqueur avec la date actuelle
+      await fs.writeFile(
+        this.markerFilePath,
+        JSON.stringify({
+          initialized: true,
+          timestamp: new Date().toISOString(),
+          queries: this.sqlQueryCacheName,
+        }),
+      );
+      this.logger.log(`Fichier marqueur créé avec succès à ${this.markerFilePath}`);
+    } catch (error) {
+      this.logger.error(`Erreur lors de la création du fichier marqueur: ${error.message}`);
+      throw error;
     }
   }
 

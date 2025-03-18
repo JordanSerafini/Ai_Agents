@@ -582,7 +582,67 @@
             "fev": 2,
             "mar": 3,
             "avr": 4,
+            "jun": 6,
+            "jui": 7,
+            "jul": 7,
+            "aou": 8,
+            "aoû": 8,
+            "sep": 9,
+            "oct": 10,
+            "nov": 11,
+            "déc": 12,
+            "dec": 12
+          }
+        }
+      ]
+    },
+    {
+      "id": "quotations_evolution_from_month",
+      "questions": [
+        "Quelle évolution des devis de [MONTH] [YEAR] à aujourd'hui ?",
+        "Evolution des devis depuis [MONTH] [YEAR]",
+        "Tendance des devis de [MONTH] [YEAR] à maintenant",
+        "Comment ont évolué les devis depuis [MONTH] [YEAR] ?",
+        "Evolution mensuelle des devis depuis [MONTH] [YEAR]",
+        "Analyse des devis entre [MONTH] [YEAR] et aujourd'hui",
+        "Progression des devis depuis [MONTH] [YEAR]",
+        "Quel évolution des devis de [MONTH] [YEAR] a aujourdhui",
+        "Statistiques mensuelles des devis depuis [MONTH] [YEAR]",
+        "Bilan des devis depuis [MONTH] [YEAR]"
+      ],
+      "sql": "SELECT EXTRACT(YEAR FROM q.issue_date) AS year, EXTRACT(MONTH FROM q.issue_date) AS month, TO_CHAR(q.issue_date, 'Month YYYY') AS month_name, COUNT(*) AS total_count, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_count, SUM(CASE WHEN rqs.code = 'refusé' THEN 1 ELSE 0 END) AS rejected_count, ROUND(AVG(q.total_ttc), 2) AS average_amount, ROUND(SUM(q.total_ttc), 2) AS total_amount, ROUND((SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END)::decimal / NULLIF(COUNT(*), 0)) * 100, 2) AS conversion_rate FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date >= TO_DATE('[YEAR]-[MONTH_NUMBER]-01', 'YYYY-MM-DD') AND q.issue_date <= CURRENT_DATE GROUP BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date), TO_CHAR(q.issue_date, 'Month YYYY') ORDER BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date)",
+      "description": "Analyse mensuelle de l'évolution des devis depuis un mois spécifique jusqu'à aujourd'hui",
+      "parameters": [
+        {
+          "name": "MONTH",
+          "description": "Le mois de départ en texte (janvier, février, mars, etc.)"
+        },
+        {
+          "name": "YEAR",
+          "description": "L'année de départ en chiffres (2023, 2024, etc.)"
+        },
+        {
+          "name": "MONTH_NUMBER",
+          "description": "Le numéro du mois de départ (1 pour janvier, 2 pour février, etc.)",
+          "computed": true,
+          "mapping": {
+            "janvier": 1,
+            "février": 2,
+            "mars": 3,
+            "avril": 4,
             "mai": 5,
+            "juin": 6,
+            "juillet": 7,
+            "août": 8,
+            "septembre": 9,
+            "octobre": 10,
+            "novembre": 11,
+            "décembre": 12,
+            "jan": 1,
+            "fév": 2,
+            "fev": 2,
+            "mar": 3,
+            "avr": 4,
             "jun": 6,
             "jui": 7,
             "jul": 7,
