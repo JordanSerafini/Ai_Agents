@@ -16,7 +16,7 @@ export class PredefinedQueriesService {
       const result = await this.ragService.findSimilarPrompt(
         this.sqlQueryCacheName,
         question,
-        0.85,
+        0.75, // Seuil de similarité
       );
 
       if (result.found && result.metadata) {
@@ -30,6 +30,7 @@ export class PredefinedQueriesService {
           parameters: this.detectRequiredParameters(result.metadata.finalQuery),
           predefinedParameters: result.metadata.parameters || [],
           id: result.metadata.id,
+          similarity: result.similarity,
         };
       }
 

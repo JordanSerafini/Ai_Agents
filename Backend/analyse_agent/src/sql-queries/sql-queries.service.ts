@@ -27,7 +27,7 @@ export class SqlQueriesService implements OnModuleInit {
       }
 
       // Créer le répertoire s'il n'existe pas
-      const queryDir = path.join(__dirname, '../../../Database/Query');
+      const queryDir = path.join(process.cwd(), 'Database', 'Query');
       try {
         await fs.mkdir(queryDir, { recursive: true });
         this.logger.log(`Répertoire ${queryDir} créé ou existant`);
@@ -46,7 +46,6 @@ export class SqlQueriesService implements OnModuleInit {
         'planning.query.json',
       ];
 
-      // Essayer de charger chaque fichier, ignorer les erreurs pour les fichiers manquants
       for (const file of files) {
         try {
           await this.loadQueriesFromFile(file);
@@ -88,11 +87,9 @@ export class SqlQueriesService implements OnModuleInit {
    */
   private async loadQueriesFromFile(filename: string): Promise<void> {
     try {
-      const filePath = path.join(
-        __dirname,
-        '../../../Database/Query',
-        filename,
-      );
+      const filePath = path.join(process.cwd(), 'Database', 'Query', filename);
+      this.logger.log(`Tentative de chargement du fichier: ${filePath}`);
+
       const fileContent = await fs.readFile(filePath, 'utf8');
       const queryData = JSON.parse(fileContent);
 
