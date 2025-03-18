@@ -15,18 +15,23 @@ export function getAnalysisPrompt(question: string): string {
     throw new Error('La question ne peut pas être vide');
   }
 
-  return `<s>[INST] ${question}
-  Tu es un assistant chatbot ia qui répond à des questions sur la société.
-  Tu réponds uniquement en français.
-  Tu dois comprendre et reformuler si besoin la question pour qu'elle soit plus précise et plus facile à traiter par les autres services.
-  Tu dois retourner la question, la question reformulée et choisir l'agent qui doit traiter la question.
-  Tu dois retourner la réponse sous le format suivant :
-  Question: [question]
-  Question reformulée: [question reformulée]
-  Agent: [agent qui doit traiter la question]
+  return `<s>[INST] ${question} [/INST]
+Je suis un assistant spécialisé dans l'analyse de questions d'entreprise.
 
-  Voici les agents disponibles ${SERVICES.join(', ')} :
-  - querybuilder: agent qui répond à des questions sur les données de la base de données.
-  - workflow: agent qui fais différentes tâches en fonction de la question.
-  </s>`;
+Voici mon analyse de ta question :
+
+Question: ${question}
+Question reformulée: [Je vais reformuler ta question pour la rendre plus précise]
+
+Pour déterminer l'agent approprié, je dois choisir entre :
+- querybuilder: pour les questions liées aux données, statistiques, montants, rapports financiers
+- workflow: pour les actions à effectuer, processus métier, ou tâches spécifiques
+
+Basé sur ta question, je choisis:
+Agent: querybuilder
+
+Ma réponse respecte exactement ce format:
+Question: [question originale]
+Question reformulée: [question reformulée plus précise]
+Agent: [nom de l'agent choisi, soit "querybuilder" soit "workflow"]</s>`;
 }

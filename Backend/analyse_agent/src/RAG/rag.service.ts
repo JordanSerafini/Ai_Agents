@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 export class RagService {
   private client: ChromaClient;
   private readonly logger = new Logger(RagService.name);
+  private readonly collections = new Map();
 
   constructor(private configService: ConfigService) {
     this.client = new ChromaClient({
@@ -16,11 +17,36 @@ export class RagService {
     this.logger.log('Service RAG initialisé');
   }
 
-  async createCollection(name: string) {
+  // Méthode pour obtenir une collection (avec mise en cache)
+  private async getCollection(name: string) {
+    if (this.collections.has(name)) {
+      return this.collections.get(name);
+    }
+
     try {
-      return await this.client.createCollection({
+      // Essayer d'utiliser getOrCreateCollection au lieu de getCollection
+      const collection = await this.client.getOrCreateCollection({
         name,
       });
+
+      this.collections.set(name, collection);
+      return collection;
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'accès à la collection: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  async createCollection(name: string) {
+    try {
+      const collection = await this.client.createCollection({
+        name,
+      });
+
+      this.collections.set(name, collection);
+      return collection;
     } catch (error) {
       this.logger.error(
         `Erreur lors de la création de la collection: ${error.message}`,
@@ -30,24 +56,12 @@ export class RagService {
   }
 
   async getOrCreateCollection(name: string) {
-    try {
-      return await this.client.getOrCreateCollection({
-        name,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Erreur lors de la récupération/création de la collection: ${error.message}`,
-      );
-      throw error;
-    }
+    return this.getCollection(name);
   }
 
   async addDocuments(collectionName: string, documents: string[]) {
     try {
-      // @ts-expect-error L'API a changé et exige embeddingFunction
-      const collection = await this.client.getCollection({
-        name: collectionName,
-      });
+      const collection = await this.getCollection(collectionName);
 
       const ids = documents.map(() => uuidv4());
 
@@ -72,10 +86,7 @@ export class RagService {
     metadatas?: Record<string, any>[],
   ) {
     try {
-      // @ts-expect-error L'API a changé et exige embeddingFunction
-      const collection = await this.client.getCollection({
-        name: collectionName,
-      });
+      const collection = await this.getCollection(collectionName);
 
       const documentIds = ids || documents.map(() => uuidv4());
 
@@ -105,10 +116,7 @@ export class RagService {
     limit: number = 10,
   ) {
     try {
-      // @ts-expect-error L'API a changé et exige embeddingFunction
-      const collection = await this.client.getCollection({
-        name: collectionName,
-      });
+      const collection = await this.getCollection(collectionName);
 
       return await collection.query({
         queryTexts: [query],
@@ -128,25 +136,33 @@ export class RagService {
     similarityThreshold: number = 0.85,
   ) {
     try {
-      const results = await this.findSimilarDocuments(
-        collectionName,
-        prompt,
-        1,
-      );
+      // Créer la collection si elle n'existe pas déjà
+      await this.getCollection(collectionName);
 
-      if (
-        results.distances &&
-        results.distances[0] &&
-        results.distances[0][0] &&
-        1 - results.distances[0][0] >= similarityThreshold
-      ) {
-        return {
-          found: true,
-          prompt: results.documents?.[0]?.[0],
-          id: results.ids?.[0]?.[0],
-          similarity: 1 - results.distances[0][0],
-          metadata: results.metadatas?.[0]?.[0],
-        };
+      try {
+        const results = await this.findSimilarDocuments(
+          collectionName,
+          prompt,
+          1,
+        );
+
+        if (
+          results.distances &&
+          results.distances[0] &&
+          results.distances[0][0] &&
+          1 - results.distances[0][0] >= similarityThreshold
+        ) {
+          return {
+            found: true,
+            prompt: results.documents?.[0]?.[0],
+            id: results.ids?.[0]?.[0],
+            similarity: 1 - results.distances[0][0],
+            metadata: results.metadatas?.[0]?.[0],
+          };
+        }
+      } catch (queryError) {
+        // Si la recherche échoue (par exemple, collection vide), simplement continuer
+        this.logger.warn(`Recherche similaire échouée: ${queryError.message}`);
       }
 
       return { found: false };
@@ -160,10 +176,7 @@ export class RagService {
 
   async deleteOldDocuments(collectionName: string, olderThanDays: number = 30) {
     try {
-      // @ts-expect-error L'API a changé et exige embeddingFunction
-      const collection = await this.client.getCollection({
-        name: collectionName,
-      });
+      const collection = await this.getCollection(collectionName);
 
       // Calculer la date limite
       const cutoffDate = new Date();
