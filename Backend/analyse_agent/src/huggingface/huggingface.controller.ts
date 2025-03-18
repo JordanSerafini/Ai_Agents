@@ -1,5 +1,5 @@
 import { Controller, Post, Body, Logger } from '@nestjs/common';
-import { HuggingFaceService } from './huggingface.service';
+import { HuggingFaceService, AnalysisResult } from './huggingface.service';
 import { RagService } from '../RAG/rag.service';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -97,7 +97,7 @@ export class HuggingFaceController {
   /**
    * Valide la réponse et analyse le niveau de confiance
    */
-  private validateAndAnalyzeResponse(result: any): {
+  private validateAndAnalyzeResponse(result: AnalysisResult): {
     isValid: boolean;
     confidenceScore: number;
   } {
@@ -111,6 +111,35 @@ export class HuggingFaceController {
     // Vérifier que la reformulation n'est pas identique à la question originale
     if (result.question.trim() === result.questionReformulated.trim()) {
       confidenceScore -= 0.3; // Pénalité pour non-reformulation
+    }
+
+    // Analyser la pertinence des champs spécifiques à l'agent
+    if (result.agent === 'querybuilder') {
+      // Vérifier les champs spécifiques au querybuilder
+      if (!result.tables || result.tables.length === 0) {
+        confidenceScore -= 0.15; // Pénalité pour absence de tables
+      }
+
+      if (!result.fields || result.fields.length === 0) {
+        confidenceScore -= 0.15; // Pénalité pour absence de champs à afficher
+      }
+
+      if (!result.conditions) {
+        confidenceScore -= 0.1; // Pénalité pour absence de conditions
+      }
+    } else if (result.agent === 'workflow') {
+      // Vérifier les champs spécifiques au workflow
+      if (!result.action) {
+        confidenceScore -= 0.2; // Pénalité pour absence d'action
+      }
+
+      if (!result.entities || result.entities.length === 0) {
+        confidenceScore -= 0.15; // Pénalité pour absence d'entités
+      }
+
+      if (!result.parameters || result.parameters.length === 0) {
+        confidenceScore -= 0.1; // Pénalité pour absence de paramètres
+      }
     }
 
     // Analyser la longueur de la reformulation

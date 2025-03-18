@@ -3,6 +3,23 @@ import { HfInference } from '@huggingface/inference';
 import { ConfigService } from '@nestjs/config';
 import { getAnalysisPrompt, Service } from './prompt';
 
+// Interface pour stocker les informations complètes de l'analyse
+export interface AnalysisResult {
+  question: string;
+  questionReformulated: string;
+  agent: Service;
+  // Champs spécifiques pour querybuilder
+  tables?: string[];
+  conditions?: string;
+  fields?: string[];
+  operations?: string[];
+  finalQuery?: string;
+  // Champs spécifiques pour workflow
+  action?: string;
+  entities?: string[];
+  parameters?: string[];
+}
+
 @Injectable()
 export class HuggingFaceService {
   private model: HfInference;
@@ -25,13 +42,9 @@ export class HuggingFaceService {
   /**
    * Analyse une question pour déterminer l'agent approprié et reformuler si nécessaire
    * @param question La question à analyser
-   * @returns Un objet contenant la question originale, la question reformulée et l'agent choisi
+   * @returns Un objet contenant les informations d'analyse complètes
    */
-  async analyseQuestion(question: string): Promise<{
-    question: string;
-    questionReformulated: string;
-    agent: Service;
-  }> {
+  async analyseQuestion(question: string): Promise<AnalysisResult> {
     try {
       const prompt = getAnalysisPrompt(question);
 
@@ -48,7 +61,60 @@ export class HuggingFaceService {
       const result = response.generated_text || '';
       this.logger.debug(`Réponse brute: ${result}`);
 
-      // Utiliser une approche différente - chercher les lignes correspondantes
+      // Essayer d'extraire le JSON de la réponse
+      const jsonContent = this.extractJsonFromText(result);
+
+      if (jsonContent) {
+        try {
+          const parsedJson = JSON.parse(jsonContent);
+          this.logger.debug('JSON extrait avec succès:', parsedJson);
+
+          const agent =
+            (parsedJson['Agent']?.toLowerCase() as Service) || 'querybuilder';
+
+          // Créer l'objet de retour de base
+          const analysisResult: AnalysisResult = {
+            question: parsedJson['Question originale'] || question,
+            questionReformulated: parsedJson['Question reformulée'] || question,
+            agent: agent,
+          };
+
+          // Ajouter les champs spécifiques en fonction du type d'agent
+          if (agent === 'querybuilder') {
+            const tables = parsedJson['Tables concernées'] || [];
+            const fields = parsedJson['Champs à afficher'] || [];
+            const conditions = parsedJson['Conditions et filtres'] || '';
+            const operations = parsedJson['Opérations'] || [];
+
+            analysisResult.tables = tables;
+            analysisResult.fields = fields;
+            analysisResult.conditions = conditions;
+            analysisResult.operations = operations;
+
+            // Générer la requête SQL complète
+            if (tables.length > 0) {
+              analysisResult.finalQuery = this.generateSqlQuery(
+                tables,
+                fields,
+                conditions,
+              );
+            }
+          } else if (agent === 'workflow') {
+            analysisResult.action = parsedJson['Action à effectuer'] || '';
+            analysisResult.entities = parsedJson['Entités concernées'] || [];
+            analysisResult.parameters =
+              parsedJson['Paramètres nécessaires'] || [];
+          }
+
+          return analysisResult;
+        } catch (jsonError) {
+          this.logger.error(
+            `Erreur lors du parsing JSON: ${jsonError.message}`,
+          );
+        }
+      }
+
+      // Fallback sur l'extraction ligne par ligne si JSON pas trouvé ou invalide
       const lines = result.split('\n');
       let extractedQuestion = question;
       let extractedReformulation = question;
@@ -220,5 +286,85 @@ export class HuggingFaceService {
     }
 
     return cleaned;
+  }
+
+  /**
+   * Extraire du JSON d'un texte brut
+   * @param text Texte contenant potentiellement du JSON
+   * @returns String JSON ou null si rien n'est trouvé
+   */
+  private extractJsonFromText(text: string): string | null {
+    // Rechercher le contenu entre les marqueurs ```json et ```
+    // Mais on veut éviter de prendre les exemples dans le prompt
+    const responseText = text.split('[/INST]</s>')[1] || text;
+    this.logger.debug(
+      'Texte de réponse isolé: ' + responseText.substring(0, 100) + '...',
+    );
+
+    // Rechercher le JSON dans la partie réponse uniquement
+    const jsonPattern = /```json\s*({[\s\S]*?})\s*```/m;
+    const match = responseText.match(jsonPattern);
+
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+
+    // Essayer une autre approche si nécessaire
+    const openBraceIdx = responseText.indexOf('{');
+    const closeBraceIdx = responseText.lastIndexOf('}');
+
+    if (
+      openBraceIdx !== -1 &&
+      closeBraceIdx !== -1 &&
+      openBraceIdx < closeBraceIdx
+    ) {
+      const jsonCandidate = responseText.substring(
+        openBraceIdx,
+        closeBraceIdx + 1,
+      );
+      try {
+        // Vérifier si c'est du JSON valide
+        JSON.parse(jsonCandidate);
+        return jsonCandidate;
+      } catch (e) {
+        this.logger.debug('JSON candidat invalide:', jsonCandidate);
+        console.log(e);
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Génère une requête SQL complète à partir des éléments d'analyse
+   * @param tables Les tables concernées par la requête
+   * @param fields Les champs à afficher
+   * @param conditions Les conditions et filtres
+   * @returns Une requête SQL complète
+   */
+  private generateSqlQuery(
+    tables: string[],
+    fields: string[] = [],
+    conditions: string = '',
+  ): string {
+    // Utiliser un champ par défaut si aucun champ n'est spécifié
+    const selectFields = fields.length > 0 ? fields.join(', ') : '*';
+
+    // Construire la requête de base
+    let query = `SELECT ${selectFields} FROM ${tables.join(', ')}`;
+
+    // Ajouter les conditions si elles existent
+    if (conditions && conditions.trim() !== '') {
+      // Si la condition ne commence pas par WHERE, l'ajouter
+      if (!conditions.trim().toUpperCase().startsWith('WHERE')) {
+        query += ' WHERE ';
+      } else {
+        query += ' ';
+      }
+      query += conditions;
+    }
+
+    return query;
   }
 }
