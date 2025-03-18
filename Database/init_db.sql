@@ -1106,6 +1106,15 @@ CREATE INDEX IF NOT EXISTS chatbot_messages_conversation_id_idx ON chatbot_messa
 CREATE INDEX IF NOT EXISTS chatbot_messages_embedding_idx ON chatbot_messages USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 
 -- Création de la table des plannings hebdomadaires des travailleurs
+-- Le champ schedule est un JSONB avec la structure suivante :
+-- {
+--   "YYYY-MM-DD": {
+--     "hours": number,
+--     "project": string (project_id),
+--     "role": string,
+--     "notes": string (optional)
+--   }
+-- }
 CREATE TABLE IF NOT EXISTS worker_weekly_schedule (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     staff_id uuid NOT NULL,

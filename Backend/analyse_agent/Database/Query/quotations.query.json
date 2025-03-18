@@ -287,16 +287,10 @@
         "Quels devis ont une remise importante ?",
         "Devis avec forte remise",
         "Liste des devis avec remise importante",
-        "Devis avec remise significative",
-        "Quels devis ont une grosse remise ?",
-        "Devis avec remise élevée",
-        "Devis avec remise importante",
-        "Liste des devis avec forte remise",
-        "Devis remise importante",
         "Devis avec remise significative"
       ],
-      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, q.discount_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE q.discount_percentage > 10 ORDER BY q.discount_percentage DESC",
-      "description": "Liste des devis avec une remise supérieure à 10%"
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, ROUND(((q.total_ht - q.total_ttc) / q.total_ht * 100), 2) as discount_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE ((q.total_ht - q.total_ttc) / q.total_ht * 100) > 10 ORDER BY ((q.total_ht - q.total_ttc) / q.total_ht * 100) DESC",
+      "description": "Liste des devis avec une remise supérieure à 10% (calculée à partir de la différence entre HT et TTC)"
     },
     {
       "id": "quotations_by_payment_terms",
@@ -380,11 +374,10 @@
         "Quels sont les devis les plus rentables ?",
         "Devis avec la meilleure marge",
         "Devis les plus profitables",
-        "Quels devis ont la plus grande marge ?",
-        "Devis avec meilleur bénéfice"
+        "Quels devis ont la plus grande marge ?"
       ],
-      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, ROUND(qp.total_margin, 2) AS total_margin, ROUND((qp.total_margin / NULLIF(q.total_ht, 0)) * 100, 2) AS margin_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN (SELECT quotation_id, SUM((unit_price - unit_cost) * quantity) AS total_margin FROM quotation_products GROUP BY quotation_id) qp ON q.id = qp.quotation_id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id ORDER BY qp.total_margin DESC LIMIT 10",
-      "description": "Liste des 10 devis avec les meilleures marges et pourcentages de rentabilité"
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, qp.total_cost, (q.total_ht - COALESCE(qp.total_cost, 0)) as margin, ROUND(((q.total_ht - COALESCE(qp.total_cost, 0)) / NULLIF(q.total_ht, 0) * 100), 2) as margin_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN (SELECT quotation_id, SUM(quantity * unit_price) as total_cost FROM quotation_products GROUP BY quotation_id) qp ON q.id = qp.quotation_id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id ORDER BY margin DESC LIMIT 10",
+      "description": "Liste des 10 devis avec les meilleures marges, calculées à partir des coûts des produits"
     },
     {
       "id": "quotations_with_low_margin",
@@ -392,10 +385,9 @@
         "Quels devis ont une marge faible ?",
         "Devis peu rentables",
         "Devis avec marge insuffisante",
-        "Quels devis ont une marge inférieure à [THRESHOLD] % ?",
-        "Devis à faible rentabilité"
+        "Quels devis ont une marge inférieure à [THRESHOLD] % ?"
       ],
-      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, ROUND(qp.total_margin, 2) AS total_margin, ROUND((qp.total_margin / NULLIF(q.total_ht, 0)) * 100, 2) AS margin_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN (SELECT quotation_id, SUM((unit_price - unit_cost) * quantity) AS total_margin FROM quotation_products GROUP BY quotation_id) qp ON q.id = qp.quotation_id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE (qp.total_margin / NULLIF(q.total_ht, 0)) * 100 < [THRESHOLD] AND rqs.code = 'en_attente' ORDER BY (qp.total_margin / NULLIF(q.total_ht, 0)) * 100 ASC",
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, qp.total_cost, (q.total_ht - COALESCE(qp.total_cost, 0)) as margin, ROUND(((q.total_ht - COALESCE(qp.total_cost, 0)) / NULLIF(q.total_ht, 0) * 100), 2) as margin_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN (SELECT quotation_id, SUM(quantity * unit_price) as total_cost FROM quotation_products GROUP BY quotation_id) qp ON q.id = qp.quotation_id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE ((q.total_ht - COALESCE(qp.total_cost, 0)) / NULLIF(q.total_ht, 0) * 100) < [THRESHOLD] AND rqs.code = 'en_attente' ORDER BY ((q.total_ht - COALESCE(qp.total_cost, 0)) / NULLIF(q.total_ht, 0) * 100) ASC",
       "description": "Liste des devis en attente avec une marge inférieure au seuil défini",
       "parameters": [
         {
@@ -487,7 +479,7 @@
         "Devis acceptés du mois montant",
         "Montant mensuel des devis acceptés"
       ],
-      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.updated_at) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM quotations.updated_at) = EXTRACT(YEAR FROM CURRENT_DATE)",
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM quotations.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)",
       "description": "Montant total cumulé des devis acceptés pendant le mois en cours uniquement"
     }
   ]
