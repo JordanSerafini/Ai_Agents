@@ -24,7 +24,6 @@ export class RagService {
     }
 
     try {
-      // Essayer d'utiliser getOrCreateCollection au lieu de getCollection
       const collection = await this.client.getOrCreateCollection({
         name,
       });
