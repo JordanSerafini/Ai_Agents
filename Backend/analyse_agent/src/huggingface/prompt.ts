@@ -173,7 +173,22 @@ Réponse:
 }
 \`\`\`
 
-## Exemple 6: Question concernant un envoi d'email
+## Exemple 6: Question sur la disponibilité du personnel
+Question: "qui est disponible la semaine prochaine?"
+Réponse:
+\`\`\`json
+{
+  "Question originale": "qui est disponible la semaine prochaine?",
+  "Question reformulée": "Quels membres du personnel sont disponibles la semaine prochaine?",
+  "Agent": "querybuilder",
+  "Tables concernées": ["staff", "timesheet_entries"],
+  "Conditions et filtres": "WHERE staff.is_available = true AND (NOT EXISTS (SELECT 1 FROM timesheet_entries WHERE timesheet_entries.staff_id = staff.id AND timesheet_entries.date BETWEEN CURRENT_DATE + INTERVAL '7 days' AND CURRENT_DATE + INTERVAL '14 days'))",
+  "Champs à afficher": ["staff.firstname", "staff.lastname", "staff.email", "staff.phone"],
+  "Opérations": []
+}
+\`\`\`
+
+## Exemple 7: Question concernant un envoi d'email
 Question: "envoyer un email au client Dupont"
 Réponse:
 \`\`\`json

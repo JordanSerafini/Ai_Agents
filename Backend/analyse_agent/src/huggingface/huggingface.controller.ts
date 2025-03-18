@@ -81,75 +81,85 @@ export class HuggingFaceController {
       }
     }
 
-    // Continuer avec le flux normal si aucune requête prédéfinie n'est trouvée
-    this.logger.log(`Recherche directe dans le cache SQL pour: "${question}"`);
-    const cachedSql = await this.findCachedSqlQuery(question);
+    // Si pas de requête prédéfinie trouvée avec la question originale, analyser la question avec Hugging Face
+    try {
+      // Analyser la question avec Hugging Face
+      const result = await this.huggingFaceService.analyseQuestion(question);
 
-    if (cachedSql) {
-      this.logger.log(
-        `Requête SQL pré-construite trouvée directement dans le cache`,
-      );
+      // Si nous avons une question reformulée différente, essayer de trouver une requête prédéfinie avec elle
+      if (
+        result.questionReformulated &&
+        result.questionReformulated !== question
+      ) {
+        this.logger.log(
+          `Recherche de requête prédéfinie avec la question reformulée: "${result.questionReformulated}"`,
+        );
+        const reformulatedPredefinedQuery =
+          await this.predefinedQueriesService.findPredefinedQuery(
+            result.questionReformulated,
+          );
 
-      // Vérifier que finalQuery existe
-      if (!cachedSql.result.finalQuery) {
-        this.logger.error('Requête SQL finale manquante dans le cache');
-        return {
-          source: 'cache_sql',
-          result: cachedSql.result,
-          error: 'Requête SQL finale manquante',
-        };
+        if (reformulatedPredefinedQuery.found) {
+          this.logger.log(
+            `Requête prédéfinie trouvée avec la question reformulée: ${reformulatedPredefinedQuery.id}`,
+          );
+
+          const analysisResult: AnalysisResult = {
+            question: question,
+            questionReformulated:
+              reformulatedPredefinedQuery.description ||
+              result.questionReformulated,
+            agent: 'querybuilder',
+            finalQuery: reformulatedPredefinedQuery.query,
+            tables: [],
+            fields: [],
+            conditions: '',
+          };
+
+          // Exécuter la requête SQL
+          try {
+            const queryResult = await this.queryBuilderService.executeQuery(
+              reformulatedPredefinedQuery.query,
+            );
+            return {
+              source: 'predefined_query_reformulated',
+              result: analysisResult,
+              parameters: reformulatedPredefinedQuery.parameters,
+              id: reformulatedPredefinedQuery.id,
+              data: queryResult.rows,
+              rowCount: queryResult.rowCount,
+              duration: queryResult.duration,
+            };
+          } catch (error) {
+            this.logger.error(
+              `Erreur lors de l'exécution de la requête (reformulée): ${error.message}`,
+            );
+            return {
+              source: 'predefined_query_reformulated',
+              result: analysisResult,
+              error: this.queryBuilderService.parsePostgresError(error),
+            };
+          }
+        }
       }
 
-      // Exécuter la requête SQL
-      try {
-        const queryResult = await this.queryBuilderService.executeQuery(
-          cachedSql.result.finalQuery,
-        );
-        return {
-          source: 'cache_sql',
-          result: cachedSql.result,
-          data: queryResult.rows,
-          rowCount: queryResult.rowCount,
-          duration: queryResult.duration,
-        };
-      } catch (error) {
-        this.logger.error(
-          `Erreur lors de l'exécution de la requête: ${error.message}`,
-        );
-        return {
-          source: 'cache_sql',
-          result: cachedSql.result,
-          error: this.queryBuilderService.parsePostgresError(error),
-        };
-      }
-    }
-
-    // Si pas de SQL direct, vérifier si une question similaire existe déjà
-    const similarResult = await this.ragService.findSimilarPrompt(
-      this.promptCollectionName,
-      question,
-    );
-
-    if (similarResult.found) {
+      // Continuer avec le flux normal si aucune requête prédéfinie n'est trouvée
       this.logger.log(
-        `Question similaire trouvée avec score: ${similarResult.similarity}`,
+        `Recherche directe dans le cache SQL pour: "${question}"`,
       );
-
-      // Vérifier si nous avons une requête SQL pré-construite pour cette question similaire
-      const cachedSql = await this.findCachedSqlQuery(similarResult.prompt);
+      const cachedSql = await this.findCachedSqlQuery(question);
 
       if (cachedSql) {
         this.logger.log(
-          'Requête SQL pré-construite trouvée pour question similaire',
+          `Requête SQL pré-construite trouvée directement dans le cache`,
         );
 
         // Vérifier que finalQuery existe
         if (!cachedSql.result.finalQuery) {
           this.logger.error('Requête SQL finale manquante dans le cache');
           return {
-            source: 'cache',
+            source: 'cache_sql',
             result: cachedSql.result,
-            similarity: similarResult.similarity,
             error: 'Requête SQL finale manquante',
           };
         }
@@ -160,9 +170,8 @@ export class HuggingFaceController {
             cachedSql.result.finalQuery,
           );
           return {
-            source: 'cache',
+            source: 'cache_sql',
             result: cachedSql.result,
-            similarity: similarResult.similarity,
             data: queryResult.rows,
             rowCount: queryResult.rowCount,
             duration: queryResult.duration,
@@ -172,78 +181,74 @@ export class HuggingFaceController {
             `Erreur lors de l'exécution de la requête: ${error.message}`,
           );
           return {
-            source: 'cache',
+            source: 'cache_sql',
             result: cachedSql.result,
-            similarity: similarResult.similarity,
             error: this.queryBuilderService.parsePostgresError(error),
           };
         }
       }
 
-      // Sinon, effectuer l'analyse avec la question d'origine
-      const result = await this.huggingFaceService.analyseQuestion(question);
+      // Si pas de SQL direct, vérifier si une question similaire existe déjà
+      const similarResult = await this.ragService.findSimilarPrompt(
+        this.promptCollectionName,
+        question,
+      );
 
-      // Si c'est une requête SQL, l'exécuter
-      if (result.agent === 'querybuilder' && result.finalQuery) {
-        try {
-          const queryResult = await this.queryBuilderService.executeQuery(
-            result.finalQuery,
-          );
-          return {
-            source: 'model',
-            result,
-            similarity: similarResult.similarity,
-            data: queryResult.rows,
-            rowCount: queryResult.rowCount,
-            duration: queryResult.duration,
-          };
-        } catch (error) {
-          this.logger.error(
-            `Erreur lors de l'exécution de la requête: ${error.message}`,
-          );
-          return {
-            source: 'model',
-            result,
-            similarity: similarResult.similarity,
-            error: this.queryBuilderService.parsePostgresError(error),
-          };
-        }
-      }
-
-      return {
-        source: 'model',
-        result,
-        similarity: similarResult.similarity,
-      };
-    }
-
-    try {
-      // Analyser la question avec Hugging Face
-      const result = await this.huggingFaceService.analyseQuestion(question);
-
-      // Analyser la confiance et valider la réponse
-      const validation = this.validateAndAnalyzeResponse(result);
-
-      if (validation.isValid) {
-        // Sauvegarder la question avec les métadonnées de confiance
-        await this.ragService.upsertDocuments(
-          this.promptCollectionName,
-          [question],
-          [uuidv4()],
-          [
-            {
-              confidenceScore: validation.confidenceScore,
-              agent: result.agent,
-              timestamp: new Date().toISOString(),
-            },
-          ],
+      if (similarResult.found) {
+        this.logger.log(
+          `Question similaire trouvée avec score: ${similarResult.similarity}`,
         );
 
-        // Si c'est une requête querybuilder valide avec une requête SQL,
-        // la sauvegarder dans le cache de requêtes SQL et l'exécuter
-        if (result.agent === 'querybuilder' && result.finalQuery) {
-          await this.cacheSqlQuery(question, result);
+        // Vérifier si nous avons une requête SQL pré-construite pour cette question similaire
+        const cachedSql = await this.findCachedSqlQuery(similarResult.prompt);
 
+        if (cachedSql) {
+          this.logger.log(
+            'Requête SQL pré-construite trouvée pour question similaire',
+          );
+
+          // Vérifier que finalQuery existe
+          if (!cachedSql.result.finalQuery) {
+            this.logger.error('Requête SQL finale manquante dans le cache');
+            return {
+              source: 'cache',
+              result: cachedSql.result,
+              similarity: similarResult.similarity,
+              error: 'Requête SQL finale manquante',
+            };
+          }
+
+          // Exécuter la requête SQL
+          try {
+            const queryResult = await this.queryBuilderService.executeQuery(
+              cachedSql.result.finalQuery,
+            );
+            return {
+              source: 'cache',
+              result: cachedSql.result,
+              similarity: similarResult.similarity,
+              data: queryResult.rows,
+              rowCount: queryResult.rowCount,
+              duration: queryResult.duration,
+            };
+          } catch (error) {
+            this.logger.error(
+              `Erreur lors de l'exécution de la requête: ${error.message}`,
+            );
+            return {
+              source: 'cache',
+              result: cachedSql.result,
+              similarity: similarResult.similarity,
+              error: this.queryBuilderService.parsePostgresError(error),
+            };
+          }
+        }
+
+        // Sinon, effectuer l'analyse avec la question d'origine
+        const result = await this.huggingFaceService.analyseQuestion(question);
+
+        // Si c'est une requête SQL, l'exécuter
+        if (result.agent === 'querybuilder' && result.finalQuery) {
           try {
             const queryResult = await this.queryBuilderService.executeQuery(
               result.finalQuery,
@@ -251,7 +256,7 @@ export class HuggingFaceController {
             return {
               source: 'model',
               result,
-              confidence: validation.confidenceScore,
+              similarity: similarResult.similarity,
               data: queryResult.rows,
               rowCount: queryResult.rowCount,
               duration: queryResult.duration,
@@ -263,7 +268,7 @@ export class HuggingFaceController {
             return {
               source: 'model',
               result,
-              confidence: validation.confidenceScore,
+              similarity: similarResult.similarity,
               error: this.queryBuilderService.parsePostgresError(error),
             };
           }
@@ -272,19 +277,82 @@ export class HuggingFaceController {
         return {
           source: 'model',
           result,
-          confidence: validation.confidenceScore,
+          similarity: similarResult.similarity,
         };
-      } else {
-        this.logger.warn(
-          `Réponse non valide pour la question: ${question}, confiance: ${validation.confidenceScore}`,
-        );
-        return {
-          source: 'model',
-          result,
-          confidence: validation.confidenceScore,
-          warning:
-            'Réponse potentiellement incorrecte, non enregistrée en cache',
-        };
+      }
+
+      try {
+        // Analyser la question avec Hugging Face
+        const result = await this.huggingFaceService.analyseQuestion(question);
+
+        // Analyser la confiance et valider la réponse
+        const validation = this.validateAndAnalyzeResponse(result);
+
+        if (validation.isValid) {
+          // Sauvegarder la question avec les métadonnées de confiance
+          await this.ragService.upsertDocuments(
+            this.promptCollectionName,
+            [question],
+            [uuidv4()],
+            [
+              {
+                confidenceScore: validation.confidenceScore,
+                agent: result.agent,
+                timestamp: new Date().toISOString(),
+              },
+            ],
+          );
+
+          // Si c'est une requête querybuilder valide avec une requête SQL,
+          // la sauvegarder dans le cache de requêtes SQL et l'exécuter
+          if (result.agent === 'querybuilder' && result.finalQuery) {
+            await this.cacheSqlQuery(question, result);
+
+            try {
+              const queryResult = await this.queryBuilderService.executeQuery(
+                result.finalQuery,
+              );
+              return {
+                source: 'model',
+                result,
+                confidence: validation.confidenceScore,
+                data: queryResult.rows,
+                rowCount: queryResult.rowCount,
+                duration: queryResult.duration,
+              };
+            } catch (error) {
+              this.logger.error(
+                `Erreur lors de l'exécution de la requête: ${error.message}`,
+              );
+              return {
+                source: 'model',
+                result,
+                confidence: validation.confidenceScore,
+                error: this.queryBuilderService.parsePostgresError(error),
+              };
+            }
+          }
+
+          return {
+            source: 'model',
+            result,
+            confidence: validation.confidenceScore,
+          };
+        } else {
+          this.logger.warn(
+            `Réponse non valide pour la question: ${question}, confiance: ${validation.confidenceScore}`,
+          );
+          return {
+            source: 'model',
+            result,
+            confidence: validation.confidenceScore,
+            warning:
+              'Réponse potentiellement incorrecte, non enregistrée en cache',
+          };
+        }
+      } catch (error) {
+        this.logger.error(`Erreur lors de l'analyse: ${error.message}`);
+        throw error;
       }
     } catch (error) {
       this.logger.error(`Erreur lors de l'analyse: ${error.message}`);

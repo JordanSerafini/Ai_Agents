@@ -251,6 +251,17 @@
       ],
       "sql": "SELECT qc.name, qc.description, qc.deadline, p.name AS project_name, s.name AS stage_name, rqcs.name AS status FROM quality_checkpoints qc JOIN projects p ON qc.project_id = p.id JOIN stages s ON qc.stage_id = s.id JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id WHERE qc.deadline BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '14 days') AND rqcs.code != 'validé' ORDER BY qc.deadline",
       "description": "Liste des points de contrôle qualité à effectuer dans les deux prochaines semaines"
+    },
+    {
+      "id": "staff_availability",
+      "questions": [
+        "Qui est disponible la semaine prochaine ?",
+        "Personnel disponible semaine pro",
+        "Membres de l'équipe disponibles",
+        "Qui est dispo la semaine prochaine ?"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s LEFT JOIN timesheet_entries t ON s.id = t.staff_id AND t.date BETWEEN CURRENT_DATE + INTERVAL '7 days' AND CURRENT_DATE + INTERVAL '14 days' WHERE s.is_active = true AND t.id IS NULL GROUP BY s.id ORDER BY s.lastname, s.firstname",
+      "description": "Liste des membres du personnel qui ne sont pas programmés sur des tâches la semaine prochaine et sont donc disponibles"
     }
   ]
 }
