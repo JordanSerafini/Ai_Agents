@@ -2,7 +2,6 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RagService } from '../RAG/rag.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class SqlQueriesService implements OnModuleInit {
@@ -128,12 +127,16 @@ export class SqlQueriesService implements OnModuleInit {
             parameters: query.parameters || [],
           };
 
+          // Utiliser l'ID de la requête pour créer un ID déterministe pour ChromaDB
+          // Cela aidera à éviter les doublons lors des rechargements
+          const documentId = `${query.id}_${this.createHash(question)}`;
+
           try {
-            // Stocker dans ChromaDB
+            // Stocker dans ChromaDB avec l'ID déterministe
             await this.ragService.upsertDocuments(
               this.sqlQueryCacheName,
               [question],
-              [uuidv4()],
+              [documentId],
               [cacheData],
             );
 
@@ -155,5 +158,20 @@ export class SqlQueriesService implements OnModuleInit {
       );
       throw error;
     }
+  }
+
+  /**
+   * Crée un hash à partir d'une chaîne de caractères
+   * Utilisé pour générer des IDs déterministes
+   */
+  private createHash(text: string): string {
+    // Simple hash function pour générer un identifiant déterministe
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      const char = text.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16);
   }
 }

@@ -178,28 +178,25 @@ export class HuggingFaceController {
         `Recherche dans le cache SQL pour la question: "${question}"`,
       );
 
-      const result = await this.ragService.findSimilarPrompt(
-        this.sqlQueryCacheName,
-        question,
-        0.9,
-      );
+      // Utiliser le service PredefinedQueriesService pour rechercher une requête prédéfinie
+      const predefinedQuery =
+        await this.predefinedQueriesService.findPredefinedQuery(question);
 
       this.logger.log(
-        `Résultat de la recherche dans le cache SQL - Trouvé: ${result.found}, Similarité: ${result.similarity || 'N/A'}`,
+        `Résultat de la recherche dans le cache SQL - Trouvé: ${predefinedQuery.found}, Similarité: ${predefinedQuery.found ? predefinedQuery.similarity || 'N/A' : 'N/A'}`,
       );
 
-      if (result.found && result.metadata) {
+      if (predefinedQuery.found) {
         this.logger.log(
-          `Requête SQL trouvée en cache avec score de similarité: ${result.similarity}`,
+          `Requête SQL trouvée en cache avec score de similarité: ${predefinedQuery.similarity || 'N/A'}`,
         );
 
         // Transformer les données du cache en AnalysisResult
-        const cacheData = result.metadata;
         const analysisResult: AnalysisResult = {
-          question: cacheData.question,
-          questionReformulated: cacheData.questionReformulated,
-          agent: cacheData.agent || 'querybuilder',
-          finalQuery: cacheData.finalQuery,
+          question: question,
+          questionReformulated: predefinedQuery.description,
+          agent: 'querybuilder',
+          finalQuery: predefinedQuery.query,
           // Ajouter des valeurs par défaut pour les autres champs requis par AnalysisResult
           tables: [],
           fields: [],
@@ -209,9 +206,9 @@ export class HuggingFaceController {
         return { result: analysisResult };
       }
 
-      if (result.reason) {
+      if (predefinedQuery.error) {
         this.logger.log(
-          `Aucune requête SQL trouvée en cache pour: "${question}" (Raison: ${result.reason})`,
+          `Erreur lors de la recherche en cache pour: "${question}" (Erreur: ${predefinedQuery.error})`,
         );
       } else {
         this.logger.log(
@@ -250,10 +247,13 @@ export class HuggingFaceController {
         agent: sqlResult.agent || 'querybuilder',
       };
 
+      // Générer un ID déterministe basé sur la question
+      const documentId = this.generateDeterministicId(question);
+
       await this.ragService.upsertDocuments(
         'sql_queries',
         [question],
-        [uuidv4()],
+        [documentId],
         [cacheData],
       );
 
@@ -267,6 +267,24 @@ export class HuggingFaceController {
       );
       return false;
     }
+  }
+
+  /**
+   * Génère un ID déterministe à partir d'une chaîne de caractères
+   */
+  private generateDeterministicId(text: string): string {
+    // Préfixe pour identifier la source (le modèle dans ce cas)
+    const prefix = 'model';
+    
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      const char = text.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return `${prefix}_${Math.abs(hash).toString(16)}`;
   }
 
   /**
