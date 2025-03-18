@@ -42,7 +42,7 @@
         "Équipe présente le [DATE]",
         "Planning pour le [DATE]"
       ],
-      "sql": "SELECT s.firstname, s.lastname, s.role, (wws.schedule->>to_char('[DATE]'::date, 'YYYY-MM-DD'))::jsonb->>'hours' AS hours_scheduled, (wws.schedule->>to_char('[DATE]'::date, 'YYYY-MM-DD'))::jsonb->>'project' AS project_name FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id WHERE wws.week_start_date <= '[DATE]'::date AND wws.week_start_date + INTERVAL '6 days' >= '[DATE]'::date AND (wws.schedule->>to_char('[DATE]'::date, 'YYYY-MM-DD')) IS NOT NULL ORDER BY s.lastname, s.firstname",
+      "sql": "SELECT s.firstname, s.lastname, s.role, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'hours' AS hours_scheduled, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'project' AS project_id, p.name AS project_name, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'role' AS daily_role, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'notes' AS notes FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id LEFT JOIN projects p ON ((wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'project')::uuid = p.id WHERE wws.week_start_date <= '[DATE]'::date AND wws.week_start_date + INTERVAL '6 days' >= '[DATE]'::date AND (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD'))) IS NOT NULL ORDER BY s.lastname, s.firstname",
       "description": "Liste des employés programmés pour travailler à une date spécifique",
       "parameters": [
         {

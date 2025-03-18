@@ -145,7 +145,7 @@
         "Liste des devis acceptés ce mois",
         "Devis confirmés durant le mois en cours"
       ],
-      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'accepté' AND EXTRACT(MONTH FROM q.updated_at) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM q.updated_at) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY q.updated_at DESC",
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'accepté' AND EXTRACT(MONTH FROM q.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM q.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY q.issue_date DESC",
       "description": "Liste des devis acceptés dans le mois courant"
     },
     {
@@ -289,8 +289,8 @@
         "Liste des devis avec remise importante",
         "Devis avec remise significative"
       ],
-      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, ROUND(((q.total_ht - q.total_ttc) / q.total_ht * 100), 2) as discount_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE ((q.total_ht - q.total_ttc) / q.total_ht * 100) > 10 ORDER BY ((q.total_ht - q.total_ttc) / q.total_ht * 100) DESC",
-      "description": "Liste des devis avec une remise supérieure à 10% (calculée à partir de la différence entre HT et TTC)"
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.tva_rate, q.total_ttc, ROUND((q.total_ttc - (q.total_ht * (1 + q.tva_rate/100))) / (q.total_ht * (1 + q.tva_rate/100)) * 100, 2) as discount_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE (q.total_ttc - (q.total_ht * (1 + q.tva_rate/100))) / (q.total_ht * (1 + q.tva_rate/100)) * 100 < -10 ORDER BY discount_percentage ASC",
+      "description": "Liste des devis avec une remise supérieure à 10% (calculée à partir de la différence entre le montant TTC théorique et le montant TTC réel)"
     },
     {
       "id": "quotations_by_payment_terms",
@@ -458,7 +458,12 @@
         "Montant total des devis accepté",
         "Quel est le montant des devis accepté ?",
         "Montant des devis accepté",
-        "Total des devis accepté"
+        "Total des devis accepté",
+        "Montant global des devis acceptés",
+        "Total de tous les devis acceptés",
+        "Chiffre d'affaires total des devis acceptés",
+        "Montant cumulé de tous les devis acceptés",
+        "Quelle est la somme totale des devis acceptés ?"
       ],
       "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté'",
       "description": "Montant total cumulé de tous les devis acceptés dans la base de données"
@@ -477,10 +482,120 @@
         "Montant des devis acceptés ce mois",
         "Total des devis acceptés du mois en cours",
         "Devis acceptés du mois montant",
-        "Montant mensuel des devis acceptés"
+        "Montant mensuel des devis acceptés",
+        "Quel est le total des devis acceptés ce mois-ci ?",
+        "Devis acceptés du mois courant montant total",
+        "Montant des devis acceptés pour le mois actuel",
+        "Combien a-t-on de devis acceptés ce mois ?",
+        "Total mensuel des devis acceptés",
+        "Devis validés du mois montant"
       ],
       "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM quotations.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)",
       "description": "Montant total cumulé des devis acceptés pendant le mois en cours uniquement"
+    },
+    {
+      "id": "quotations_total_accepted_next_month",
+      "questions": [
+        "Quel est le montant des devis acceptés du mois prochain ?",
+        "Montant des devis acceptés le mois prochain",
+        "Somme des devis acceptés pour le mois à venir",
+        "Total des devis validés pour le mois suivant",
+        "Quel est le montant des devis accepté du mois porchain?",
+        "Montant des devis acceptés pour le mois prochain",
+        "Devis acceptés prévus pour le mois prochain",
+        "Combien représentent les devis acceptés du mois prochain ?",
+        "Montant des devis acceptés mois suivant",
+        "Total des devis acceptés du mois prochain",
+        "Devis acceptés du mois suivant montant",
+        "Montant des devis validés mois prochain",
+        "Quel est le total des devis acceptés pour le mois à venir ?",
+        "Devis acceptés mois prochain montant total",
+        "Montant total des devis acceptés mois suivant"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE + INTERVAL '1 month') AND EXTRACT(YEAR FROM quotations.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE + INTERVAL '1 month')",
+      "description": "Montant total cumulé des devis acceptés pour le mois prochain uniquement"
+    },
+    {
+      "id": "quotations_total_accepted_last_month",
+      "questions": [
+        "Quel est le montant des devis acceptés du mois dernier ?",
+        "Montant des devis acceptés le mois dernier",
+        "Somme des devis acceptés pour le mois passé",
+        "Total des devis validés pour le mois précédent",
+        "Montant des devis acceptés pour le mois écoulé",
+        "Devis acceptés du mois précédent montant",
+        "Combien représentent les devis acceptés du mois dernier ?",
+        "Montant des devis acceptés mois passé",
+        "Total des devis acceptés du mois précédent",
+        "Montant des devis validés mois dernier",
+        "Quel est le total des devis acceptés pour le mois passé ?",
+        "Devis acceptés mois précédent montant total"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM quotations.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month')",
+      "description": "Montant total cumulé des devis acceptés pour le mois précédent uniquement"
+    },
+    {
+      "id": "quotations_total_accepted_specific_month",
+      "questions": [
+        "Quel est le montant des devis acceptés pour le mois de [MONTH] [YEAR] ?",
+        "Montant des devis acceptés en [MONTH] [YEAR]",
+        "Somme des devis acceptés du mois de [MONTH] [YEAR]",
+        "Total des devis validés de [MONTH] [YEAR]",
+        "Montant total des devis acceptés en [MONTH] [YEAR]",
+        "Combien représentent les devis acceptés de [MONTH] [YEAR] ?",
+        "Montant des devis acceptés pour [MONTH] [YEAR]",
+        "Quel est le total des devis acceptés en [MONTH] [YEAR] ?",
+        "Devis acceptés [MONTH] [YEAR] montant",
+        "Montant devis acceptés [MONTH] [YEAR]",
+        "Chiffre d'affaires des devis acceptés pour [MONTH] [YEAR]"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = [MONTH_NUMBER] AND EXTRACT(YEAR FROM quotations.issue_date) = [YEAR]",
+      "description": "Montant total cumulé des devis acceptés pour un mois et une année spécifiques",
+      "parameters": [
+        {
+          "name": "MONTH",
+          "description": "Le mois en texte (janvier, février, mars, etc.)"
+        },
+        {
+          "name": "YEAR",
+          "description": "L'année en chiffres (2023, 2024, etc.)"
+        },
+        {
+          "name": "MONTH_NUMBER",
+          "description": "Le numéro du mois (1 pour janvier, 2 pour février, etc.)",
+          "computed": true,
+          "mapping": {
+            "janvier": 1,
+            "février": 2,
+            "mars": 3,
+            "avril": 4,
+            "mai": 5,
+            "juin": 6,
+            "juillet": 7,
+            "août": 8,
+            "septembre": 9,
+            "octobre": 10,
+            "novembre": 11,
+            "décembre": 12,
+            "jan": 1,
+            "fév": 2,
+            "fev": 2,
+            "mar": 3,
+            "avr": 4,
+            "mai": 5,
+            "jun": 6,
+            "jui": 7,
+            "jul": 7,
+            "aou": 8,
+            "aoû": 8,
+            "sep": 9,
+            "oct": 10,
+            "nov": 11,
+            "déc": 12,
+            "dec": 12
+          }
+        }
+      ]
     }
   ]
 }

@@ -354,7 +354,7 @@
         "Chantiers avec matériel en panne",
         "Liste des projets avec problèmes d'équipement"
       ],
-      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(set.id) AS problematic_equipment FROM projects p JOIN clients c ON p.client_id = c.id JOIN site_equipment_tracking set ON p.id = set.project_id JOIN equipment e ON set.equipment_id = e.id JOIN ref_equipment_status res ON e.status = res.id WHERE res.code IN ('maintenance', 'hors_service') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY problematic_equipment DESC",
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(set.id) AS problematic_equipment FROM projects p JOIN clients c ON p.client_id = c.id JOIN site_equipment_tracking set ON p.id = set.project_id JOIN equipment e ON set.equipment_id = e.id JOIN ref_equipment_status res ON e.status = res.id WHERE res.code IN ('en_maintenance', 'hors_service') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY problematic_equipment DESC",
       "description": "Liste des projets avec des équipements en mauvais état ou en maintenance"
     },
     {
@@ -365,7 +365,7 @@
         "Chantiers avec demandes de matériaux",
         "Liste des projets avec demandes de matériaux"
       ],
-      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(mr.id) AS pending_requests FROM projects p JOIN clients c ON p.client_id = c.id JOIN material_requests mr ON p.id = mr.project_id JOIN ref_material_request_status rmrs ON mr.status = rmrs.id WHERE rmrs.code = 'en_attente' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY pending_requests DESC",
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(mr.id) AS pending_requests FROM projects p JOIN clients c ON p.client_id = c.id JOIN material_requests mr ON p.id = mr.project_id JOIN ref_material_request_status rmrs ON mr.status = rmrs.id WHERE rmrs.code = 'pending' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY pending_requests DESC",
       "description": "Liste des projets avec des demandes de matériaux en attente"
     },
     {
@@ -400,7 +400,7 @@
         "Classement des chantiers par rentabilité",
         "Quels sont les chantiers les plus profitables ?"
       ],
-      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, SUM(i.total_ttc) AS total_revenue, COALESCE(SUM(e.amount), 0) AS total_expenses, SUM(i.total_ttc) - COALESCE(SUM(e.amount), 0) AS profit, CASE WHEN SUM(i.total_ttc) > 0 THEN ROUND((SUM(i.total_ttc) - COALESCE(SUM(e.amount), 0)) / SUM(i.total_ttc) * 100, 2) ELSE 0 END AS profit_margin FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN invoices i ON p.id = i.project_id LEFT JOIN expenses e ON p.id = e.project_id WHERE p.status IN (SELECT id FROM ref_status WHERE code = 'terminé' AND entity_type = 'project') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY profit DESC",
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, SUM(i.total_ttc) AS total_revenue, COALESCE(SUM(e.amount), 0) AS total_expenses, SUM(i.total_ttc) - COALESCE(SUM(e.amount), 0) AS profit, CASE WHEN SUM(i.total_ttc) > 0 THEN ROUND((SUM(i.total_ttc) - COALESCE(SUM(e.amount), 0)) / SUM(i.total_ttc) * 100, 2) ELSE 0 END AS profit_margin FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN invoices i ON p.id = i.project_id LEFT JOIN expenses e ON p.id = e.project_id WHERE p.status IN (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY profit DESC",
       "description": "Liste des projets terminés classés par profit réalisé (revenus moins dépenses)"
     }
   ]
