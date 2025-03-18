@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { HuggingFaceService, AnalysisResult } from './huggingface.service';
 import { RagService } from '../RAG/rag.service';
+import { PredefinedQueriesService } from '../sql-queries/predefined-queries.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Controller('analyse')
@@ -12,6 +13,7 @@ export class HuggingFaceController {
   constructor(
     private readonly huggingFaceService: HuggingFaceService,
     private readonly ragService: RagService,
+    private readonly predefinedQueriesService: PredefinedQueriesService,
   ) {
     // Créer les collections si elles n'existent pas
     void this.initCollections();
@@ -33,6 +35,37 @@ export class HuggingFaceController {
   async analyseQuestion(@Body() body: { question: string }) {
     const { question } = body;
 
+    // Vérifier d'abord si nous avons une requête prédéfinie correspondante
+    this.logger.log(`Recherche de requête prédéfinie pour: "${question}"`);
+    const predefinedQuery =
+      await this.predefinedQueriesService.findPredefinedQuery(question);
+
+    if (predefinedQuery.found) {
+      this.logger.log(`Requête prédéfinie trouvée: ${predefinedQuery.id}`);
+
+      // Si la requête a des paramètres, nous devrions les extraire
+      // Pour cette version, nous allons simplement utiliser la requête sans paramètres
+      // Dans une version future, on pourrait appeler le LLM pour extraire les paramètres
+
+      const analysisResult: AnalysisResult = {
+        question: question,
+        questionReformulated: predefinedQuery.description,
+        agent: 'querybuilder',
+        finalQuery: predefinedQuery.query,
+        tables: [],
+        fields: [],
+        conditions: '',
+      };
+
+      return {
+        source: 'predefined_query',
+        result: analysisResult,
+        parameters: predefinedQuery.parameters,
+        id: predefinedQuery.id,
+      };
+    }
+
+    // Continuer avec le flux normal si aucune requête prédéfinie n'est trouvée
     this.logger.log(`Recherche directe dans le cache SQL pour: "${question}"`);
     const cachedSql = await this.findCachedSqlQuery(question);
 
