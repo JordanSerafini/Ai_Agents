@@ -35,64 +35,155 @@ export class EmailFilterService implements OnModuleInit {
   }
 
   private async deleteEmailBatch(uids: number[]): Promise<number> {
-    return new Promise<number>((resolve) => {
-      if (uids.length === 0) return resolve(0);
+    if (uids.length === 0) return 0;
 
-      const currentEmail = uids[0];
-      const remaining = uids.slice(1);
+    // Limite le nombre d'emails traités en une fois pour éviter de surcharger le serveur
+    const maxEmailsPerBatch = 10;
+    const currentBatch = uids.slice(0, maxEmailsPerBatch);
+    const remainingUids = uids.slice(maxEmailsPerBatch);
 
+    this.logger.log(
+      `📦 Traitement d'un lot de ${currentBatch.length} emails sur ${uids.length} au total`,
+    );
+
+    // Assurons-nous d'être connectés avant de commencer le traitement du lot
+    try {
+      await this.ensureConnection();
+
+      // Ouvrir la boîte de réception une seule fois pour le lot
+      await promisify<string, Imap.Box>(this.imap.openBox.bind(this.imap))(
+        'INBOX',
+      );
+
+      const count = await this.processEmailsSequentially(currentBatch, 0);
+
+      // S'il reste des emails à traiter, appeler récursivement avec pause
+      if (remainingUids.length > 0) {
+        this.logger.log(`⏱️ Pause de 3 secondes avant le prochain lot...`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const remainingCount = await this.deleteEmailBatch(remainingUids);
+        return count + remainingCount;
+      }
+
+      return count;
+    } catch (err) {
+      this.logger.error(
+        'Erreur lors de la préparation du traitement par lot:',
+        err,
+      );
+
+      // En cas d'erreur, attendre 10 secondes avant de tenter le lot restant
+      if (remainingUids.length > 0) {
+        this.logger.log(
+          '⚠️ Attente de 10 secondes avant de tenter le prochain lot...',
+        );
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        return await this.deleteEmailBatch(remainingUids);
+      }
+
+      return 0;
+    }
+  }
+
+  // Nouvelle méthode pour traiter les emails de manière séquentielle
+  private async processEmailsSequentially(
+    uids: number[],
+    count: number,
+  ): Promise<number> {
+    if (uids.length === 0) return count;
+
+    const currentEmail = uids[0];
+    const remaining = uids.slice(1);
+
+    this.logger.log(`🔄 Traitement de l'email ${currentEmail}...`);
+
+    try {
+      // Traiter un seul email
+      const success =
+        await this.deleteSingleEmailWithoutReconnection(currentEmail);
+
+      if (success) {
+        this.logger.log(`✅ Email ${currentEmail} supprimé avec succès`);
+        count++;
+      } else {
+        this.logger.error(
+          `❌ Échec de la suppression de l'email ${currentEmail}`,
+        );
+      }
+
+      // Attendre 2 secondes avant de passer à l'email suivant
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Traiter les emails restants
+      return this.processEmailsSequentially(remaining, count);
+    } catch (err) {
+      this.logger.error(
+        `❌ Erreur lors de la suppression de l'email ${currentEmail}:`,
+        err,
+      );
+      // En cas d'erreur, on continue avec les emails restants
+      return this.processEmailsSequentially(remaining, count);
+    }
+  }
+
+  // Version simplifiée de testDeleteSingleEmail qui ne tente pas de se reconnecter
+  private async deleteSingleEmailWithoutReconnection(
+    uid: number,
+  ): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
       let resolved = false;
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           resolved = true;
           this.logger.error(
-            `⏰ Timeout : la suppression a pris trop de temps pour l'email ${currentEmail}.`,
+            `⏰ Timeout : la suppression a pris trop de temps pour l'email ${uid}`,
           );
-          setTimeout(() => {
-            this.deleteEmailBatch(remaining)
-              .then(resolve)
-              .catch((err) => {
-                this.logger.error('Erreur lors de la suppression:', err);
-                resolve(0);
-              });
-          }, 5000);
+          resolve(false);
         }
       }, 30000);
 
-      this.logger.log(`🔄 Déplacement en cours de l'email ${currentEmail}...`);
+      this.logger.log(`🔄 Marquage de l'email ${uid} comme supprimé...`);
 
-      this.imap.move([currentEmail], '[Gmail]/Trash', (err) => {
+      // Marquer l'email comme supprimé
+      this.imap.addFlags([uid], '\\Deleted', (err) => {
         if (!resolved) {
-          clearTimeout(timeoutId);
-          resolved = true;
-
           if (err) {
             this.logger.error(
-              `❌ Erreur lors du déplacement de l'email ${currentEmail}:`,
+              `❌ Erreur lors du marquage de l'email ${uid}:`,
               err,
             );
-            setTimeout(() => {
-              this.deleteEmailBatch(remaining)
-                .then(resolve)
-                .catch((err) => {
-                  this.logger.error('Erreur lors de la suppression:', err);
-                  resolve(0);
-                });
-            }, 10000);
+            clearTimeout(timeoutId);
+            resolved = true;
+            resolve(false);
             return;
           }
 
           this.logger.log(
-            `🗑️ Email ${currentEmail} déplacé vers la corbeille.`,
+            `✅ Email ${uid} marqué comme supprimé, attente avant expunge...`,
           );
+
+          // Attendre 3 secondes avant d'expunger
           setTimeout(() => {
-            this.deleteEmailBatch(remaining)
-              .then(resolve)
-              .catch((err) => {
-                this.logger.error('Erreur lors de la suppression:', err);
-                resolve(0);
-              });
-          }, 5000);
+            // Forcer la suppression
+            this.imap.expunge((expungeErr) => {
+              if (!resolved) {
+                clearTimeout(timeoutId);
+                resolved = true;
+
+                if (expungeErr) {
+                  this.logger.error(
+                    `❌ Erreur lors de l'expunge de l'email ${uid}:`,
+                    expungeErr,
+                  );
+                  resolve(false);
+                  return;
+                }
+
+                this.logger.log(`✅ Email ${uid} supprimé avec succès`);
+                resolve(true);
+              }
+            });
+          }, 3000);
         }
       });
     });
@@ -452,8 +543,11 @@ export class EmailFilterService implements OnModuleInit {
                 );
               }
 
-              if (analyzedCount >= 100) {
-                this.logger.log('🔸 Arrêt du traitement à 100 emails');
+              // Traiter les emails par petits lots de 20 pour éviter les timeouts
+              if (analyzedCount >= 50 || emailsToDelete.length >= 20) {
+                this.logger.log(
+                  `🔸 Arrêt du traitement après ${analyzedCount} emails analysés`,
+                );
                 shouldStop = true;
 
                 const emailsBatch = [...emailsToDelete];
@@ -466,9 +560,13 @@ export class EmailFilterService implements OnModuleInit {
                 const deletedInBatch = await this.deleteEmailBatch(emailsBatch);
                 totalDeleted += deletedInBatch;
 
+                // Pause de 5 secondes entre les lots pour éviter de surcharger le serveur
+                this.logger.log('⏱️ Pause de 5 secondes entre les lots...');
+                await new Promise((resolve) => setTimeout(resolve, 5000));
+
                 shouldStop = false;
                 this.logger.log(
-                  '▶️ Reprise du traitement du prochain lot de 100 emails',
+                  '▶️ Reprise du traitement du prochain lot de 50 emails',
                 );
               }
             } catch (err) {
@@ -530,63 +628,8 @@ export class EmailFilterService implements OnModuleInit {
         'INBOX',
       );
 
-      return new Promise<boolean>((resolve) => {
-        let resolved = false;
-        const timeoutId = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            this.logger.error(
-              `⏰ Timeout : la suppression a pris trop de temps pour l'email ${uid}`,
-            );
-            resolve(false);
-          }
-        }, 30000);
-
-        this.logger.log(`🔄 Marquage de l'email ${uid} comme supprimé...`);
-
-        // D'abord, marquer l'email comme supprimé
-        this.imap.addFlags([uid], '\\Deleted', (err) => {
-          if (!resolved) {
-            if (err) {
-              this.logger.error(
-                `❌ Erreur lors du marquage de l'email ${uid}:`,
-                err,
-              );
-              clearTimeout(timeoutId);
-              resolved = true;
-              resolve(false);
-              return;
-            }
-
-            this.logger.log(
-              `✅ Email ${uid} marqué comme supprimé, attente avant expunge...`,
-            );
-
-            // Attendre 3 secondes avant d'expunger
-            setTimeout(() => {
-              // Ensuite, forcer la suppression
-              this.imap.expunge((expungeErr) => {
-                if (!resolved) {
-                  clearTimeout(timeoutId);
-                  resolved = true;
-
-                  if (expungeErr) {
-                    this.logger.error(
-                      `❌ Erreur lors de l'expunge de l'email ${uid}:`,
-                      expungeErr,
-                    );
-                    resolve(false);
-                    return;
-                  }
-
-                  this.logger.log(`✅ Email ${uid} supprimé avec succès`);
-                  resolve(true);
-                }
-              });
-            }, 3000);
-          }
-        });
-      });
+      // Utiliser notre méthode optimisée sans reconnexion
+      return await this.deleteSingleEmailWithoutReconnection(uid);
     } catch (err) {
       this.logger.error('Erreur lors du test de suppression:', err);
       return false;
