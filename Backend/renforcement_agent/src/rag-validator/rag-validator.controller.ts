@@ -42,9 +42,12 @@ export class RagValidatorController {
   async evaluateAllSqlQueries() {
     this.logger.log(`Évaluation de toutes les requêtes SQL`);
     try {
-      // Compteur pour suivre l'avancement
+      // Compteurs pour suivre l'avancement
       let processedCount = 0;
       let totalCount = 0;
+      let errorsCount = 0;
+      let successCount = 0;
+      let totalScore = 0;
 
       // Suivi du temps
       const startTime = Date.now();
@@ -64,12 +67,21 @@ export class RagValidatorController {
       this.logger.log(`Nombre total de requêtes SQL à évaluer: ${totalCount}`);
 
       // Fonction de callback pour suivre l'avancement
-      const progressCallback = () => {
+      const progressCallback = (success: boolean, score?: number) => {
         processedCount++;
+        if (success && score) {
+          successCount++;
+          totalScore += score;
+        } else {
+          errorsCount++;
+        }
+
         const percentage = Math.round((processedCount / totalCount) * 100);
+        const averageScore =
+          successCount > 0 ? (totalScore / successCount).toFixed(2) : 'N/A';
         const elapsed = getElapsedTime();
         this.logger.log(
-          `Progression: ${processedCount}/${totalCount} (${percentage}%) - Temps écoulé: ${elapsed}`,
+          `Progression: ${processedCount}/${totalCount} (${percentage}%) - Temps écoulé: ${elapsed} - Succès: ${successCount}, Erreurs: ${errorsCount}, Score moyen: ${averageScore}/5`,
         );
       };
 
@@ -85,7 +97,10 @@ export class RagValidatorController {
         success: true,
         message: `${result.evaluatedDocuments} requêtes SQL évaluées sur ${result.totalDocuments}`,
         processedCount,
+        successCount,
+        errorsCount,
         totalCount,
+        averageRating: result.averageRating,
         elapsedTime: totalTime,
         ...result,
       };

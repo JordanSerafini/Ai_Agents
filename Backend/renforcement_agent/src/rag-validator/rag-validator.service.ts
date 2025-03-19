@@ -49,7 +49,7 @@ export class RagValidatorService {
    */
   async validateCollection(
     collectionName: string,
-    progressCallback?: () => void,
+    progressCallback?: (success: boolean, score?: number) => void,
   ): Promise<{
     totalDocuments: number;
     evaluatedDocuments: number;
@@ -59,9 +59,11 @@ export class RagValidatorService {
     if (progressCallback) {
       // Utiliser le RAG service avec une implémentation personnalisée
       const documents = await this.ragService.getAllDocuments(collectionName);
-      
-      this.logger.log(`Validation de ${documents.length} documents dans la collection ${collectionName}`);
-      
+
+      this.logger.log(
+        `Validation de ${documents.length} documents dans la collection ${collectionName}`,
+      );
+
       if (!documents.length) {
         return {
           totalDocuments: 0,
@@ -79,30 +81,48 @@ export class RagValidatorService {
         const doc = documents[i];
         try {
           // Générer une requête représentative ou utiliser les métadonnées
-          const query = await this.generateQueryForDocument(doc.content, doc.metadata);
-          
+          const query = await this.generateQueryForDocument(
+            doc.content,
+            doc.metadata,
+          );
+
           // Évaluer le document
           const rating = await this.evaluateRagDocument(doc.content, query);
-          
+
           // Mettre à jour le document avec la note
-          await this.ragService.updateDocument(collectionName, doc.id, doc.content, {
-            ...doc.metadata,
-            rating,
-          });
+          await this.ragService.updateDocument(
+            collectionName,
+            doc.id,
+            doc.content,
+            {
+              ...doc.metadata,
+              rating,
+            },
+          );
 
           totalRating += rating.overall;
           evaluatedCount++;
           documentRatings.push({ id: doc.id, rating });
-          
+
           // Appeler le callback de progression après chaque document
-          progressCallback();
+          if (progressCallback) {
+            progressCallback(true, rating.overall);
+          }
         } catch (error) {
-          this.logger.warn(`Impossible d'évaluer le document ${doc.id}: ${error.message}`);
+          this.logger.warn(
+            `Impossible d'évaluer le document ${doc.id}: ${error.message}`,
+          );
+
+          // Notifier une erreur via le callback
+          if (progressCallback) {
+            progressCallback(false);
+          }
         }
       }
 
-      const averageRating = evaluatedCount > 0 ? totalRating / evaluatedCount : 0;
-      
+      const averageRating =
+        evaluatedCount > 0 ? totalRating / evaluatedCount : 0;
+
       return {
         totalDocuments: documents.length,
         evaluatedDocuments: evaluatedCount,
@@ -114,7 +134,7 @@ export class RagValidatorService {
       return this.ragService.validateCollection(collectionName);
     }
   }
-  
+
   /**
    * Génère une requête appropriée pour un document
    */
@@ -126,7 +146,7 @@ export class RagValidatorService {
     if (metadata?.originalPrompt || metadata?.question) {
       return metadata.originalPrompt || metadata.question;
     }
-    
+
     // Sinon, générer une requête
     try {
       const prompt = `
@@ -147,7 +167,9 @@ Réponds uniquement avec la requête, sans autre explication.
 
       return response.trim();
     } catch (error) {
-      this.logger.error(`Erreur lors de la génération de requête: ${error.message}`);
+      this.logger.error(
+        `Erreur lors de la génération de requête: ${error.message}`,
+      );
       return 'Quelle est la pertinence de ce document?';
     }
   }
