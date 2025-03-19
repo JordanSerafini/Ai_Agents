@@ -109,7 +109,7 @@
         "Liste des clients avec des factures en attente",
         "Clients ayant des paiements en retard"
       ],
-      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(i.id) AS unpaid_invoices, SUM(i.total_ttc) AS total_amount_due FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN ref_status rs ON i.status = rs.id WHERE rs.code NOT IN ('payée', 'annulée') AND rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY SUM(i.total_ttc) DESC",
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(i.id) AS unpaid_invoices, SUM(i.total_ttc) AS total_amount_due FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN ref_status rs ON i.status = rs.id WHERE rs.code IN ('brouillon', 'envoyée', 'payée_partiellement', 'en_retard') AND rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY SUM(i.total_ttc) DESC",
       "description": "Liste des clients ayant des factures non payées, avec le montant total dû"
     },
     {
@@ -120,7 +120,7 @@
         "Clients les plus importants financièrement",
         "Meilleurs clients en termes de facturation"
       ],
-      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(i.id) AS total_invoices, SUM(i.total_ht) AS total_revenue FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY SUM(i.total_ht) DESC LIMIT 10",
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(i.id) AS total_invoices, SUM(i.total_ht) AS total_revenue FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND rs.code != 'annulée' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY SUM(i.total_ht) DESC LIMIT 10",
       "description": "Top 10 des clients générant le plus de chiffre d'affaires"
     },
     {
@@ -171,7 +171,7 @@
         "Délais de paiement par client",
         "Clients et leurs habitudes de paiement"
       ],
-      "sql": "SELECT c.id, c.firstname || ' ' || c.lastname AS client_name, COUNT(i.id) AS total_invoices, COUNT(CASE WHEN rs.code = 'payée' THEN 1 END) AS paid_invoices, ROUND(AVG(CASE WHEN pay.payment_date IS NOT NULL THEN pay.payment_date - i.issue_date)) AS average_payment_delay_days FROM invoices i JOIN payments pay ON i.id = pay.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE rs.code = 'payée' AND rs.entity_type = 'invoice' AND i.issue_date >= CURRENT_DATE - INTERVAL '1 year' GROUP BY c.id, c.firstname, c.lastname"
+      "sql": "SELECT c.id, c.firstname || ' ' || c.lastname AS client_name, COUNT(i.id) AS total_invoices, COUNT(CASE WHEN rs.code = 'payée' THEN 1 END) AS paid_invoices, ROUND(AVG(CASE WHEN pay.payment_date IS NOT NULL THEN pay.payment_date - i.issue_date END)) AS average_payment_delay_days FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id LEFT JOIN payments pay ON i.id = pay.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND i.issue_date >= CURRENT_DATE - INTERVAL '1 year' GROUP BY c.id, c.firstname, c.lastname ORDER BY c.lastname, c.firstname"
     }
   ]
 }

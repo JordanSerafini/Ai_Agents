@@ -510,6 +510,150 @@
       "sql": "WITH project_stats AS (SELECT COUNT(*) as total_projects, COUNT(CASE WHEN status = (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') THEN 1 END) as completed_projects, COUNT(CASE WHEN status = (SELECT id FROM ref_status WHERE code = 'en_cours' AND entity_type = 'project') THEN 1 END) as active_projects FROM projects WHERE EXTRACT(YEAR FROM start_date) = EXTRACT(YEAR FROM CURRENT_DATE)), staff_stats AS (SELECT COUNT(*) as total_staff, COUNT(CASE WHEN is_available = true THEN 1 END) as available_staff FROM staff), financial_stats AS (SELECT COUNT(*) as total_quotations, SUM(total_ttc) as total_quotation_amount, (SELECT COUNT(*) FROM invoices WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) as total_invoices, (SELECT SUM(total_ttc) FROM invoices WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) as total_invoice_amount FROM quotations WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) SELECT ps.*, ss.*, fs.* FROM project_stats ps CROSS JOIN staff_stats ss CROSS JOIN financial_stats fs",
       "description": "Bilan complet de l'année en cours avec les statistiques des projets, du personnel et des aspects financiers",
       "parameters": []
+    },
+    {
+      "id": "staff_most_working_hours",
+      "questions": [
+        "Qui a le plus d'heures de travail ?",
+        "Personnel avec le plus d'heures travaillées",
+        "Collaborateurs les plus actifs",
+        "Employés avec horaires les plus chargés"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, SUM(te.hours) AS total_hours FROM staff s JOIN timesheet_entries te ON s.id = te.staff_id WHERE te.date >= CURRENT_DATE - INTERVAL '30 days' GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY total_hours DESC LIMIT 10",
+      "description": "Liste des 10 employés ayant cumulé le plus d'heures de travail au cours des 30 derniers jours"
+    },
+    {
+      "id": "staff_project_distribution",
+      "questions": [
+        "Comment sont distribués les employés sur les projets ?",
+        "Répartition du personnel par projet",
+        "Distribution des équipes par chantier",
+        "Affectation des ressources humaines"
+      ],
+      "sql": "SELECT p.name AS project_name, COUNT(DISTINCT ps.staff_id) AS staff_count, string_agg(s.firstname || ' ' || s.lastname, ', ') AS staff_members FROM projects p JOIN project_staff ps ON p.id = ps.project_id JOIN staff s ON ps.staff_id = s.id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' GROUP BY p.id, p.name ORDER BY staff_count DESC",
+      "description": "Répartition du personnel sur les différents projets en cours, avec le nombre d'employés et la liste des membres par projet"
+    },
+    {
+      "id": "resource_conflicts",
+      "questions": [
+        "Y a-t-il des conflits de ressources ?",
+        "Employés avec double planning",
+        "Conflits d'horaires dans les plannings",
+        "Personnel sur-programmé"
+      ],
+      "sql": "WITH daily_hours AS (SELECT s.id, s.firstname, s.lastname, te.date, SUM(te.hours) AS total_daily_hours FROM staff s JOIN timesheet_entries te ON s.id = te.staff_id GROUP BY s.id, s.firstname, s.lastname, te.date) SELECT id, firstname, lastname, date, total_daily_hours FROM daily_hours WHERE total_daily_hours > 8 ORDER BY date DESC, total_daily_hours DESC LIMIT 20",
+      "description": "Liste des employés ayant des conflits de planning avec plus de 8 heures programmées par jour"
+    },
+    {
+      "id": "equipment_planning",
+      "questions": [
+        "Quel est le planning des équipements ?",
+        "Matériel utilisé prochainement",
+        "Planning d'utilisation des machines",
+        "Calendrier d'utilisation des équipements"
+      ],
+      "sql": "SELECT e.name AS equipment_name, p.name AS project_name, set.check_out_time, set.expected_return_time, s.firstname || ' ' || s.lastname AS staff_name, rec.name AS condition_at_checkout FROM site_equipment_tracking set JOIN equipment e ON set.equipment_id = e.id JOIN projects p ON set.project_id = p.id JOIN staff s ON set.staff_id = s.id LEFT JOIN ref_equipment_condition rec ON set.condition_at_checkout = rec.id WHERE (set.check_out_time <= CURRENT_DATE + INTERVAL '14 days' AND set.expected_return_time >= CURRENT_DATE) OR (set.check_out_time >= CURRENT_DATE AND set.check_out_time <= CURRENT_DATE + INTERVAL '14 days') ORDER BY set.check_out_time",
+      "description": "Planning d'utilisation des équipements sur les chantiers pour les 14 prochains jours"
+    },
+    {
+      "id": "overdue_equipment_return",
+      "questions": [
+        "Quels équipements sont en retard de retour ?",
+        "Matériel non retourné dans les délais",
+        "Équipements avec dépassement de date",
+        "Outils en retard de retour"
+      ],
+      "sql": "SELECT e.name AS equipment_name, p.name AS project_name, set.check_out_time, set.expected_return_time, CURRENT_DATE - set.expected_return_time AS days_overdue, s.firstname || ' ' || s.lastname AS staff_name FROM site_equipment_tracking set JOIN equipment e ON set.equipment_id = e.id JOIN projects p ON set.project_id = p.id JOIN staff s ON set.staff_id = s.id WHERE set.actual_return_time IS NULL AND set.expected_return_time < CURRENT_DATE ORDER BY days_overdue DESC",
+      "description": "Liste des équipements qui n'ont pas été retournés à la date prévue, classés par nombre de jours de retard"
+    },
+    {
+      "id": "peak_workload_days",
+      "questions": [
+        "Quels jours ont la charge de travail la plus élevée ?",
+        "Journées avec pic d'activité",
+        "Jours avec surcharge de travail",
+        "Périodes à forte charge"
+      ],
+      "sql": "WITH daily_workload AS (SELECT te.date, COUNT(DISTINCT te.staff_id) AS staff_count, SUM(te.hours) AS total_hours FROM timesheet_entries te WHERE te.date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' GROUP BY te.date) SELECT date, staff_count, total_hours, ROUND(total_hours / staff_count, 2) AS avg_hours_per_staff FROM daily_workload ORDER BY total_hours DESC LIMIT 10",
+      "description": "Les 10 jours avec la charge de travail la plus élevée dans les 30 prochains jours, basée sur le nombre total d'heures planifiées"
+    },
+    {
+      "id": "staff_role_analysis",
+      "questions": [
+        "Comment sont répartis les rôles dans l'équipe ?",
+        "Distribution des fonctions dans le personnel",
+        "Analyse des rôles de l'équipe",
+        "Répartition par fonction"
+      ],
+      "sql": "WITH role_stats AS (SELECT s.role, COUNT(*) AS staff_count FROM staff s GROUP BY s.role), project_role_usage AS (SELECT ps.role AS project_role, COUNT(DISTINCT ps.staff_id) AS staff_assigned FROM project_staff ps JOIN projects p ON ps.project_id = p.id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' GROUP BY ps.role) SELECT rs.role, rs.staff_count, COALESCE(pru.staff_assigned, 0) AS currently_assigned, ROUND((COALESCE(pru.staff_assigned, 0)::numeric / rs.staff_count) * 100, 2) AS utilization_percentage FROM role_stats rs LEFT JOIN project_role_usage pru ON rs.role = pru.project_role ORDER BY utilization_percentage DESC",
+      "description": "Analyse de la répartition des rôles dans l'équipe avec le taux d'utilisation actuel sur les projets en cours"
+    },
+    {
+      "id": "location_based_scheduling",
+      "questions": [
+        "Comment sont organisés les chantiers par zone géographique ?",
+        "Répartition géographique des projets",
+        "Planning par localisation",
+        "Organisation territoriale des chantiers"
+      ],
+      "sql": "SELECT a.city, COUNT(*) AS project_count, string_agg(p.name, ', ') AS projects, COUNT(DISTINCT ps.staff_id) AS total_staff FROM projects p JOIN addresses a ON p.address_id = a.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_staff ps ON p.id = ps.project_id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' GROUP BY a.city ORDER BY project_count DESC, total_staff DESC",
+      "description": "Organisation des chantiers par localité avec le nombre de projets et de personnel dans chaque zone"
+    },
+    {
+      "id": "material_delivery_schedule",
+      "questions": [
+        "Quel est le calendrier des livraisons de matériaux ?",
+        "Planning des arrivées de matériaux",
+        "Calendrier des livraisons",
+        "Échéancier des livraisons de fournitures"
+      ],
+      "sql": "SELECT p.name AS project_name, pm.material_name, pm.quantity, pm.unit, pm.delivery_date, s.name AS supplier_name, rs.name AS status FROM project_materials pm JOIN projects p ON pm.project_id = p.id LEFT JOIN suppliers s ON pm.supplier_id = s.id LEFT JOIN ref_status rs ON pm.status = rs.id WHERE pm.delivery_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' ORDER BY pm.delivery_date",
+      "description": "Calendrier des livraisons de matériaux prévues pour les 30 prochains jours"
+    },
+    {
+      "id": "material_requests_pending",
+      "questions": [
+        "Quelles sont les demandes de matériaux en attente ?",
+        "Matériaux demandés non livrés",
+        "Demandes de fournitures en cours",
+        "Requêtes de matériaux pendantes"
+      ],
+      "sql": "SELECT mr.id, p.name AS project_name, mr.request_date, mr.needed_by_date, s.firstname || ' ' || s.lastname AS requested_by, rmrs.name AS status, COUNT(mri.id) AS item_count FROM material_requests mr JOIN projects p ON mr.project_id = p.id JOIN staff s ON mr.requested_by = s.id JOIN ref_material_request_status rmrs ON mr.status = rmrs.id LEFT JOIN material_request_items mri ON mr.id = mri.request_id WHERE rmrs.code IN ('pending', 'approved') GROUP BY mr.id, p.name, mr.request_date, mr.needed_by_date, s.firstname, s.lastname, rmrs.name ORDER BY mr.needed_by_date",
+      "description": "Liste des demandes de matériaux en attente ou approuvées mais non encore livrées"
+    },
+    {
+      "id": "staff_productivity_analysis",
+      "questions": [
+        "Quelle est la productivité du personnel ?",
+        "Efficacité des employés",
+        "Analyse de productivité individuelle",
+        "Performance du personnel"
+      ],
+      "sql": "WITH staff_project_completion AS (SELECT s.id, s.firstname, s.lastname, s.role, p.id AS project_id, p.name AS project_name, COALESCE(AVG(stg.completion_percentage), 0) AS avg_project_completion, SUM(te.hours) AS total_hours FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id LEFT JOIN stages stg ON p.id = stg.project_id AND ps.role = stg.name LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND p.id = te.project_id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' AND ps.start_date <= CURRENT_DATE GROUP BY s.id, s.firstname, s.lastname, s.role, p.id, p.name), productivity_metrics AS (SELECT id, firstname, lastname, role, COUNT(DISTINCT project_id) AS project_count, ROUND(AVG(avg_project_completion), 2) AS avg_project_completion, SUM(total_hours) AS total_hours, CASE WHEN SUM(total_hours) > 0 THEN ROUND(AVG(avg_project_completion) / SUM(total_hours) * 100, 2) ELSE 0 END AS productivity_score FROM staff_project_completion GROUP BY id, firstname, lastname, role) SELECT * FROM productivity_metrics ORDER BY productivity_score DESC",
+      "description": "Analyse de la productivité du personnel basée sur l'avancement des projets par rapport aux heures travaillées"
+    },
+    {
+      "id": "invoice_payment_prediction",
+      "questions": [
+        "Quand les factures seront-elles probablement payées ?",
+        "Prévision des paiements clients",
+        "Dates estimées de paiement des factures",
+        "Calendrier prévisionnel des encaissements"
+      ],
+      "sql": "WITH client_payment_history AS (SELECT c.id AS client_id, c.firstname || ' ' || c.lastname AS client_name, i.reference, i.issue_date, i.due_date, COALESCE(MIN(p.payment_date), CURRENT_DATE + (i.due_date - i.issue_date) + INTERVAL '10 days') AS payment_date, (COALESCE(MIN(p.payment_date), CURRENT_DATE + (i.due_date - i.issue_date) + INTERVAL '10 days') - i.due_date) AS payment_delay FROM clients c JOIN projects pj ON c.id = pj.client_id JOIN invoices i ON pj.id = i.project_id LEFT JOIN payments p ON i.id = p.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE rs.code != 'annulée' AND rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname, i.reference, i.issue_date, i.due_date), avg_delay_by_client AS (SELECT client_id, client_name, AVG(payment_delay) AS avg_payment_delay FROM client_payment_history GROUP BY client_id, client_name), current_invoices AS (SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ttc, c.id AS client_id, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE rs.code IN ('envoyée', 'en_retard') AND rs.entity_type = 'invoice') SELECT ci.reference, ci.issue_date, ci.due_date, ci.total_ttc, ci.client_name, ci.status, ci.due_date + COALESCE(adc.avg_payment_delay, INTERVAL '0 days') AS estimated_payment_date, CURRENT_DATE - (ci.due_date + COALESCE(adc.avg_payment_delay, INTERVAL '0 days')) AS days_until_payment FROM current_invoices ci LEFT JOIN avg_delay_by_client adc ON ci.client_id = adc.client_id ORDER BY estimated_payment_date",
+      "description": "Prévision des dates de paiement des factures en cours basée sur l'historique des délais de paiement des clients"
+    },
+    {
+      "id": "staff_most_worked_current_month",
+      "questions": [
+        "Qui a le plus travaillé ce mois ?",
+        "Personnel avec le plus d'heures ce mois-ci",
+        "Employés ayant fait le plus d'heures ce mois",
+        "Classement du personnel par heures travaillées ce mois",
+        "Top des employés les plus actifs du mois"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(SUM(te.hours), 0) AS total_hours_worked FROM staff s LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND EXTRACT(MONTH FROM te.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE) WHERE s.is_available = true GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY total_hours_worked DESC LIMIT 10",
+      "description": "Top 10 des employés ayant accumulé le plus d'heures de travail effectif durant le mois en cours"
     }
   ]
 }

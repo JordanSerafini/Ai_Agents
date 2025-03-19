@@ -110,20 +110,27 @@ export class PredefinedQueriesService {
       // Normaliser la question pour la comparaison
       const normalizedQuestion = this.normalizeTextForComparison(question);
       const questionWords = this.extractKeywords(normalizedQuestion);
-      
+
       // Détecter si la question contient des contraintes temporelles
-      const hasMoisEnCours = /mois.*(en)?.*cours|ce mois|mois.*(actuel|courant)/i.test(question);
-      const hasSemaineEnCours = /semaine.*(en)?.*cours|cette semaine|semaine.*(actuel|courant)/i.test(question);
-      const hasAnneeEnCours = /annee.*(en)?.*cours|cette annee|annee.*(actuel|courant)/i.test(question);
+      const hasMoisEnCours =
+        /mois.*(en)?.*cours|ce mois|mois.*(actuel|courant)/i.test(question);
+      const hasSemaineEnCours =
+        /semaine.*(en)?.*cours|cette semaine|semaine.*(actuel|courant)/i.test(
+          question,
+        );
+      const hasAnneeEnCours =
+        /annee.*(en)?.*cours|cette annee|annee.*(actuel|courant)/i.test(
+          question,
+        );
       const hasProchain = /prochain|suivant/i.test(question);
       const hasDernier = /dernier|precedent|passe/i.test(question);
-      
+
       // Journal de débogage
       this.logger.log(
         `Recherche de variations pour: "${question}" (mots-clés: ${questionWords.join(', ')})
-        Contraintes temporelles détectées: ${hasMoisEnCours ? 'mois en cours, ' : ''}${hasSemaineEnCours ? 'semaine en cours, ' : ''}${hasProchain ? 'prochain, ' : ''}${hasDernier ? 'dernier/passé' : ''}`
+        Contraintes temporelles détectées: ${hasMoisEnCours ? 'mois en cours, ' : ''}${hasSemaineEnCours ? 'semaine en cours, ' : ''}${hasProchain ? 'prochain, ' : ''}${hasDernier ? 'dernier/passé' : ''}`,
       );
-      
+
       let bestMatch: MatchResult = null;
       let bestSimilarity = 0;
 
@@ -142,20 +149,32 @@ export class PredefinedQueriesService {
           for (const variantQuestion of metadata.questions) {
             const normalizedVariant =
               this.normalizeTextForComparison(variantQuestion);
-              
+
             // Vérifier la cohérence des contraintes temporelles
-            const variantHasMoisEnCours = /mois.*(en)?.*cours|ce mois|mois.*(actuel|courant)/i.test(variantQuestion);
-            const variantHasSemaineEnCours = /semaine.*(en)?.*cours|cette semaine|semaine.*(actuel|courant)/i.test(variantQuestion);
-            const variantHasProchain = /prochain|suivant/i.test(variantQuestion);
-            const variantHasDernier = /dernier|precedent|passe/i.test(variantQuestion);
-            
+            const variantHasMoisEnCours =
+              /mois.*(en)?.*cours|ce mois|mois.*(actuel|courant)/i.test(
+                variantQuestion,
+              );
+            const variantHasSemaineEnCours =
+              /semaine.*(en)?.*cours|cette semaine|semaine.*(actuel|courant)/i.test(
+                variantQuestion,
+              );
+            const variantHasProchain = /prochain|suivant/i.test(
+              variantQuestion,
+            );
+            const variantHasDernier = /dernier|precedent|passe/i.test(
+              variantQuestion,
+            );
+
             // Pénalité pour les incohérences temporelles
             let temporalPenalty = 1.0;
-            
+
             // Si la question mentionne "mois en cours" mais pas la variante, c'est une grosse incohérence
-            if (hasMoisEnCours && !variantHasMoisEnCours) temporalPenalty *= 0.7;
+            if (hasMoisEnCours && !variantHasMoisEnCours)
+              temporalPenalty *= 0.7;
             // Si la question mentionne "semaine en cours" mais pas la variante, c'est une grosse incohérence
-            if (hasSemaineEnCours && !variantHasSemaineEnCours) temporalPenalty *= 0.7;
+            if (hasSemaineEnCours && !variantHasSemaineEnCours)
+              temporalPenalty *= 0.7;
             // Si la question mentionne "prochain" mais pas la variante ou vice versa
             if (hasProchain !== variantHasProchain) temporalPenalty *= 0.8;
             // Si la question mentionne "dernier" mais pas la variante ou vice versa
@@ -175,7 +194,8 @@ export class PredefinedQueriesService {
 
             // Combiner les deux scores avec une pondération et appliquer la pénalité temporelle
             const combinedSimilarity =
-              (wordSimilarity * 0.7 + levenshteinSimilarity * 0.3) * temporalPenalty;
+              (wordSimilarity * 0.7 + levenshteinSimilarity * 0.3) *
+              temporalPenalty;
 
             if (combinedSimilarity > entrySimilarity) {
               entrySimilarity = combinedSimilarity;
@@ -288,31 +308,31 @@ export class PredefinedQueriesService {
 
     // Mots-clés temporels importants avec leur poids
     const temporalKeywords = {
-      'mois': true,
-      'semaine': true,
-      'annee': true,
-      'jour': true,
-      'courant': true,
-      'cours': true,
-      'actuel': true,
-      'current': true,
-      'prochain': true,
-      'precedent': true,
-      'dernier': true,
-      'passe': true
+      mois: true,
+      semaine: true,
+      annee: true,
+      jour: true,
+      courant: true,
+      cours: true,
+      actuel: true,
+      current: true,
+      prochain: true,
+      precedent: true,
+      dernier: true,
+      passe: true,
     };
 
     // Compter combien de mots-clés sont présents dans la cible
     let matchCount = 0;
     let temporalMatched = false;
     let temporalInQuestion = false;
-    
+
     for (const keyword of keywords) {
       // Vérifier si c'est un mot-clé temporel
       if (temporalKeywords[keyword]) {
         temporalInQuestion = true;
       }
-      
+
       // Vérifier les correspondances exactes
       if (target.includes(keyword)) {
         // Les mots temporels sont plus importants
@@ -431,21 +451,30 @@ export class PredefinedQueriesService {
    * Recherche une correspondance approximative en utilisant le RAG
    */
   private async findApproximateMatch(userQuestion: string): Promise<any> {
-    this.logger.log(`Recherche d'une correspondance approximative pour: "${userQuestion}"`);
-    
+    this.logger.log(
+      `Recherche d'une correspondance approximative pour: "${userQuestion}"`,
+    );
+
     // Détecter si la question porte sur des personnes ou des projets
-    const isPersonnelQuestion = /qui|personne|personnel|staff|employe|travaille/i.test(userQuestion);
-    const isProjectQuestion = /projet|quels|quelles|chantier/i.test(userQuestion);
-    
+    const isPersonnelQuestion =
+      /qui|personne|personnel|staff|employe|travaille/i.test(userQuestion);
+    const isProjectQuestion = /projet|quels|quelles|chantier/i.test(
+      userQuestion,
+    );
+
     // Ajuster le seuil de similarité en fonction du type de question
-    let similarityThreshold = 0.70; // Seuil par défaut
-    
+    let similarityThreshold = 0.7; // Seuil par défaut
+
     if (isPersonnelQuestion) {
       similarityThreshold = 0.65; // Plus permissif pour les questions sur le personnel
-      this.logger.log('Question détectée comme portant sur le personnel, seuil ajusté à 0.65');
+      this.logger.log(
+        'Question détectée comme portant sur le personnel, seuil ajusté à 0.65',
+      );
     } else if (isProjectQuestion) {
       similarityThreshold = 0.68; // Seuil pour les questions sur les projets
-      this.logger.log('Question détectée comme portant sur les projets, seuil ajusté à 0.68');
+      this.logger.log(
+        'Question détectée comme portant sur les projets, seuil ajusté à 0.68',
+      );
     }
 
     try {
@@ -457,37 +486,64 @@ export class PredefinedQueriesService {
       );
 
       if (ragResult.found && ragResult.metadata) {
-        this.logger.log(`Correspondance approximative trouvée: "${ragResult.metadata.question || ragResult.prompt}" (score: ${ragResult.similarity})`);
-        
+        this.logger.log(
+          `Correspondance approximative trouvée: "${ragResult.metadata.question || ragResult.prompt}" (score: ${ragResult.similarity})`,
+        );
+
         const question = ragResult.metadata.question || ragResult.prompt;
-        
+
         // Vérification supplémentaire pour éviter les correspondances incorrectes entre personnel et projets
-        if (isPersonnelQuestion && question.toLowerCase().includes('projet') && 
-           !question.toLowerCase().includes('qui') && !question.toLowerCase().includes('travaille')) {
-          this.logger.warn('Correspondance potentiellement incorrecte: question sur le personnel mais réponse sur les projets');
-          return { found: false, reason: 'Correspondance inadéquate entre question sur le personnel et requête sur les projets' };
+        if (
+          isPersonnelQuestion &&
+          question.toLowerCase().includes('projet') &&
+          !question.toLowerCase().includes('qui') &&
+          !question.toLowerCase().includes('travaille')
+        ) {
+          this.logger.warn(
+            'Correspondance potentiellement incorrecte: question sur le personnel mais réponse sur les projets',
+          );
+          return {
+            found: false,
+            reason:
+              'Correspondance inadéquate entre question sur le personnel et requête sur les projets',
+          };
         }
-        
-        if (isProjectQuestion && question.toLowerCase().includes('qui travaille')) {
-          this.logger.warn('Correspondance potentiellement incorrecte: question sur les projets mais réponse sur le personnel');
-          return { found: false, reason: 'Correspondance inadéquate entre question sur les projets et requête sur le personnel' };
+
+        if (
+          isProjectQuestion &&
+          question.toLowerCase().includes('qui travaille')
+        ) {
+          this.logger.warn(
+            'Correspondance potentiellement incorrecte: question sur les projets mais réponse sur le personnel',
+          );
+          return {
+            found: false,
+            reason:
+              'Correspondance inadéquate entre question sur les projets et requête sur le personnel',
+          };
         }
 
         return {
           found: true,
           query: ragResult.metadata.finalQuery,
           description: ragResult.metadata.questionReformulated || question,
-          parameters: this.detectRequiredParameters(ragResult.metadata.finalQuery),
+          parameters: this.detectRequiredParameters(
+            ragResult.metadata.finalQuery,
+          ),
           predefinedParameters: ragResult.metadata.parameters || [],
           id: ragResult.metadata.id || ragResult.id,
-          similarity: ragResult.similarity
+          similarity: ragResult.similarity,
         };
       } else {
-        this.logger.log(`Aucune correspondance approximative trouvée: ${ragResult.reason}`);
+        this.logger.log(
+          `Aucune correspondance approximative trouvée: ${ragResult.reason}`,
+        );
         return { found: false, reason: ragResult.reason };
       }
     } catch (error) {
-      this.logger.error(`Erreur lors de la recherche par RAG: ${error.message}`);
+      this.logger.error(
+        `Erreur lors de la recherche par RAG: ${error.message}`,
+      );
       return { found: false, error: error.message };
     }
   }

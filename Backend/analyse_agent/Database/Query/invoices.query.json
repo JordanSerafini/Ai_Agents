@@ -206,7 +206,7 @@
         "Statistiques des factures par mois",
         "Evolution mensuelle des montants de factures"
       ],
-      "sql": "SELECT EXTRACT(YEAR FROM i.issue_date) AS year, EXTRACT(MONTH FROM i.issue_date) AS month, TO_CHAR(i.issue_date, 'Month YYYY') AS month_name, COUNT(*) AS invoice_count, ROUND(AVG(i.total_ht), 2) AS average_amount_ht, SUM(i.total_ht) AS total_amount_ht FROM invoices i WHERE i.issue_date >= CURRENT_DATE - INTERVAL '12 months' GROUP BY EXTRACT(YEAR FROM i.issue_date), EXTRACT(MONTH FROM i.issue_date), TO_CHAR(i.issue_date, 'Month YYYY') ORDER BY EXTRACT(YEAR FROM i.issue_date) DESC, EXTRACT(MONTH FROM i.issue_date) DESC",
+      "sql": "SELECT EXTRACT(YEAR FROM i.issue_date) AS year, EXTRACT(MONTH FROM i.issue_date) AS month, TO_CHAR(i.issue_date, 'Month YYYY') AS month_name, COUNT(*) AS invoice_count, ROUND(AVG(i.total_ht), 2) AS average_amount_ht, SUM(i.total_ht) AS total_amount_ht FROM invoices i JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND rs.code != 'annulée' AND i.issue_date >= CURRENT_DATE - INTERVAL '12 months' GROUP BY EXTRACT(YEAR FROM i.issue_date), EXTRACT(MONTH FROM i.issue_date), TO_CHAR(i.issue_date, 'Month YYYY') ORDER BY EXTRACT(YEAR FROM i.issue_date) DESC, EXTRACT(MONTH FROM i.issue_date) DESC",
       "description": "Statistiques des montants moyens de factures par mois sur les 12 derniers mois"
     },
     {
