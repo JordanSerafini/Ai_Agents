@@ -2,14 +2,14 @@
 ==============================================================
 RAPPORT D'ÉVALUATION RAG DÉTAILLÉ
 ==============================================================
-ID du rapport: rapport-user_prompts-2025-03-19T12-38-51-733Z
-Date: 3/19/2025, 12:38:51 PM
+ID du rapport: rapport-user_prompts-2025-03-19T12-49-34-636Z
+Date: 3/19/2025, 12:49:34 PM
 Collection: user_prompts
 ==============================================================
 
 
 Rapport d'évaluation RAG pour la collection "user_prompts"
-Date: 3/19/2025, 12:38:51 PM
+Date: 3/19/2025, 12:49:34 PM
 
 RÉSUMÉ DE L'ÉVALUATION:
 - Documents évalués: 2/2 (100%)
