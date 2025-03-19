@@ -142,35 +142,60 @@ export class RagService {
   }
 
   /**
-   * Récupère un document spécifique par son ID
+   * Récupère un document spécifique depuis une collection
    * @param collectionName Nom de la collection
-   * @param id ID du document
-   * @returns Le document ou null s'il n'existe pas
+   * @param documentId ID du document
+   * @returns Le document s'il existe, null sinon
    */
-  async getDocument(collectionName: string, id: string) {
+  async getDocument(
+    collectionName: string,
+    documentId: string,
+  ): Promise<{
+    id: string;
+    content: string;
+    metadata: any;
+  } | null> {
     try {
+      this.logger.log(
+        `Récupération du document ${documentId} dans la collection ${collectionName}`,
+      );
+
+      // Vérifier que la collection existe
+      const collections = await this.client.listCollections();
+      if (!collections.includes(collectionName)) {
+        this.logger.warn(`Collection ${collectionName} introuvable`);
+        return null;
+      }
+
+      // Accéder à la collection
       const collection = await this.getCollection(collectionName);
+
+      // Rechercher le document par ID
       const result = await collection.get({
-        ids: [id],
+        ids: [documentId],
+        include: ['metadatas', 'documents'] as any,
       });
 
-      if (!result.ids || result.ids.length === 0) {
+      // Vérifier si le document a été trouvé
+      if (!result.ids.length) {
         this.logger.warn(
-          `Document ${id} non trouvé dans la collection ${collectionName}`,
+          `Document ${documentId} non trouvé dans la collection ${collectionName}`,
         );
         return null;
       }
 
+      // Retourner le document trouvé
+      this.logger.log(`Document ${documentId} récupéré avec succès`);
       return {
         id: result.ids[0],
-        content: result.documents[0],
+        content: result.documents[0] as string,
         metadata: result.metadatas?.[0],
       };
     } catch (error) {
       this.logger.error(
-        `Erreur lors de la récupération du document ${id}: ${error.message}`,
+        `Erreur lors de la récupération du document ${documentId}: ${error.message}`,
       );
-      throw error;
+      throw new Error(`Impossible de récupérer le document: ${error.message}`);
     }
   }
 
@@ -657,30 +682,55 @@ Fournis le résultat au format JSON avec des notes entre 1 et 5:
    */
   private parseRatingFromResponse(response: string): RagRating {
     try {
+      this.logger.log(
+        `Tentative de parsing de la réponse : ${response.substring(0, 100)}...`,
+      );
+
       // Chercher un objet JSON dans la réponse
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const jsonStr = jsonMatch[0];
-        const rating = JSON.parse(jsonStr);
+        this.logger.log(`JSON extrait : ${jsonStr.substring(0, 100)}...`);
 
-        // S'assurer que toutes les propriétés nécessaires sont présentes
-        if (!rating.relevance || !rating.quality || !rating.completeness) {
-          throw new Error('Réponse incomplète du modèle');
+        try {
+          const rating = JSON.parse(jsonStr);
+
+          // S'assurer que toutes les propriétés nécessaires sont présentes
+          if (!rating.relevance || !rating.quality || !rating.completeness) {
+            this.logger.warn(
+              `JSON incomplet - propriétés manquantes: ${JSON.stringify(rating)}`,
+            );
+            throw new Error('Réponse incomplète du modèle');
+          }
+
+          // Calculer la note globale si elle n'est pas fournie
+          if (!rating.overall) {
+            rating.overall =
+              (rating.relevance + rating.quality + rating.completeness) / 3;
+          }
+
+          this.logger.log(
+            `Évaluation réussie - Score global: ${rating.overall}`,
+          );
+
+          return {
+            ...rating,
+            timestamp: new Date().toISOString(),
+          };
+        } catch (parseError) {
+          this.logger.error(
+            `Erreur JSON.parse: ${parseError.message}, JSON string: ${jsonStr.substring(0, 50)}...`,
+          );
+          throw parseError;
         }
-
-        // Calculer la note globale si elle n'est pas fournie
-        if (!rating.overall) {
-          rating.overall =
-            (rating.relevance + rating.quality + rating.completeness) / 3;
-        }
-
-        return {
-          ...rating,
-          timestamp: new Date().toISOString(),
-        };
+      } else {
+        this.logger.warn(
+          `Aucun JSON trouvé dans la réponse: ${response.substring(0, 50)}...`,
+        );
       }
 
       // Fallback si le JSON n'est pas trouvé
+      this.logger.log("Utilisation de l'évaluation par défaut");
       return {
         relevance: 3,
         quality: 3,
@@ -691,7 +741,7 @@ Fournis le résultat au format JSON avec des notes entre 1 et 5:
       };
     } catch (error) {
       this.logger.error(
-        `Erreur lors du parsing de la réponse: ${error.message}`,
+        `Erreur lors du parsing de la réponse: ${error.message}, Réponse: ${response.substring(0, 50)}...`,
       );
       return {
         relevance: 2,
@@ -804,10 +854,20 @@ Fournis le résultat au format JSON avec des notes entre 1 et 5:
     documentRatings: Array<{ id: string; rating: RagRating }>;
   }> {
     try {
+      this.logger.log(
+        `Début de la validation de la collection ${collectionName}`,
+      );
+
       // 1. Récupérer tous les documents de la collection
       const documents = await this.getAllDocuments(collectionName);
+      this.logger.log(
+        `${documents.length} documents trouvés dans la collection ${collectionName}`,
+      );
 
       if (!documents.length) {
+        this.logger.warn(
+          `Collection ${collectionName} vide - aucun document à valider`,
+        );
         return {
           totalDocuments: 0,
           evaluatedDocuments: 0,
@@ -820,15 +880,31 @@ Fournis le résultat au format JSON avec des notes entre 1 et 5:
       let evaluatedCount = 0;
       const documentRatings: Array<{ id: string; rating: RagRating }> = [];
 
-      for (const doc of documents) {
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i];
+        this.logger.log(
+          `Validation du document ${i + 1}/${documents.length} (ID: ${doc.id})`,
+        );
+
         try {
           // Générer une requête représentative
+          this.logger.log(
+            `Génération d'une requête pour le document ${doc.id}`,
+          );
           const query = await this.generateQueryForDocument(doc.content);
+          this.logger.log(`Requête générée: "${query.substring(0, 50)}..."`);
 
           // Évaluer le document
+          this.logger.log(
+            `Évaluation du document ${doc.id} avec la requête générée`,
+          );
           const rating = await this.evaluateRagDocument(doc.content, query);
+          this.logger.log(
+            `Document ${doc.id} évalué avec un score global de ${rating.overall}/5`,
+          );
 
           // Mettre à jour le document avec la note
+          this.logger.log(`Mise à jour des métadonnées du document ${doc.id}`);
           await this.updateDocument(collectionName, doc.id, doc.content, {
             ...doc.metadata,
             rating,
@@ -837,6 +913,10 @@ Fournis le résultat au format JSON avec des notes entre 1 et 5:
           totalRating += rating.overall;
           evaluatedCount++;
           documentRatings.push({ id: doc.id, rating });
+
+          this.logger.log(
+            `Document ${doc.id} validé avec succès (${i + 1}/${documents.length} terminés)`,
+          );
         } catch (error) {
           this.logger.warn(
             `Impossible d'évaluer le document ${doc.id}: ${error.message}`,
@@ -844,10 +924,16 @@ Fournis le résultat au format JSON avec des notes entre 1 et 5:
         }
       }
 
+      const averageRating =
+        evaluatedCount > 0 ? totalRating / evaluatedCount : 0;
+      this.logger.log(
+        `Validation de la collection ${collectionName} terminée: ${evaluatedCount}/${documents.length} documents évalués, note moyenne: ${averageRating.toFixed(2)}/5`,
+      );
+
       return {
         totalDocuments: documents.length,
         evaluatedDocuments: evaluatedCount,
-        averageRating: evaluatedCount > 0 ? totalRating / evaluatedCount : 0,
+        averageRating,
         documentRatings,
       };
     } catch (error) {
