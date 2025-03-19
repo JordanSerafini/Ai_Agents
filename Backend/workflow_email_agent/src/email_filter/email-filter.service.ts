@@ -38,59 +38,56 @@ export class EmailFilterService implements OnModuleInit {
     return new Promise<number>((resolve) => {
       if (uids.length === 0) return resolve(0);
 
-      // 🔥 Optimisation avec plages d'IDs
-      const batchSize = 200; // Taille de lot optimale selon la doc
-      const batch = uids.slice(0, batchSize);
-      const remaining = uids.slice(batchSize);
+      // 🔥 Traitement email par email
+      const currentEmail = uids[0];
+      const remaining = uids.slice(1);
 
       let resolved = false;
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           resolved = true;
           this.logger.error(
-            `⏰ Timeout : la suppression a pris trop de temps pour ${batch.length} emails.`,
+            `⏰ Timeout : la suppression a pris trop de temps pour l'email ${currentEmail}.`,
           );
 
           // Si on a des emails restants, on continue avec eux
           if (remaining.length > 0) {
             this.logger.log(
-              `⏭️ Passage aux ${remaining.length} emails suivants...`,
+              `⏭️ Passage à l'email suivant (${remaining.length} restants)...`,
             );
             setTimeout(() => {
               void this.deleteEmailBatch(remaining).then((deleted) =>
                 resolve(deleted),
               );
-            }, 500); // Pause réduite à 500ms
+            }, 2000); // Pause de 2 secondes entre les emails
           } else {
             resolve(0);
           }
         }
-      }, 15000); // Timeout de 15 secondes
+      }, 10000); // Timeout réduit à 10 secondes
 
       this.logger.log(
-        `🔄 Tentative de suppression d'un lot de ${batch.length} emails...`,
+        `🔄 Tentative de suppression de l'email ${currentEmail}...`,
       );
 
-      // Utilisation de plages d'IDs pour optimiser la suppression
-      const ranges = this.createRanges(batch);
-
-      this.imap.addFlags(ranges, '\\Deleted', (err) => {
+      // Suppression d'un seul email
+      this.imap.addFlags([currentEmail], '\\Deleted', (err) => {
         if (resolved) return;
         if (err) {
           clearTimeout(timeoutId);
           resolved = true;
           this.logger.error('❌ Erreur lors de la suppression:', err);
 
-          // En cas d'erreur, on passe aux suivants
+          // En cas d'erreur, on passe au suivant
           if (remaining.length > 0) {
             this.logger.log(
-              `⏭️ Erreur, passage aux ${remaining.length} emails suivants...`,
+              `⏭️ Erreur, passage à l'email suivant (${remaining.length} restants)...`,
             );
             setTimeout(() => {
               void this.deleteEmailBatch(remaining).then((deleted) =>
                 resolve(deleted),
               );
-            }, 500);
+            }, 2000);
           } else {
             resolve(0);
           }
@@ -103,71 +100,49 @@ export class EmailFilterService implements OnModuleInit {
             if (expungeErr) {
               this.logger.error("❌ Erreur lors de l'expunge:", expungeErr);
               this.logger.log(
-                `⚠️ Email marqué pour suppression mais non expungé`,
+                `⚠️ Email ${currentEmail} marqué pour suppression mais non expungé`,
               );
 
               if (remaining.length > 0) {
                 this.logger.log(
-                  `⏭️ Passage aux ${remaining.length} emails suivants...`,
+                  `⏭️ Passage à l'email suivant (${remaining.length} restants)...`,
                 );
                 setTimeout(() => {
                   void this.deleteEmailBatch(remaining)
                     .then((deletedRemaining) => {
-                      resolve(batch.length + deletedRemaining);
+                      resolve(1 + deletedRemaining);
                     })
                     .catch(() => {
-                      resolve(batch.length);
+                      resolve(1);
                     });
-                }, 500);
+                }, 2000);
               } else {
-                resolve(batch.length);
+                resolve(1);
               }
             } else {
-              this.logger.log(`✅ ${batch.length} emails supprimés.`);
+              this.logger.log(`✅ Email ${currentEmail} supprimé.`);
 
               if (remaining.length > 0) {
                 this.logger.log(
-                  `⏭️ Passage aux ${remaining.length} emails suivants...`,
+                  `⏭️ Passage à l'email suivant (${remaining.length} restants)...`,
                 );
                 setTimeout(() => {
                   void this.deleteEmailBatch(remaining)
                     .then((deletedRemaining) => {
-                      resolve(batch.length + deletedRemaining);
+                      resolve(1 + deletedRemaining);
                     })
                     .catch(() => {
-                      resolve(batch.length);
+                      resolve(1);
                     });
-                }, 500);
+                }, 2000);
               } else {
-                resolve(batch.length);
+                resolve(1);
               }
             }
           });
         }
       });
     });
-  }
-
-  // Nouvelle méthode pour créer des plages d'IDs
-  private createRanges(uids: number[]): string[] {
-    if (uids.length === 0) return [];
-
-    const ranges: string[] = [];
-    let start = uids[0];
-    let prev = uids[0];
-
-    for (let i = 1; i < uids.length; i++) {
-      if (uids[i] === prev + 1) {
-        prev = uids[i];
-      } else {
-        ranges.push(start === prev ? start.toString() : `${start}:${prev}`);
-        start = uids[i];
-        prev = uids[i];
-      }
-    }
-
-    ranges.push(start === prev ? start.toString() : `${start}:${prev}`);
-    return ranges;
   }
 
   async processEmails(): Promise<{ deleted: number }> {
