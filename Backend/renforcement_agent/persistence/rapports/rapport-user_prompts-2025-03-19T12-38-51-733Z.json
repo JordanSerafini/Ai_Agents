@@ -1,0 +1,63 @@
+{
+  "id": "rapport-user_prompts-2025-03-19T12-38-51-733Z",
+  "timestamp": "2025-03-19T12:38:51.733Z",
+  "collection": "user_prompts",
+  "totalDocuments": 2,
+  "evaluatedDocuments": 2,
+  "averageRating": 4,
+  "documentRatings": [
+    {
+      "id": "a0d3e29f-c462-4697-aaae-0759a3c07867",
+      "rating": {
+        "relevance": 4,
+        "quality": 5,
+        "completeness": 3,
+        "overall": 4,
+        "feedback": "Ce document sur \"compare les projet de janvier a fevrier 2025?...\" \n          a obtenu un score de 4/5. \n          Il est très pertinent \n          pour répondre à des requêtes comme \"Tu es un expert en génération de requête...\".\n          Il manque certains détails importants.",
+        "timestamp": "2025-03-19T12:38:47.723Z",
+        "detailedEvaluation": {
+          "relevance": 4,
+          "relevance_feedback": "Le document a0d3e29f traite de \"compare les projet de janvier a fevrier 2025?...\" \n            ce qui est très pertinent \n            par rapport à la requête \"Tu es un expert en génération de requêtes.\nVoici u...\"",
+          "accuracy": 5,
+          "accuracy_feedback": "Les informations présentées dans le document sont très précises \n            concernant compare les projet de janvier ...",
+          "completeness": 3,
+          "completeness_feedback": "Le document couvre partiellement \n            le sujet \"compare les projet de janvier a fevrier 2025?\"",
+          "clarity": 4,
+          "clarity_feedback": "La structure et la présentation du document sont très claires",
+          "improvement_suggestions": [
+            "Ajouter plus de contexte sur compare les projet...",
+            "Améliorer la structure de la section sur compare les projet de janvier a fevrier 2025?",
+            "Inclure des exemples concrets pour illustrer compare les projet de janvier a fevrier ..."
+          ]
+        }
+      }
+    },
+    {
+      "id": "11145a81-1467-4884-9919-c956b5b2ae69",
+      "rating": {
+        "relevance": 4,
+        "quality": 5,
+        "completeness": 3,
+        "overall": 4,
+        "feedback": "Ce document sur \"quel sont lses chantiers les plus rentable ??...\" \n          a obtenu un score de 4/5. \n          Il est très pertinent \n          pour répondre à des requêtes comme \"Tu es un expert en génération de requête...\".\n          Il manque certains détails importants.",
+        "timestamp": "2025-03-19T12:38:51.732Z",
+        "detailedEvaluation": {
+          "relevance": 4,
+          "relevance_feedback": "Le document 11145a81 traite de \"quel sont lses chantiers les plus rentable ??...\" \n            ce qui est très pertinent \n            par rapport à la requête \"Tu es un expert en génération de requêtes.\nVoici u...\"",
+          "accuracy": 5,
+          "accuracy_feedback": "Les informations présentées dans le document sont très précises \n            concernant quel sont lses chantiers les p...",
+          "completeness": 3,
+          "completeness_feedback": "Le document couvre partiellement \n            le sujet \"quel sont lses chantiers les plus rentable ??\"",
+          "clarity": 4,
+          "clarity_feedback": "La structure et la présentation du document sont très claires",
+          "improvement_suggestions": [
+            "Ajouter plus de contexte sur quel sont lses...",
+            "Améliorer la structure de la section sur quel sont lses chantiers les plus rentable ??",
+            "Inclure des exemples concrets pour illustrer quel sont lses chantiers les plus rentab..."
+          ]
+        }
+      }
+    }
+  ],
+  "summary": "\nRapport d'évaluation RAG pour la collection \"user_prompts\"\nDate: 3/19/2025, 12:38:51 PM\n\nRÉSUMÉ DE L'ÉVALUATION:\n- Documents évalués: 2/2 (100%)\n- Note moyenne globale: 4.00/5\n\nRÉPARTITION DES NOTES:\n- Documents de haute qualité (≥4/5): 2 (100%)\n- Documents de qualité moyenne (3-4/5): 0 (0%)\n- Documents de faible qualité (<3/5): 0 (0%)\n\nSCORES MOYENS PAR CRITÈRE:\n- Pertinence: 4.00/5\n- Qualité: 5.00/5\n- Complétude: 3.00/5\n\nCONCLUSIONS:\nLa qualité globale de la collection est excellente.\nLa complétude des documents est insuffisante. Enrichissez les documents avec plus de détails.\nRecommandations: Concentrez les efforts d'amélioration sur les documents de faible qualité identifiés.\n    "
+}

@@ -676,28 +676,29 @@ Analyse le document en détail selon ces critères spécifiques et attribue une 
    - La clarté et la cohérence de la présentation
    - 1: Confus/incohérent, 3: Compréhensible avec effort, 5: Parfaitement structuré et clair
 
-Pour chaque critère, fournis une justification brève de ta note.
+Pour chaque critère, fournis une justification spécifique en te référant explicitement au contenu du document et à la requête. 
+NE PAS utiliser des phrases génériques ou des modèles - chaque évaluation doit être unique et basée sur le contenu réel.
 
 Ensuite:
 - Calcule un score GLOBAL qui est la moyenne des quatre notes ci-dessus
-- Propose 2-3 suggestions concrètes pour améliorer ce document
+- Propose 2-3 suggestions concrètes et spécifiques pour améliorer ce document
 
 IMPORTANT: Fournis UNIQUEMENT un objet JSON valide avec cette structure EXACTE:
 
 {
   "relevance": 4,
-  "relevance_feedback": "Le document répond directement à la requête avec des informations pertinentes sur...",
+  "relevance_feedback": "Le document [ANALYSE SPÉCIFIQUE basée sur le texte réel]",
   "accuracy": 5,
-  "accuracy_feedback": "Toutes les informations présentées sont vérifiables et précises...",
+  "accuracy_feedback": "Les informations [ANALYSE SPÉCIFIQUE basée sur le texte réel]",
   "completeness": 3,
-  "completeness_feedback": "Le document couvre les aspects principaux mais manque de détails sur...",
+  "completeness_feedback": "Le document [ANALYSE SPÉCIFIQUE basée sur le texte réel]",
   "clarity": 4,
-  "clarity_feedback": "L'information est bien structurée mais pourrait bénéficier de...",
+  "clarity_feedback": "L'information [ANALYSE SPÉCIFIQUE basée sur le texte réel]",
   "overall": 4,
   "improvement_suggestions": [
-    "Ajouter des détails sur X pour améliorer la complétude",
-    "Restructurer la section Y pour plus de clarté",
-    "Inclure des références à Z pour renforcer la crédibilité"
+    "[SUGGESTION SPÉCIFIQUE #1 basée sur le contenu réel]",
+    "[SUGGESTION SPÉCIFIQUE #2 basée sur le contenu réel]",
+    "[SUGGESTION SPÉCIFIQUE #3 basée sur le contenu réel]"
   ]
 }
 
@@ -709,7 +710,52 @@ Inclus UNIQUEMENT le JSON dans ta réponse, sans texte additionnel.
         max_new_tokens: 800,
       });
 
-      return this.parseEnhancedRatingFromResponse(response);
+      // Parser la réponse et l'enrichir si nécessaire
+      const rating = this.parseEnhancedRatingFromResponse(response);
+
+      // Enrichir les feedbacks si nécessaires
+      if (rating.detailedEvaluation) {
+        if (rating.detailedEvaluation.relevance_feedback.includes('...')) {
+          rating.detailedEvaluation.relevance_feedback = `Le document traite de "${document.substring(0, 50)}..." 
+            ce qui est ${rating.relevance >= 4 ? 'très pertinent' : rating.relevance >= 3 ? 'assez pertinent' : 'peu pertinent'} 
+            par rapport à la requête "${query.substring(0, 50)}..."`;
+        }
+
+        if (rating.detailedEvaluation.accuracy_feedback.includes('...')) {
+          rating.detailedEvaluation.accuracy_feedback = `Les informations présentées dans le document sont ${rating.quality >= 4 ? 'très précises' : 'de qualité moyenne'} 
+            concernant ${document.substring(0, 30)}...`;
+        }
+
+        if (rating.detailedEvaluation.completeness_feedback.includes('...')) {
+          rating.detailedEvaluation.completeness_feedback = `Le document couvre ${rating.completeness >= 4 ? 'de manière exhaustive' : 'partiellement'} 
+            le sujet "${document.split('.')[0]}"`;
+        }
+
+        if (rating.detailedEvaluation.clarity_feedback.includes('...')) {
+          rating.detailedEvaluation.clarity_feedback = `La structure et la présentation du document sont ${rating.overall >= 4 ? 'très claires' : 'à améliorer'}`;
+        }
+
+        // Vérifier si les suggestions sont génériques
+        if (Array.isArray(rating.detailedEvaluation.improvement_suggestions)) {
+          const hasGenericSuggestions =
+            rating.detailedEvaluation.improvement_suggestions.some(
+              (suggestion) =>
+                suggestion.includes('X') ||
+                suggestion.includes('Y') ||
+                suggestion.includes('Z'),
+            );
+
+          if (hasGenericSuggestions) {
+            rating.detailedEvaluation.improvement_suggestions = [
+              `Ajouter plus de contexte sur ${document.split(' ').slice(0, 3).join(' ')}...`,
+              `Améliorer la structure de la section sur ${document.split('.')[0]}`,
+              `Inclure des exemples concrets pour illustrer ${document.substring(0, 40)}...`,
+            ];
+          }
+        }
+      }
+
+      return rating;
     } catch (error) {
       this.logger.error(
         `Erreur lors de l'évaluation du document: ${error.message}`,

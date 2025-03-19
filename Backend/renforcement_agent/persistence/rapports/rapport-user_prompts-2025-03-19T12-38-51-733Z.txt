@@ -1,0 +1,65 @@
+
+==============================================================
+RAPPORT D'ÉVALUATION RAG DÉTAILLÉ
+==============================================================
+ID du rapport: rapport-user_prompts-2025-03-19T12-38-51-733Z
+Date: 3/19/2025, 12:38:51 PM
+Collection: user_prompts
+==============================================================
+
+
+Rapport d'évaluation RAG pour la collection "user_prompts"
+Date: 3/19/2025, 12:38:51 PM
+
+RÉSUMÉ DE L'ÉVALUATION:
+- Documents évalués: 2/2 (100%)
+- Note moyenne globale: 4.00/5
+
+RÉPARTITION DES NOTES:
+- Documents de haute qualité (≥4/5): 2 (100%)
+- Documents de qualité moyenne (3-4/5): 0 (0%)
+- Documents de faible qualité (<3/5): 0 (0%)
+
+SCORES MOYENS PAR CRITÈRE:
+- Pertinence: 4.00/5
+- Qualité: 5.00/5
+- Complétude: 3.00/5
+
+CONCLUSIONS:
+La qualité globale de la collection est excellente.
+La complétude des documents est insuffisante. Enrichissez les documents avec plus de détails.
+Recommandations: Concentrez les efforts d'amélioration sur les documents de faible qualité identifiés.
+    
+
+==============================================================
+DÉTAIL DES ÉVALUATIONS PAR DOCUMENT
+==============================================================
+
+DOCUMENT #1 (ID: a0d3e29f-c462-4697-aaae-0759a3c07867)
+Score global: 4/5
+- Pertinence: 4/5
+- Qualité: 5/5
+- Complétude: 3/5
+
+ÉVALUATION DÉTAILLÉE:
+Ce document sur "compare les projet de janvier a fevrier 2025?..." 
+          a obtenu un score de 4/5. 
+          Il est très pertinent 
+          pour répondre à des requêtes comme "Tu es un expert en génération de requête...".
+          Il manque certains détails importants.
+
+--------------------------------------------------------------
+
+DOCUMENT #2 (ID: 11145a81-1467-4884-9919-c956b5b2ae69)
+Score global: 4/5
+- Pertinence: 4/5
+- Qualité: 5/5
+- Complétude: 3/5
+
+ÉVALUATION DÉTAILLÉE:
+Ce document sur "quel sont lses chantiers les plus rentable ??..." 
+          a obtenu un score de 4/5. 
+          Il est très pertinent 
+          pour répondre à des requêtes comme "Tu es un expert en génération de requête...".
+          Il manque certains détails importants.
+
