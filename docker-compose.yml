@@ -75,12 +75,21 @@ services:
     container_name: workflow_email_agent
     ports:
       - "${WORKFLOW_EMAIL_AGENT_PORT}:3011"
+    volumes:
+      - ./Backend/workflow_email_agent/persistence:/app/data/persistence
     env_file:
       - .env
     command: >
       sh -c "npm install && npm run start:dev"
     restart: unless-stopped
-
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - app-network
 
   postgres:
     container_name: postgres
