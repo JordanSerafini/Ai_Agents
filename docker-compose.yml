@@ -7,7 +7,7 @@ services:
     ports:
       - "${ANALYSE_AGENT_PORT}:3001"
     volumes:
-      - ./Backend/analyse_agent/src/data:/app/data
+      - ./Backend/analyse_agent/persistence:/app/data/persistence
     env_file:
       - .env
     environment:
@@ -75,7 +75,7 @@ services:
     container_name: ChromaDB
     image: ghcr.io/chroma-core/chroma
     volumes:
-      - ./Backend/analyse_agent/src/data/chroma:/data
+      - ./Backend/analyse_agent/persistence/chroma:/chroma/chroma
     ports:
       - "8000:8000"
     networks:
@@ -84,7 +84,7 @@ services:
       - CHROMA_OPEN_TELEMETRY__ENDPOINT=http://otel-collector:4317/
       - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
-      - CHROMA_PERSIST_DIRECTORY=/data
+      - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
     depends_on:
       - otel-collector
       - zipkin

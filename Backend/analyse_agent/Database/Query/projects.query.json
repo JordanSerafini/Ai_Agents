@@ -1058,6 +1058,42 @@
       ],
       "sql": "WITH seasonal_projects AS (SELECT p.id, p.name, CASE WHEN EXTRACT(MONTH FROM p.start_date) IN (12, 1, 2) THEN 'Hiver' WHEN EXTRACT(MONTH FROM p.start_date) IN (3, 4, 5) THEN 'Printemps' WHEN EXTRACT(MONTH FROM p.start_date) IN (6, 7, 8) THEN 'Été' WHEN EXTRACT(MONTH FROM p.start_date) IN (9, 10, 11) THEN 'Automne' END AS season, (p.end_date - p.start_date) AS duration_days, COALESCE(SUM(i.total_ttc), 0) AS total_revenue, COALESCE(SUM(e.amount), 0) AS total_expenses FROM projects p LEFT JOIN invoices i ON p.id = i.project_id LEFT JOIN expenses e ON p.id = e.project_id WHERE p.start_date IS NOT NULL AND p.end_date IS NOT NULL AND p.status IN (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') GROUP BY p.id, p.name, p.start_date, p.end_date) SELECT season, COUNT(*) AS project_count, ROUND(AVG(duration_days)) AS avg_duration, ROUND(AVG(total_revenue)) AS avg_revenue, ROUND(AVG(total_expenses)) AS avg_expenses, ROUND(AVG(total_revenue - total_expenses)) AS avg_profit FROM seasonal_projects GROUP BY season ORDER BY CASE WHEN season = 'Hiver' THEN 1 WHEN season = 'Printemps' THEN 2 WHEN season = 'Été' THEN 3 WHEN season = 'Automne' THEN 4 END",
       "description": "Analyse des performances des projets par saison (nombre de projets, durée moyenne, revenus moyens, dépenses moyennes, profit moyen)"
+    },
+    {
+      "id": "projects_period_comparison",
+      "questions": [
+        "Compare les projets entre [PERIOD1_START] et [PERIOD1_END] avec ceux entre [PERIOD2_START] et [PERIOD2_END]",
+        "Différences entre les projets de [PERIOD1_START] à [PERIOD1_END] et de [PERIOD2_START] à [PERIOD2_END]",
+        "Analyse comparative des projets sur deux périodes",
+        "Évolution des projets entre deux périodes",
+        "Quelles sont les différences entre les projets de deux périodes",
+        "Compare les chantiers de deux périodes différentes",
+        "Comparatif des projets entre deux périodes"
+      ],
+      "sql": "WITH periode1 AS (SELECT COUNT(*) AS nombre_projets, COUNT(DISTINCT client_id) AS nombre_clients, ROUND(AVG(EXTRACT(DAY FROM (end_date - start_date)))) AS duree_moyenne, SUM(CASE WHEN rs.code = 'termine' THEN 1 ELSE 0 END) AS projets_termines, ROUND(AVG(COALESCE(pb.total_budget, 0))) AS budget_moyen FROM projects p JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_budgets pb ON p.id = pb.project_id WHERE p.start_date BETWEEN '[PERIOD1_START]'::date AND '[PERIOD1_END]'::date), periode2 AS (SELECT COUNT(*) AS nombre_projets, COUNT(DISTINCT client_id) AS nombre_clients, ROUND(AVG(EXTRACT(DAY FROM (end_date - start_date)))) AS duree_moyenne, SUM(CASE WHEN rs.code = 'termine' THEN 1 ELSE 0 END) AS projets_termines, ROUND(AVG(COALESCE(pb.total_budget, 0))) AS budget_moyen FROM projects p JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_budgets pb ON p.id = pb.project_id WHERE p.start_date BETWEEN '[PERIOD2_START]'::date AND '[PERIOD2_END]'::date) SELECT p1.nombre_projets AS projets_periode1, p2.nombre_projets AS projets_periode2, (p2.nombre_projets - p1.nombre_projets) AS diff_projets, CASE WHEN p1.nombre_projets > 0 THEN ROUND(((p2.nombre_projets - p1.nombre_projets)::numeric / p1.nombre_projets) * 100, 2) ELSE NULL END AS variation_projets_pct, p1.nombre_clients AS clients_periode1, p2.nombre_clients AS clients_periode2, (p2.nombre_clients - p1.nombre_clients) AS diff_clients, p1.duree_moyenne AS duree_moyenne_periode1, p2.duree_moyenne AS duree_moyenne_periode2, (p2.duree_moyenne - p1.duree_moyenne) AS diff_duree, p1.projets_termines AS termines_periode1, p2.projets_termines AS termines_periode2, (p2.projets_termines - p1.projets_termines) AS diff_termines, p1.budget_moyen AS budget_moyen_periode1, p2.budget_moyen AS budget_moyen_periode2, (p2.budget_moyen - p1.budget_moyen) AS diff_budget FROM periode1 p1, periode2 p2",
+      "description": "Analyse comparative des projets démarrés sur deux périodes distinctes (nombre de projets, clients, durée moyenne, projets terminés, budget moyen)",
+      "parameters": [
+        {
+          "name": "PERIOD1_START",
+          "description": "Date de début de la première période (format YYYY-MM-DD)",
+          "default": "DATE_TRUNC('month', CURRENT_DATE)::date - INTERVAL '1 month'"
+        },
+        {
+          "name": "PERIOD1_END",
+          "description": "Date de fin de la première période (format YYYY-MM-DD)",
+          "default": "DATE_TRUNC('month', CURRENT_DATE)::date - INTERVAL '1 day'"
+        },
+        {
+          "name": "PERIOD2_START",
+          "description": "Date de début de la seconde période (format YYYY-MM-DD)",
+          "default": "DATE_TRUNC('month', CURRENT_DATE)::date"
+        },
+        {
+          "name": "PERIOD2_END",
+          "description": "Date de fin de la seconde période (format YYYY-MM-DD)",
+          "default": "CURRENT_DATE"
+        }
+      ]
     }
   ]
 }
