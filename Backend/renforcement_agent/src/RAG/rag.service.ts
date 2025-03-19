@@ -818,7 +818,7 @@ Fournis le résultat au format JSON avec des notes entre 1 et 5:
 
       let totalRating = 0;
       let evaluatedCount = 0;
-      const documentRatings = [];
+      const documentRatings: Array<{ id: string; rating: RagRating }> = [];
 
       for (const doc of documents) {
         try {
