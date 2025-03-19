@@ -1,0 +1,212 @@
+import { Controller, Get, Post, Body, Param, Logger } from '@nestjs/common';
+import { HuggingFaceService } from './huggingface.service';
+import { RagService } from '../RAG/rag.service';
+
+interface EvaluatePromptDto {
+  prompt: string;
+}
+
+interface EvaluateSqlDto {
+  sql: string;
+  originalPrompt: string;
+}
+
+interface ComparePromptSqlDto {
+  prompt: string;
+  sql: string;
+}
+
+@Controller('analyse')
+export class HuggingFaceController {
+  private readonly logger = new Logger(HuggingFaceController.name);
+  private readonly promptCollectionName = 'user_prompts';
+  private readonly sqlQueryCacheName = 'sql_queries';
+
+  constructor(
+    private readonly huggingFaceService: HuggingFaceService,
+    private readonly ragService: RagService,
+  ) {
+    // Créer les collections si elles n'existent pas
+    void this.initCollections();
+  }
+
+  private async initCollections() {
+    try {
+      await this.ragService.getOrCreateCollection(this.promptCollectionName);
+      await this.ragService.getOrCreateCollection(this.sqlQueryCacheName);
+      this.logger.log(`Collections initialisées`);
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'initialisation des collections: ${error.message}`,
+      );
+    }
+  }
+
+  @Post('prompt/eval')
+  async evaluatePrompt(@Body() dto: EvaluatePromptDto) {
+    this.logger.log(
+      `Évaluation du prompt: "${dto.prompt.substring(0, 50)}..."`,
+    );
+    return this.huggingFaceService.evaluatePrompt(dto.prompt);
+  }
+
+  @Post('sql/eval')
+  async evaluateSql(@Body() dto: EvaluateSqlDto) {
+    this.logger.log(
+      `Évaluation de la requête SQL pour le prompt: "${dto.originalPrompt.substring(0, 50)}..."`,
+    );
+    return this.huggingFaceService.evaluateSqlQuery(
+      dto.sql,
+      dto.originalPrompt,
+    );
+  }
+
+  @Post('compare')
+  async comparePromptAndSql(@Body() dto: ComparePromptSqlDto) {
+    this.logger.log(`Comparaison du prompt et de la requête SQL`);
+    return this.huggingFaceService.comparePromptAndSql(dto.prompt, dto.sql);
+  }
+
+  @Get('prompt/eval/:id')
+  async evaluatePromptById(@Param('id') id: string) {
+    this.logger.log(`Évaluation du prompt avec l'ID: ${id}`);
+    // Récupération du prompt depuis la collection ChomeDB et évaluation
+    try {
+      // Récupérer le document depuis Chroma
+      const document = await this.ragService.getDocument(
+        this.promptCollectionName,
+        id,
+      );
+
+      if (!document) {
+        return {
+          success: false,
+          message: `Prompt avec l'ID ${id} non trouvé`,
+        };
+      }
+
+      // Évaluer le prompt avec le service HuggingFace
+      const evaluation = await this.huggingFaceService.evaluatePrompt(
+        document.content,
+      );
+
+      return {
+        success: true,
+        message: `Prompt évalué avec succès`,
+        evaluation,
+        document,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'évaluation du prompt ${id}: ${error.message}`,
+      );
+      return {
+        success: false,
+        message: `Erreur: ${error.message}`,
+      };
+    }
+  }
+
+  @Get('sql/eval/:id')
+  async evaluateSqlById(@Param('id') id: string) {
+    this.logger.log(`Évaluation de la requête SQL avec l'ID: ${id}`);
+    // Récupération de la requête SQL depuis la collection ChomeDB et évaluation
+    try {
+      // Récupérer le document depuis Chroma
+      const document = await this.ragService.getDocument(
+        this.sqlQueryCacheName,
+        id,
+      );
+
+      if (!document) {
+        return {
+          success: false,
+          message: `Requête SQL avec l'ID ${id} non trouvée`,
+        };
+      }
+
+      // Pour une évaluation plus précise, nous aurions besoin du prompt original
+      const originalPrompt =
+        document.metadata?.originalPrompt || 'Requête utilisateur inconnue';
+
+      // Évaluer la requête SQL avec le service HuggingFace
+      const evaluation = await this.huggingFaceService.evaluateSqlQuery(
+        document.content,
+        originalPrompt,
+      );
+
+      return {
+        success: true,
+        message: `Requête SQL évaluée avec succès`,
+        evaluation,
+        document,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'évaluation de la requête SQL ${id}: ${error.message}`,
+      );
+      return {
+        success: false,
+        message: `Erreur: ${error.message}`,
+      };
+    }
+  }
+
+  @Post('validate/all')
+  async validateAllCollections() {
+    this.logger.log(`Validation de toutes les collections RAG`);
+    try {
+      // Valider les deux collections
+      const promptsResult = await this.ragService.validateCollection(
+        this.promptCollectionName,
+      );
+
+      const sqlResult = await this.ragService.validateCollection(
+        this.sqlQueryCacheName,
+      );
+
+      // Générer un rapport d'analyse
+      const stats = {
+        user_prompts: {
+          totalDocuments: promptsResult.totalDocuments,
+          averageRating: promptsResult.averageRating,
+          lowQualityDocuments: promptsResult.documentRatings.filter(
+            (doc) => doc.rating.overall < 3,
+          ).length,
+          highQualityDocuments: promptsResult.documentRatings.filter(
+            (doc) => doc.rating.overall >= 4,
+          ).length,
+        },
+        sql_queries: {
+          totalDocuments: sqlResult.totalDocuments,
+          averageRating: sqlResult.averageRating,
+          lowQualityDocuments: sqlResult.documentRatings.filter(
+            (doc) => doc.rating.overall < 3,
+          ).length,
+          highQualityDocuments: sqlResult.documentRatings.filter(
+            (doc) => doc.rating.overall >= 4,
+          ).length,
+        },
+      };
+
+      const analysisReport =
+        await this.huggingFaceService.generateRagAnalysisReport(stats);
+
+      return {
+        success: true,
+        message: `Toutes les collections validées avec succès`,
+        prompt_collection: promptsResult,
+        sql_collection: sqlResult,
+        analysis: analysisReport,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la validation des collections: ${error.message}`,
+      );
+      return {
+        success: false,
+        message: `Erreur: ${error.message}`,
+      };
+    }
+  }
+}
