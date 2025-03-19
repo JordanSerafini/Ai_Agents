@@ -34,16 +34,84 @@ export class EmailFilterService implements OnModuleInit {
     this.logger.log("Service de filtrage d'emails initialisé");
   }
 
-  private async deleteEmailBatch(uids: number[]): Promise<number> {
+  private async deleteEmailBatch(
+    uids: number[],
+    retryCount = 0,
+  ): Promise<number> {
     return new Promise<number>((resolve) => {
-      if (uids.length === 0) return resolve(0);
+      let resolved = false;
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          this.logger.error(
+            '⏰ Timeout : la suppression a pris trop de temps.',
+          );
+
+          // Si nous avons moins de 2 tentatives et au moins 10 emails, réessayer avec un lot plus petit
+          if (retryCount < 2 && uids.length > 10) {
+            this.logger.log(
+              `🔄 Tentative de nouvelle suppression avec un lot plus petit (${Math.floor(uids.length / 2)} emails)...`,
+            );
+            // Diviser le lot en deux et réessayer avec la première moitié
+            const halfSize = Math.floor(uids.length / 2);
+            const firstHalf = uids.slice(0, halfSize);
+
+            // Réessayer de façon asynchrone pour ne pas bloquer
+            setTimeout(() => {
+              // Utilisation d'une IIFE (Immediately Invoked Function Expression) non-async
+              void (async () => {
+                const deletedInRetry = await this.deleteEmailBatch(
+                  firstHalf,
+                  retryCount + 1,
+                );
+                resolve(deletedInRetry);
+              })();
+            }, 1000);
+          } else {
+            resolve(0);
+          }
+        }
+      }, 15000); // timeout de 15 secondes maximum
+
+      if (uids.length === 0) {
+        clearTimeout(timeout);
+        return resolve(0);
+      }
 
       this.imap.addFlags(uids, '\\Deleted', (err) => {
+        if (resolved) return;
         if (err) {
+          clearTimeout(timeout);
+          resolved = true;
           this.logger.error('Erreur lors de la suppression:', err);
-          resolve(0);
+
+          // Si erreur et lot important, tenter avec un lot plus petit
+          if (retryCount < 2 && uids.length > 10) {
+            this.logger.log(
+              `🔄 Tentative après erreur avec un lot plus petit (${Math.floor(uids.length / 2)} emails)...`,
+            );
+            const halfSize = Math.floor(uids.length / 2);
+            const firstHalf = uids.slice(0, halfSize);
+
+            setTimeout(() => {
+              // Utilisation d'une IIFE (Immediately Invoked Function Expression) non-async
+              void (async () => {
+                const deletedInRetry = await this.deleteEmailBatch(
+                  firstHalf,
+                  retryCount + 1,
+                );
+                resolve(deletedInRetry);
+              })();
+            }, 1000);
+          } else {
+            resolve(0);
+          }
         } else {
           this.imap.expunge((expungeErr) => {
+            if (resolved) return;
+            clearTimeout(timeout);
+            resolved = true;
             if (expungeErr) {
               this.logger.error(
                 'Erreur lors de la suppression définitive:',
@@ -93,28 +161,52 @@ export class EmailFilterService implements OnModuleInit {
       let analyzedCount = 0;
       const emailsToDelete: number[] = [];
       let totalDeleted = 0;
-      let currentBatch = 1;
+      let shouldStop = false;
 
       await new Promise<void>((resolve) => {
         fetch.on('message', (msg: Imap.ImapMessage) => {
           let uid: number | null = null;
-          let messageProcessed = false;
+          let buffer = '';
 
           msg.on('attributes', (attrs) => {
             uid = attrs.uid;
           });
 
-          msg.on('body', async (stream: Stream) => {
-            try {
-              if (messageProcessed) return;
-              messageProcessed = true;
+          msg.on('body', (stream: Stream) => {
+            stream.on('data', (chunk) => {
+              buffer += chunk.toString('utf8');
+            });
+          });
 
-              const parsed = await simpleParser(stream);
+          msg.once('end', async () => {
+            if (!uid) {
+              this.logger.warn(`❌ UID manquant pour un email`);
+              return;
+            }
+
+            if (shouldStop) {
+              return;
+            }
+
+            try {
+              const parsed = await simpleParser(buffer);
               analyzedCount++;
 
-              // Afficher le compteur moins fréquemment
               if (analyzedCount % 1000 === 0) {
                 this.logger.log(`Emails analysés: ${analyzedCount}`);
+              }
+
+              if (analyzedCount <= 10) {
+                this.logger.log("=== Détails de l'email ===");
+                this.logger.log(`Sujet: ${parsed.subject}`);
+                this.logger.log(`De: ${parsed.from?.text}`);
+                this.logger.log(
+                  `Texte brut: ${parsed.text ? parsed.text.substring(0, 200) : 'Non disponible'}`,
+                );
+                this.logger.log(
+                  `HTML: ${parsed.html ? parsed.html.substring(0, 200) : 'Non disponible'}`,
+                );
+                this.logger.log('=======================');
               }
 
               const subject = parsed.subject || '';
@@ -138,33 +230,30 @@ export class EmailFilterService implements OnModuleInit {
               );
 
               if (hasUnsubscribe) {
-                if (uid) {
-                  emailsToDelete.push(uid);
-                  // Réduire la fréquence des logs pour les emails à supprimer
-                  if (emailsToDelete.length % 100 === 0) {
-                    this.logger.log(
-                      `✅ ${emailsToDelete.length} emails marqués pour suppression`,
-                    );
-                  }
-                } else {
-                  this.logger.warn(
-                    `❌ UID manquant pour l'email : "${subject}"`,
-                  );
-                }
+                emailsToDelete.push(uid);
+                this.logger.log(
+                  `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
+                );
               }
 
-              // Traitement par lot de 1000
-              if (analyzedCount % 1000 === 0) {
-                if (emailsToDelete.length > 0) {
-                  const deletedInBatch =
-                    await this.deleteEmailBatch(emailsToDelete);
-                  totalDeleted += deletedInBatch;
-                  this.logger.log(
-                    `✓ Lot #${currentBatch}: ${deletedInBatch} emails supprimés (Total: ${totalDeleted})`,
-                  );
-                  emailsToDelete.length = 0;
-                }
-                currentBatch++;
+              if (analyzedCount >= 100) {
+                this.logger.log('🔸 Arrêt du traitement à 100 emails');
+                shouldStop = true;
+
+                const emailsBatch = [...emailsToDelete];
+                emailsToDelete.length = 0;
+                analyzedCount = 0;
+
+                this.logger.log(
+                  `Suppression du lot de ${emailsBatch.length} emails...`,
+                );
+                const deletedInBatch = await this.deleteEmailBatch(emailsBatch);
+                totalDeleted += deletedInBatch;
+
+                shouldStop = false;
+                this.logger.log(
+                  '▶️ Reprise du traitement du prochain lot de 100 emails',
+                );
               }
             } catch (err) {
               this.logger.error('Erreur lors du parsing:', err);
@@ -325,26 +414,36 @@ export class EmailFilterService implements OnModuleInit {
       await new Promise<void>((resolve) => {
         fetch.on('message', (msg: Imap.ImapMessage) => {
           let uid: number | null = null;
-          let messageProcessed = false;
+          let buffer = '';
 
           msg.on('attributes', (attrs) => {
             uid = attrs.uid;
           });
 
-          msg.on('body', async (stream: Stream) => {
-            try {
-              if (messageProcessed) return;
-              messageProcessed = true;
+          msg.on('body', (stream: Stream) => {
+            stream.on('data', (chunk) => {
+              buffer += chunk.toString('utf8');
+            });
+          });
 
-              const parsed: ParsedMail = await simpleParser(stream);
+          msg.once('end', async () => {
+            if (!uid) {
+              this.logger.warn(`❌ UID manquant pour un email`);
+              return;
+            }
+
+            if (shouldStop) {
+              return;
+            }
+
+            try {
+              const parsed = await simpleParser(buffer);
               analyzedCount++;
 
-              // Afficher le compteur moins fréquemment
               if (analyzedCount % 1000 === 0) {
                 this.logger.log(`Emails analysés: ${analyzedCount}`);
               }
 
-              // Logs de débogage pour les 10 premiers emails
               if (analyzedCount <= 10) {
                 this.logger.log("=== Détails de l'email ===");
                 this.logger.log(`Sujet: ${parsed.subject}`);
@@ -379,50 +478,29 @@ export class EmailFilterService implements OnModuleInit {
               );
 
               if (hasUnsubscribe) {
-                if (uid) {
-                  emailsToDelete.push(uid);
-                  this.logger.log(
-                    `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
-                  );
-                } else {
-                  this.logger.warn(
-                    `❌ UID manquant pour l'email : "${subject}"`,
-                  );
-                }
+                emailsToDelete.push(uid);
+                this.logger.log(
+                  `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
+                );
               }
 
-              if (analyzedCount >= 200) {
-                this.logger.log('🔸 Arrêt du traitement à 200 emails');
+              if (analyzedCount >= 100) {
+                this.logger.log('🔸 Arrêt du traitement à 100 emails');
                 shouldStop = true;
 
                 const emailsBatch = [...emailsToDelete];
                 emailsToDelete.length = 0;
-                analyzedCount = 0; // Réinitialisation immédiate du compteur
+                analyzedCount = 0;
 
                 this.logger.log(
                   `Suppression du lot de ${emailsBatch.length} emails...`,
                 );
-                await new Promise<void>((resolveDelete) => {
-                  this.imap.addFlags(emailsBatch, '\\Deleted', (err) => {
-                    if (err) {
-                      this.logger.error('Erreur lors de la suppression:', err);
-                      this.imap.end();
-                      resolveDelete();
-                    } else {
-                      totalDeleted += emailsBatch.length;
-                      this.logger.log(
-                        `Emails supprimés: ${totalDeleted} au total`,
-                      );
-                      this.imap.expunge(() => {
-                        resolveDelete();
-                      });
-                    }
-                  });
-                });
+                const deletedInBatch = await this.deleteEmailBatch(emailsBatch);
+                totalDeleted += deletedInBatch;
 
                 shouldStop = false;
                 this.logger.log(
-                  '▶️ Reprise du traitement du prochain lot de 200 emails',
+                  '▶️ Reprise du traitement du prochain lot de 100 emails',
                 );
               }
             } catch (err) {
@@ -431,25 +509,18 @@ export class EmailFilterService implements OnModuleInit {
           });
         });
 
-        fetch.once('end', () => {
+        fetch.once('end', async () => {
           if (!shouldStop && emailsToDelete.length > 0) {
             this.logger.log(
               `Suppression finale de ${emailsToDelete.length} emails...`,
             );
-            this.imap.addFlags(emailsToDelete, '\\Deleted', (err) => {
-              if (err) {
-                this.logger.error('Erreur lors de la suppression:', err);
-                this.imap.end();
-                resolve();
-              } else {
-                totalDeleted += emailsToDelete.length;
-                this.logger.log(`Emails supprimés: ${totalDeleted} au total`);
-                this.imap.expunge(() => {
-                  this.imap.end();
-                  resolve();
-                });
-              }
-            });
+            const deletedFinal = await this.deleteEmailBatch(emailsToDelete);
+            totalDeleted += deletedFinal;
+            this.logger.log(
+              `🎉 Traitement terminé - Total d'emails supprimés: ${totalDeleted}`,
+            );
+            this.imap.end();
+            resolve();
           } else if (!shouldStop) {
             this.logger.log('Traitement terminé, aucun email à supprimer');
             this.imap.end();
