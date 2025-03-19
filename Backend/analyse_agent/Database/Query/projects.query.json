@@ -1119,6 +1119,17 @@
           "name": "PERIOD2_END",
           "description": "Date de fin de la seconde période (format YYYY-MM-DD)",
           "default": "CURRENT_DATE"
+        },
+        {
+          "id": "projects_starting_next_month",
+          "questions": [
+            "Quels projets commencent le mois prochain ?",
+            "Liste des projets qui débutent le mois prochain",
+            "Projets démarrant le mois prochain",
+            "quel proejts commencent le mois prochain"
+          ],
+          "sql": "SELECT p.name, p.description, p.start_date, p.end_date, rs.name as status, c.firstname || ' ' || c.lastname as client_name FROM projects p JOIN ref_status rs ON p.status = rs.id JOIN clients c ON p.client_id = c.id WHERE EXTRACT(MONTH FROM p.start_date) = EXTRACT(MONTH FROM CURRENT_DATE + INTERVAL '1 month') AND EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE + INTERVAL '1 month') ORDER BY p.start_date",
+          "description": "Liste des projets qui commencent le mois prochain"
         }
       ]
     }

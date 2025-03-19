@@ -1,13 +1,13 @@
 {
   "projects.query.json": {
-    "lastModified": 1742386288000,
-    "lastLoaded": 1742386939958,
+    "lastModified": 1742389656000,
+    "lastLoaded": 1742390610750,
     "queriesCount": 0
   },
   "quotations.query.json": {
-    "lastModified": 1742369741000,
-    "lastLoaded": 1742377849758,
-    "queriesCount": 233
+    "lastModified": 1742388978000,
+    "lastLoaded": 1742389258628,
+    "queriesCount": 4
   },
   "invoices.query.json": {
     "lastModified": 1742371385000,

@@ -656,6 +656,34 @@
           }
         }
       ]
+    },
+    {
+      "id": "quotations_monthly_comparison",
+      "questions": [
+        "Comparaison financière entre [MONTH1] et [MONTH2] [YEAR]",
+        "Comparer les finances entre [MONTH1] et [MONTH2] [YEAR]",
+        "Différence financière entre [MONTH1] et [MONTH2] [YEAR]",
+        "Evolution des montants entre [MONTH1] et [MONTH2] [YEAR]"
+      ],
+      "sql": "SELECT '[MONTH1]' AS mois, COUNT(*) as total_quotations, SUM(total_ttc) as montant_total, ROUND(AVG(total_ttc), 2) as montant_moyen FROM quotations WHERE EXTRACT(MONTH FROM issue_date) = EXTRACT(MONTH FROM DATE '[YEAR]-[MONTH1]-01') AND EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM DATE '[YEAR]-[MONTH1]-01') UNION ALL SELECT '[MONTH2]' AS mois, COUNT(*) as total_quotations, SUM(total_ttc) as montant_total, ROUND(AVG(total_ttc), 2) as montant_moyen FROM quotations WHERE EXTRACT(MONTH FROM issue_date) = EXTRACT(MONTH FROM DATE '[YEAR]-[MONTH2]-01') AND EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM DATE '[YEAR]-[MONTH2]-01') ORDER BY mois",
+      "description": "Comparaison des statistiques financières entre deux mois spécifiés",
+      "parameters": [
+        {
+          "name": "MONTH1",
+          "description": "Premier mois (format: 01, 02, ..., 12)",
+          "default": "01"
+        },
+        {
+          "name": "MONTH2",
+          "description": "Second mois (format: 01, 02, ..., 12)",
+          "default": "02"
+        },
+        {
+          "name": "YEAR",
+          "description": "Année de comparaison (format: YYYY)",
+          "default": "2024"
+        }
+      ]
     }
   ]
 }

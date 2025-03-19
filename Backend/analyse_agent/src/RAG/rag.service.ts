@@ -377,7 +377,7 @@ export class RagService {
       staff: 2.0,
       employe: 2.0,
       travaille: 1.5,
-      projet: 1.5,
+      projet: 2.0,
       quels: 1.5,
       quelles: 1.5,
       chantier: 1.5,
@@ -385,6 +385,9 @@ export class RagService {
       semaine: 1.0,
       prochain: 1.0,
       prochaine: 1.0,
+      commence: 1.5,
+      démarre: 1.5,
+      début: 1.5,
     };
 
     let commonWords = 0;
@@ -457,7 +460,7 @@ export class RagService {
   }> {
     try {
       // Vérifier si nous avons des requêtes stockées
-      const result = await this.findSimilarPrompt('queries', question, 0.7);
+      const result = await this.findSimilarPrompt('queries', question, 0.5);
 
       if (result && result.found && result.metadata) {
         return {
@@ -475,7 +478,7 @@ export class RagService {
         const reformulatedResult = await this.findSimilarPrompt(
           'queries',
           reformulatedQuestion,
-          0.7,
+          0.4,
         );
 
         if (

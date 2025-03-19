@@ -68,6 +68,20 @@ services:
     networks:
       - app-network
 
+  workflow_email_agent:
+    build:
+      context: ./Backend/workflow_email_agent
+      dockerfile: Dockerfile
+    container_name: workflow_email_agent
+    ports:
+      - "${WORKFLOW_EMAIL_AGENT_PORT}:3011"
+    env_file:
+      - .env
+    command: >
+      sh -c "npm install && npm run start:dev"
+    restart: unless-stopped
+
+
   postgres:
     container_name: postgres
     image: ankane/pgvector:latest
