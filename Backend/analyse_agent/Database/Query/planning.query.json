@@ -654,6 +654,23 @@
       ],
       "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(SUM(te.hours), 0) AS total_hours_worked FROM staff s LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND EXTRACT(MONTH FROM te.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE) WHERE s.is_available = true GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY total_hours_worked DESC LIMIT 10",
       "description": "Top 10 des employés ayant accumulé le plus d'heures de travail effectif durant le mois en cours"
+    },
+    {
+      "id": "staff_availability_next_month",
+      "questions": [
+        "Qui est disponible le mois prochain ?",
+        "Personnel disponible mois prochain",
+        "Membres du staff libres mois prochain",
+        "Employés non planifiés le mois prochain",
+        "Qui est dispo le mois prochain ?",
+        "Personnel libre mois prochain",
+        "Staff disponible mois prochain",
+        "Employés disponibles mois prochain",
+        "Qui est libre mois prochain ?",
+        "Personnel non planifié mois prochain"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM project_staff ps JOIN projects p ON ps.project_id = p.id WHERE ps.staff_id = s.id AND (p.start_date <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' + INTERVAL '1 month - 1 day')::date) AND (p.end_date >= date_trunc('month', CURRENT_DATE + INTERVAL '1 month')::date)) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour le mois prochain (sans affectation à des projets pour cette période)"
     }
   ]
 }
