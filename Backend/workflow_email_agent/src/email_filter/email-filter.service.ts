@@ -59,8 +59,8 @@ export class EmailFilterService implements OnModuleInit {
 
       // S'il reste des emails à traiter, appeler récursivement avec pause
       if (remainingUids.length > 0) {
-        this.logger.log(`⏱️ Pause de 3 secondes avant le prochain lot...`);
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        this.logger.log(`⏱️ Pause de 1 seconde avant le prochain lot...`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         const remainingCount = await this.deleteEmailBatch(remainingUids);
         return count + remainingCount;
       }
@@ -112,7 +112,7 @@ export class EmailFilterService implements OnModuleInit {
       }
 
       // Attendre 2 secondes avant de passer à l'email suivant
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Traiter les emails restants
       return this.processEmailsSequentially(remaining, count);
@@ -183,7 +183,7 @@ export class EmailFilterService implements OnModuleInit {
                 resolve(true);
               }
             });
-          }, 3000);
+          }, 1000);
         }
       });
     });
@@ -312,9 +312,9 @@ export class EmailFilterService implements OnModuleInit {
 
                 // Pause de 2 secondes après chaque suppression pour éviter de surcharger le serveur
                 this.logger.log(
-                  `⏱️ Pause de 2 secondes après la suppression de l'email ${uid}...`,
+                  `⏱️ Pause de 1 seconde après la suppression de l'email ${uid}...`,
                 );
-                await new Promise((resolve) => setTimeout(resolve, 2000));
+                await new Promise((resolve) => setTimeout(resolve, 1000));
                 this.logger.log(
                   `✅ Fin de la pause, passage à l'email suivant`,
                 );
@@ -539,9 +539,9 @@ export class EmailFilterService implements OnModuleInit {
 
             // Pause de 2 secondes après chaque suppression pour éviter de surcharger le serveur
             this.logger.log(
-              `⏱️ Pause de 2 secondes après la suppression de l'email ${uid}...`,
+              `⏱️ Pause de 1 seconde après la suppression de l'email ${uid}...`,
             );
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
             this.logger.log(`✅ Fin de la pause, passage à l'email suivant`);
           }
         } catch (err) {
