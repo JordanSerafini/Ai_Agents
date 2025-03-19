@@ -1,4 +1,4 @@
-import { Controller, Post, Get } from '@nestjs/common';
+import { Controller, Post, Get, Param, ParseIntPipe } from '@nestjs/common';
 import { EmailFilterService } from './email-filter.service';
 
 @Controller('email')
@@ -22,5 +22,11 @@ export class EmailController {
       message: 'Filtrage et suppression des emails terminé',
       deleted: result.deleted,
     };
+  }
+
+  @Post('test/:uid')
+  async testDeleteEmail(@Param('uid', ParseIntPipe) uid: number) {
+    const success = await this.emailFilterService.testDeleteSingleEmail(uid);
+    return { success, uid };
   }
 }

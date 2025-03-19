@@ -38,7 +38,6 @@ export class EmailFilterService implements OnModuleInit {
     return new Promise<number>((resolve) => {
       if (uids.length === 0) return resolve(0);
 
-      // 🔥 Traitement email par email
       const currentEmail = uids[0];
       const remaining = uids.slice(1);
 
@@ -49,97 +48,51 @@ export class EmailFilterService implements OnModuleInit {
           this.logger.error(
             `⏰ Timeout : la suppression a pris trop de temps pour l'email ${currentEmail}.`,
           );
-
-          // Si on a des emails restants, on continue avec eux
-          if (remaining.length > 0) {
-            this.logger.log(
-              `⏭️ Passage à l'email suivant (${remaining.length} restants)...`,
-            );
-            setTimeout(() => {
-              void this.deleteEmailBatch(remaining).then((deleted) =>
-                resolve(deleted),
-              );
-            }, 2000); // Pause de 2 secondes entre les emails
-          } else {
-            resolve(0);
-          }
+          setTimeout(() => {
+            this.deleteEmailBatch(remaining)
+              .then(resolve)
+              .catch((err) => {
+                this.logger.error('Erreur lors de la suppression:', err);
+                resolve(0);
+              });
+          }, 5000);
         }
-      }, 10000); // Timeout réduit à 10 secondes
+      }, 30000);
 
-      this.logger.log(
-        `🔄 Tentative de suppression de l'email ${currentEmail}...`,
-      );
+      this.logger.log(`🔄 Déplacement en cours de l'email ${currentEmail}...`);
 
-      // Suppression d'un seul email
-      this.imap.addFlags([currentEmail], '\\Deleted', (err) => {
-        if (resolved) return;
-        if (err) {
+      this.imap.move([currentEmail], '[Gmail]/Trash', (err) => {
+        if (!resolved) {
           clearTimeout(timeoutId);
           resolved = true;
-          this.logger.error('❌ Erreur lors de la suppression:', err);
 
-          // En cas d'erreur, on passe au suivant
-          if (remaining.length > 0) {
-            this.logger.log(
-              `⏭️ Erreur, passage à l'email suivant (${remaining.length} restants)...`,
+          if (err) {
+            this.logger.error(
+              `❌ Erreur lors du déplacement de l'email ${currentEmail}:`,
+              err,
             );
             setTimeout(() => {
-              void this.deleteEmailBatch(remaining).then((deleted) =>
-                resolve(deleted),
-              );
-            }, 2000);
-          } else {
-            resolve(0);
+              this.deleteEmailBatch(remaining)
+                .then(resolve)
+                .catch((err) => {
+                  this.logger.error('Erreur lors de la suppression:', err);
+                  resolve(0);
+                });
+            }, 10000);
+            return;
           }
-        } else {
-          this.imap.expunge((expungeErr) => {
-            if (resolved) return;
-            clearTimeout(timeoutId);
-            resolved = true;
 
-            if (expungeErr) {
-              this.logger.error("❌ Erreur lors de l'expunge:", expungeErr);
-              this.logger.log(
-                `⚠️ Email ${currentEmail} marqué pour suppression mais non expungé`,
-              );
-
-              if (remaining.length > 0) {
-                this.logger.log(
-                  `⏭️ Passage à l'email suivant (${remaining.length} restants)...`,
-                );
-                setTimeout(() => {
-                  void this.deleteEmailBatch(remaining)
-                    .then((deletedRemaining) => {
-                      resolve(1 + deletedRemaining);
-                    })
-                    .catch(() => {
-                      resolve(1);
-                    });
-                }, 2000);
-              } else {
-                resolve(1);
-              }
-            } else {
-              this.logger.log(`✅ Email ${currentEmail} supprimé.`);
-
-              if (remaining.length > 0) {
-                this.logger.log(
-                  `⏭️ Passage à l'email suivant (${remaining.length} restants)...`,
-                );
-                setTimeout(() => {
-                  void this.deleteEmailBatch(remaining)
-                    .then((deletedRemaining) => {
-                      resolve(1 + deletedRemaining);
-                    })
-                    .catch(() => {
-                      resolve(1);
-                    });
-                }, 2000);
-              } else {
-                resolve(1);
-              }
-            }
-          });
+          this.logger.log(
+            `🗑️ Email ${currentEmail} déplacé vers la corbeille.`,
+          );
+          setTimeout(() => {
+            this.deleteEmailBatch(remaining)
+              .then(resolve)
+              .catch((err) => {
+                this.logger.error('Erreur lors de la suppression:', err);
+                resolve(0);
+              });
+          }, 5000);
         }
       });
     });
@@ -551,6 +504,92 @@ export class EmailFilterService implements OnModuleInit {
         this.imap.end();
       }
       throw err;
+    }
+  }
+
+  private async ensureConnection(): Promise<void> {
+    if (this.imap.state === 'disconnected') {
+      this.logger.log('Connexion au serveur IMAP...');
+      await new Promise<void>((resolve, reject) => {
+        this.imap.once('ready', () => resolve());
+        this.imap.once('error', reject);
+        this.imap.connect();
+      });
+    }
+  }
+
+  async testDeleteSingleEmail(uid: number): Promise<boolean> {
+    try {
+      this.logger.log(`🔄 Test de suppression de l'email ${uid}...`);
+
+      // S'assurer que nous sommes connectés
+      await this.ensureConnection();
+
+      // Ouvrir la boîte de réception
+      await promisify<string, Imap.Box>(this.imap.openBox.bind(this.imap))(
+        'INBOX',
+      );
+
+      return new Promise<boolean>((resolve) => {
+        let resolved = false;
+        const timeoutId = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            this.logger.error(
+              `⏰ Timeout : la suppression a pris trop de temps pour l'email ${uid}`,
+            );
+            resolve(false);
+          }
+        }, 30000);
+
+        this.logger.log(`🔄 Marquage de l'email ${uid} comme supprimé...`);
+
+        // D'abord, marquer l'email comme supprimé
+        this.imap.addFlags([uid], '\\Deleted', (err) => {
+          if (!resolved) {
+            if (err) {
+              this.logger.error(
+                `❌ Erreur lors du marquage de l'email ${uid}:`,
+                err,
+              );
+              clearTimeout(timeoutId);
+              resolved = true;
+              resolve(false);
+              return;
+            }
+
+            this.logger.log(
+              `✅ Email ${uid} marqué comme supprimé, attente avant expunge...`,
+            );
+
+            // Attendre 3 secondes avant d'expunger
+            setTimeout(() => {
+              // Ensuite, forcer la suppression
+              this.imap.expunge((expungeErr) => {
+                if (!resolved) {
+                  clearTimeout(timeoutId);
+                  resolved = true;
+
+                  if (expungeErr) {
+                    this.logger.error(
+                      `❌ Erreur lors de l'expunge de l'email ${uid}:`,
+                      expungeErr,
+                    );
+                    resolve(false);
+                    return;
+                  }
+
+                  this.logger.log(`✅ Email ${uid} supprimé avec succès`);
+                  resolve(true);
+                }
+              });
+            }, 3000);
+          }
+        });
+      });
+    } catch (err) {
+      this.logger.error('Erreur lors du test de suppression:', err);
+      return false;
     }
   }
 }
