@@ -100,7 +100,6 @@ export class RagValidatorController {
         successCount,
         errorsCount,
         totalCount,
-        averageRating: result.averageRating,
         elapsedTime: totalTime,
         ...result,
       };
