@@ -44,14 +44,112 @@ export class RagValidatorService {
 
   /**
    * Valide tous les documents d'une collection
+   * @param collectionName Nom de la collection
+   * @param progressCallback Fonction de rappel pour suivre l'avancement
    */
-  async validateCollection(collectionName: string): Promise<{
+  async validateCollection(
+    collectionName: string,
+    progressCallback?: () => void,
+  ): Promise<{
     totalDocuments: number;
     evaluatedDocuments: number;
     averageRating: number;
     documentRatings: Array<{ id: string; rating: RagRating }>;
   }> {
-    return this.ragService.validateCollection(collectionName);
+    if (progressCallback) {
+      // Utiliser le RAG service avec une implémentation personnalisée
+      const documents = await this.ragService.getAllDocuments(collectionName);
+      
+      this.logger.log(`Validation de ${documents.length} documents dans la collection ${collectionName}`);
+      
+      if (!documents.length) {
+        return {
+          totalDocuments: 0,
+          evaluatedDocuments: 0,
+          averageRating: 0,
+          documentRatings: [],
+        };
+      }
+
+      let totalRating = 0;
+      let evaluatedCount = 0;
+      const documentRatings: Array<{ id: string; rating: RagRating }> = [];
+
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i];
+        try {
+          // Générer une requête représentative ou utiliser les métadonnées
+          const query = await this.generateQueryForDocument(doc.content, doc.metadata);
+          
+          // Évaluer le document
+          const rating = await this.evaluateRagDocument(doc.content, query);
+          
+          // Mettre à jour le document avec la note
+          await this.ragService.updateDocument(collectionName, doc.id, doc.content, {
+            ...doc.metadata,
+            rating,
+          });
+
+          totalRating += rating.overall;
+          evaluatedCount++;
+          documentRatings.push({ id: doc.id, rating });
+          
+          // Appeler le callback de progression après chaque document
+          progressCallback();
+        } catch (error) {
+          this.logger.warn(`Impossible d'évaluer le document ${doc.id}: ${error.message}`);
+        }
+      }
+
+      const averageRating = evaluatedCount > 0 ? totalRating / evaluatedCount : 0;
+      
+      return {
+        totalDocuments: documents.length,
+        evaluatedDocuments: evaluatedCount,
+        averageRating,
+        documentRatings,
+      };
+    } else {
+      // Utiliser l'implémentation standard du RAG service
+      return this.ragService.validateCollection(collectionName);
+    }
+  }
+  
+  /**
+   * Génère une requête appropriée pour un document
+   */
+  private async generateQueryForDocument(
+    content: string,
+    metadata?: any,
+  ): Promise<string> {
+    // Si les métadonnées contiennent une requête originale, l'utiliser
+    if (metadata?.originalPrompt || metadata?.question) {
+      return metadata.originalPrompt || metadata.question;
+    }
+    
+    // Sinon, générer une requête
+    try {
+      const prompt = `
+Tu es un expert en génération de requêtes.
+Voici un document:
+"""
+${content}
+"""
+
+Génère une requête utilisateur qui pourrait aboutir à ce document comme résultat pertinent.
+Réponds uniquement avec la requête, sans autre explication.
+`;
+
+      const response = await this.huggingFaceService.generateText(prompt, {
+        max_new_tokens: 256,
+        temperature: 0.7,
+      });
+
+      return response.trim();
+    } catch (error) {
+      this.logger.error(`Erreur lors de la génération de requête: ${error.message}`);
+      return 'Quelle est la pertinence de ce document?';
+    }
   }
 
   /**

@@ -42,12 +42,51 @@ export class RagValidatorController {
   async evaluateAllSqlQueries() {
     this.logger.log(`Évaluation de toutes les requêtes SQL`);
     try {
-      const result = await this.ragValidatorService.validateCollection(
+      // Compteur pour suivre l'avancement
+      let processedCount = 0;
+      let totalCount = 0;
+
+      // Suivi du temps
+      const startTime = Date.now();
+      const getElapsedTime = () => {
+        const elapsedMs = Date.now() - startTime;
+        const seconds = Math.floor((elapsedMs / 1000) % 60);
+        const minutes = Math.floor((elapsedMs / (1000 * 60)) % 60);
+        const hours = Math.floor(elapsedMs / (1000 * 60 * 60));
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      };
+
+      // Récupérer le nombre total de documents pour le suivi
+      const documents = await this.ragService.getAllDocuments(
         this.sqlQueryCacheName,
       );
+      totalCount = documents.length;
+      this.logger.log(`Nombre total de requêtes SQL à évaluer: ${totalCount}`);
+
+      // Fonction de callback pour suivre l'avancement
+      const progressCallback = () => {
+        processedCount++;
+        const percentage = Math.round((processedCount / totalCount) * 100);
+        const elapsed = getElapsedTime();
+        this.logger.log(
+          `Progression: ${processedCount}/${totalCount} (${percentage}%) - Temps écoulé: ${elapsed}`,
+        );
+      };
+
+      const result = await this.ragValidatorService.validateCollection(
+        this.sqlQueryCacheName,
+        progressCallback,
+      );
+
+      const totalTime = getElapsedTime();
+      this.logger.log(`Évaluation terminée en ${totalTime}`);
+
       return {
         success: true,
         message: `${result.evaluatedDocuments} requêtes SQL évaluées sur ${result.totalDocuments}`,
+        processedCount,
+        totalCount,
+        elapsedTime: totalTime,
         ...result,
       };
     } catch (error) {

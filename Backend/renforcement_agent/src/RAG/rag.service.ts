@@ -634,7 +634,7 @@ export class RagService {
         throw new Error('HuggingFaceService non disponible');
       }
 
-      // Utiliser un prompt d'évaluation générique
+      // Utiliser un prompt d'évaluation avec des exemples
       const prompt = `
 Tu es un expert en évaluation de données RAG (Retrieval-Augmented Generation).
 Évalue la pertinence et la qualité du document suivant par rapport à la requête.
@@ -651,14 +651,18 @@ ${document}
 2. Qualité: Le document est-il bien structuré et précis?
 3. Complétude: Le document contient-il toutes les informations nécessaires?
 
-Fournis le résultat au format JSON avec des notes entre 1 et 5:
+Fournis le résultat UNIQUEMENT au format JSON avec des notes NUMÉRIQUES entre 1 et 5:
+
+Exemple de format attendu:
 {
-  "relevance": [note],
-  "quality": [note],
-  "completeness": [note],
-  "overall": [moyenne des notes],
-  "feedback": "[explication détaillée]"
+  "relevance": 4,
+  "quality": 3,
+  "completeness": 5,
+  "overall": 4,
+  "feedback": "Le document est très pertinent et contient toutes les informations, mais pourrait être mieux structuré."
 }
+
+N'inclus PAS d'autre texte dans ta réponse, seulement le JSON.
 `;
 
       const response = await this.huggingFaceService.generateText(prompt, {
