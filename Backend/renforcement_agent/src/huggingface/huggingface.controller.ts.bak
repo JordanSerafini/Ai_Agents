@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Param, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Logger,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { HuggingFaceService } from './huggingface.service';
 import { RagService } from '../RAG/rag.service';
 
@@ -24,6 +33,7 @@ export class HuggingFaceController {
 
   constructor(
     private readonly huggingFaceService: HuggingFaceService,
+    @Inject(forwardRef(() => RagService))
     private readonly ragService: RagService,
   ) {
     // Créer les collections si elles n'existent pas
