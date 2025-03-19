@@ -93,6 +93,12 @@ export class RagValidatorController {
       const totalTime = getElapsedTime();
       this.logger.log(`Évaluation terminée en ${totalTime}`);
 
+      // Calculer le score moyen à partir de nos compteurs locaux
+      const calculatedAverage =
+        successCount > 0
+          ? parseFloat((totalScore / successCount).toFixed(2))
+          : 0;
+
       return {
         success: true,
         message: `${result.evaluatedDocuments} requêtes SQL évaluées sur ${result.totalDocuments}`,
@@ -101,7 +107,9 @@ export class RagValidatorController {
         errorsCount,
         totalCount,
         elapsedTime: totalTime,
-        ...result,
+        // Utiliser notre moyenne calculée plutôt que celle du résultat
+        averageRating: calculatedAverage,
+        documentRatings: result.documentRatings,
       };
     } catch (error) {
       this.logger.error(

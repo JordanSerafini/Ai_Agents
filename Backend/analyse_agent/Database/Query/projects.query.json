@@ -41,6 +41,33 @@
       "description": "Liste des projets qui débutent demain avec informations client et adresse"
     },
     {
+      "id": "projects_this_year",
+      "questions": [
+        "Quels sont les chantiers prévus cette année ?",
+        "Projets planifiés pour cette année",
+        "Chantiers programmés cette année",
+        "Liste des projets de l'année en cours",
+        "Quels travaux sont prévus cette année ?",
+        "Chantiers de l'année actuelle",
+        "Projets de l'année",
+        "Chantiers pour l'année en cours",
+        "Quels sont les projets pour cette année ?",
+        "Quels chantiers sont programmés pour cette année ?",
+        "Travaux de l'année courante",
+        "Projets de cette année",
+        "Tous les chantiers de l'année",
+        "Quels sont les projets prévus pour l'année en cours ?",
+        "Chantiers planifiés pour l'année actuelle",
+        "Quel sont les chantiers prevu cette année ?",
+        "Quel sont les projet prevu cette année ??",
+        "Liste des chantier de cette anné",
+        "Projets plannifié cette anné",
+        "Chantiés de l'anné"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, a.city FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN addresses a ON p.address_id = a.id WHERE EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY p.start_date",
+      "description": "Liste de tous les projets dont la date de début est dans l'année en cours"
+    },
+    {
       "id": "projects_in_progress",
       "questions": [
         "Quels sont les projets en cours ?",

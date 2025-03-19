@@ -18,6 +18,17 @@ export interface RagRating {
   overall: number;
   feedback: string;
   timestamp: string;
+  detailedEvaluation?: {
+    relevance: number;
+    relevance_feedback: string;
+    accuracy: number;
+    accuracy_feedback: string;
+    completeness: number;
+    completeness_feedback: string;
+    clarity: number;
+    clarity_feedback: string;
+    improvement_suggestions: string[] | string;
+  };
 }
 
 interface BestMatch {
@@ -620,57 +631,85 @@ export class RagService {
   }
 
   /**
-   * Évalue la pertinence d'un document RAG par rapport à une requête
+   * Évalue un document RAG par rapport à une requête
    * @param document Contenu du document
    * @param query Requête utilisateur
-   * @returns Évaluation du document
    */
   async evaluateRagDocument(
     document: string,
     query: string,
   ): Promise<RagRating> {
     try {
-      if (!this.huggingFaceService) {
-        throw new Error('HuggingFaceService non disponible');
-      }
+      this.logger.log(
+        `Évaluation du document: ${document.substring(0, 100)}...`,
+      );
 
-      // Utiliser un prompt d'évaluation avec des exemples
+      // Construction du prompt d'évaluation amélioré
       const prompt = `
-Tu es un expert en évaluation de données RAG (Retrieval-Augmented Generation).
-Évalue la pertinence et la qualité du document suivant par rapport à la requête.
+Tu es un expert en évaluation de la qualité des données RAG (Retrieval-Augmented Generation).
 
-Requête: "${query}"
+REQUÊTE UTILISATEUR:
+"""
+${query}
+"""
 
-Document à évaluer:
+DOCUMENT À ÉVALUER:
 """
 ${document}
 """
 
-Évalue selon les critères suivants (1 = très mauvais, 5 = excellent):
-1. Pertinence: Dans quelle mesure le document répond à la requête?
-2. Qualité: Le document est-il bien structuré et précis?
-3. Complétude: Le document contient-il toutes les informations nécessaires?
+Analyse le document en détail selon ces critères spécifiques et attribue une note de 1 à 5 pour chacun:
 
-Fournis le résultat UNIQUEMENT au format JSON avec des notes NUMÉRIQUES entre 1 et 5:
+1. PERTINENCE (1-5):
+   - La pertinence du document par rapport à la requête
+   - 1: Totalement hors sujet, 3: Partiellement pertinent, 5: Parfaitement adapté à la requête
+   
+2. EXACTITUDE (1-5):
+   - L'exactitude factuelle des informations
+   - 1: Contient des erreurs graves, 3: Quelques imprécisions mineures, 5: Informations totalement exactes
+   
+3. COMPLÉTUDE (1-5):
+   - Le niveau de complétude des informations
+   - 1: Très incomplet, 3: Couvre les bases mais manque de détails, 5: Information exhaustive
+   
+4. CLARTÉ (1-5):
+   - La clarté et la cohérence de la présentation
+   - 1: Confus/incohérent, 3: Compréhensible avec effort, 5: Parfaitement structuré et clair
 
-Exemple de format attendu:
+Pour chaque critère, fournis une justification brève de ta note.
+
+Ensuite:
+- Calcule un score GLOBAL qui est la moyenne des quatre notes ci-dessus
+- Propose 2-3 suggestions concrètes pour améliorer ce document
+
+IMPORTANT: Fournis UNIQUEMENT un objet JSON valide avec cette structure EXACTE:
+
 {
   "relevance": 4,
-  "quality": 3,
-  "completeness": 5,
+  "relevance_feedback": "Le document répond directement à la requête avec des informations pertinentes sur...",
+  "accuracy": 5,
+  "accuracy_feedback": "Toutes les informations présentées sont vérifiables et précises...",
+  "completeness": 3,
+  "completeness_feedback": "Le document couvre les aspects principaux mais manque de détails sur...",
+  "clarity": 4,
+  "clarity_feedback": "L'information est bien structurée mais pourrait bénéficier de...",
   "overall": 4,
-  "feedback": "Le document est très pertinent et contient toutes les informations, mais pourrait être mieux structuré."
+  "improvement_suggestions": [
+    "Ajouter des détails sur X pour améliorer la complétude",
+    "Restructurer la section Y pour plus de clarté",
+    "Inclure des références à Z pour renforcer la crédibilité"
+  ]
 }
 
-N'inclus PAS d'autre texte dans ta réponse, seulement le JSON.
+Inclus UNIQUEMENT le JSON dans ta réponse, sans texte additionnel.
 `;
 
       const response = await this.huggingFaceService.generateText(prompt, {
         temperature: 0.2,
-        max_new_tokens: 500,
+        max_new_tokens: 800,
       });
 
-      return this.parseRatingFromResponse(response);
+      return this.parseEnhancedRatingFromResponse(response);
     } catch (error) {
       this.logger.error(
         `Erreur lors de l'évaluation du document: ${error.message}`,
@@ -680,56 +719,172 @@ N'inclus PAS d'autre texte dans ta réponse, seulement le JSON.
   }
 
   /**
-   * Analyse la réponse pour extraire l'évaluation au format JSON
+   * Analyse la réponse pour extraire l'évaluation améliorée au format JSON
    * @param response Réponse du modèle
    * @returns Évaluation structurée
    */
-  private parseRatingFromResponse(response: string): RagRating {
+  private parseEnhancedRatingFromResponse(response: string): RagRating {
     try {
       this.logger.log(
         `Tentative de parsing de la réponse : ${response.substring(0, 100)}...`,
       );
 
-      // Chercher un objet JSON dans la réponse
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const jsonStr = jsonMatch[0];
-        this.logger.log(`JSON extrait : ${jsonStr.substring(0, 100)}...`);
+      // Extraire seulement la partie JSON de la réponse
+      let jsonStr = '';
+
+      // Rechercher un objet JSON complet
+      const jsonRegex = /(\{[\s\S]*?\})/g;
+      const matches = response.match(jsonRegex);
+
+      if (matches && matches.length > 0) {
+        // Essayer chaque match jusqu'à trouver un JSON valide
+        for (const match of matches) {
+          try {
+            const parsed = JSON.parse(match);
+            if (
+              parsed.relevance &&
+              parsed.accuracy &&
+              parsed.completeness &&
+              parsed.clarity
+            ) {
+              jsonStr = match;
+              break;
+            }
+          } catch {
+            // Continuer avec le prochain match
+          }
+        }
+      }
+
+      // Si un JSON valide a été trouvé
+      if (jsonStr) {
+        this.logger.log(`JSON extrait : ${jsonStr}`);
 
         try {
-          const rating = JSON.parse(jsonStr);
+          const enhancedRating = JSON.parse(jsonStr);
 
-          // S'assurer que toutes les propriétés nécessaires sont présentes
-          if (!rating.relevance || !rating.quality || !rating.completeness) {
+          // S'assurer que toutes les propriétés nécessaires sont présentes et sont des nombres
+          const hasRelevance = typeof enhancedRating.relevance === 'number';
+          const hasAccuracy = typeof enhancedRating.accuracy === 'number';
+          const hasCompleteness =
+            typeof enhancedRating.completeness === 'number';
+          const hasClarity = typeof enhancedRating.clarity === 'number';
+
+          if (
+            !hasRelevance ||
+            !hasAccuracy ||
+            !hasCompleteness ||
+            !hasClarity
+          ) {
             this.logger.warn(
-              `JSON incomplet - propriétés manquantes: ${JSON.stringify(rating)}`,
+              `JSON incomplet - critères manquants ou non numériques: ${JSON.stringify(enhancedRating)}`,
             );
-            throw new Error('Réponse incomplète du modèle');
+
+            // Convertir les valeurs non numériques en nombres
+            if (
+              enhancedRating.relevance &&
+              typeof enhancedRating.relevance !== 'number'
+            ) {
+              enhancedRating.relevance =
+                parseFloat(enhancedRating.relevance) || 3;
+            }
+            if (
+              enhancedRating.accuracy &&
+              typeof enhancedRating.accuracy !== 'number'
+            ) {
+              enhancedRating.accuracy =
+                parseFloat(enhancedRating.accuracy) || 3;
+            }
+            if (
+              enhancedRating.completeness &&
+              typeof enhancedRating.completeness !== 'number'
+            ) {
+              enhancedRating.completeness =
+                parseFloat(enhancedRating.completeness) || 3;
+            }
+            if (
+              enhancedRating.clarity &&
+              typeof enhancedRating.clarity !== 'number'
+            ) {
+              enhancedRating.clarity = parseFloat(enhancedRating.clarity) || 3;
+            }
           }
 
-          // Calculer la note globale si elle n'est pas fournie
-          if (!rating.overall) {
-            rating.overall =
-              (rating.relevance + rating.quality + rating.completeness) / 3;
+          // Calculer le score global si nécessaire
+          if (
+            !enhancedRating.overall ||
+            typeof enhancedRating.overall !== 'number'
+          ) {
+            enhancedRating.overall = Math.round(
+              ((enhancedRating.relevance || 3) +
+                (enhancedRating.accuracy || 3) +
+                (enhancedRating.completeness || 3) +
+                (enhancedRating.clarity || 3)) /
+                4,
+            );
           }
+
+          // Combiner les feedbacks en un seul texte détaillé
+          const detailedFeedback = [
+            `PERTINENCE (${enhancedRating.relevance}/5): ${enhancedRating.relevance_feedback || 'Non évalué'}`,
+            `EXACTITUDE (${enhancedRating.accuracy}/5): ${enhancedRating.accuracy_feedback || 'Non évalué'}`,
+            `COMPLÉTUDE (${enhancedRating.completeness}/5): ${enhancedRating.completeness_feedback || 'Non évalué'}`,
+            `CLARTÉ (${enhancedRating.clarity}/5): ${enhancedRating.clarity_feedback || 'Non évalué'}`,
+            '',
+            "SUGGESTIONS D'AMÉLIORATION:",
+          ].join('\n');
+
+          // Ajouter les suggestions d'amélioration si disponibles
+          let suggestions = '';
+          if (
+            enhancedRating.improvement_suggestions &&
+            Array.isArray(enhancedRating.improvement_suggestions)
+          ) {
+            suggestions = enhancedRating.improvement_suggestions
+              .map((suggestion, index) => `${index + 1}. ${suggestion}`)
+              .join('\n');
+          } else if (
+            typeof enhancedRating.improvement_suggestions === 'string'
+          ) {
+            suggestions = enhancedRating.improvement_suggestions;
+          }
+
+          const feedback = `${detailedFeedback}\n${suggestions || 'Aucune suggestion disponible.'}`;
 
           this.logger.log(
-            `Évaluation réussie - Score global: ${rating.overall}`,
+            `Évaluation améliorée réussie - Score global: ${enhancedRating.overall}/5`,
           );
 
+          // Convertir au format standard RagRating
           return {
-            ...rating,
+            relevance: enhancedRating.relevance || 3,
+            quality: enhancedRating.accuracy || 3,
+            completeness: enhancedRating.completeness || 3,
+            overall: enhancedRating.overall,
+            feedback: feedback,
             timestamp: new Date().toISOString(),
+            detailedEvaluation: {
+              relevance: enhancedRating.relevance || 3,
+              relevance_feedback: enhancedRating.relevance_feedback || '',
+              accuracy: enhancedRating.accuracy || 3,
+              accuracy_feedback: enhancedRating.accuracy_feedback || '',
+              completeness: enhancedRating.completeness || 3,
+              completeness_feedback: enhancedRating.completeness_feedback || '',
+              clarity: enhancedRating.clarity || 3,
+              clarity_feedback: enhancedRating.clarity_feedback || '',
+              improvement_suggestions:
+                enhancedRating.improvement_suggestions || [],
+            },
           };
         } catch (parseError) {
           this.logger.error(
-            `Erreur JSON.parse: ${parseError.message}, JSON string: ${jsonStr.substring(0, 50)}...`,
+            `Erreur JSON.parse: ${parseError.message}, JSON string: ${jsonStr}`,
           );
           throw parseError;
         }
       } else {
         this.logger.warn(
-          `Aucun JSON trouvé dans la réponse: ${response.substring(0, 50)}...`,
+          `Aucun JSON valide trouvé dans la réponse: ${response.substring(0, 100)}...`,
         );
       }
 
@@ -740,19 +895,20 @@ N'inclus PAS d'autre texte dans ta réponse, seulement le JSON.
         quality: 3,
         completeness: 3,
         overall: 3,
-        feedback: "Impossible d'analyser la réponse du modèle.",
+        feedback:
+          "Impossible d'analyser la réponse du modèle. Une évaluation par défaut a été utilisée.",
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
       this.logger.error(
-        `Erreur lors du parsing de la réponse: ${error.message}, Réponse: ${response.substring(0, 50)}...`,
+        `Erreur lors du parsing de la réponse: ${error.message}, Réponse: ${response.substring(0, 100)}...`,
       );
       return {
-        relevance: 2,
-        quality: 2,
-        completeness: 2,
-        overall: 2,
-        feedback: `Erreur: ${error.message}`,
+        relevance: 3,
+        quality: 3,
+        completeness: 3,
+        overall: 3,
+        feedback: `Erreur de parsing: ${error.message}. Une évaluation par défaut a été utilisée.`,
         timestamp: new Date().toISOString(),
       };
     }

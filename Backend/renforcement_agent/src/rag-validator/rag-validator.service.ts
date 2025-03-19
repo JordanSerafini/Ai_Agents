@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HuggingFaceService } from '../huggingface/huggingface.service';
 import { RagService, RagDocument, RagRating } from '../RAG/rag.service';
+import { RapportService } from '../rapport/rapport.service';
 
 @Injectable()
 export class RagValidatorService {
@@ -13,6 +14,7 @@ export class RagValidatorService {
     private readonly configService: ConfigService,
     private readonly huggingFaceService: HuggingFaceService,
     private readonly ragService: RagService,
+    private readonly rapportService: RapportService,
   ) {
     this.logger.log('RagValidatorService initialisé');
   }
@@ -55,6 +57,7 @@ export class RagValidatorService {
     evaluatedDocuments: number;
     averageRating: number;
     documentRatings: Array<{ id: string; rating: RagRating }>;
+    rapportId?: string;
   }> {
     if (progressCallback) {
       // Utiliser le RAG service avec une implémentation personnalisée
@@ -123,15 +126,45 @@ export class RagValidatorService {
       const averageRating =
         evaluatedCount > 0 ? totalRating / evaluatedCount : 0;
 
-      return {
+      const result = {
         totalDocuments: documents.length,
         evaluatedDocuments: evaluatedCount,
         averageRating,
         documentRatings,
       };
+
+      // Générer un rapport d'évaluation
+      try {
+        const rapportId = await this.rapportService.generateRapport(
+          collectionName,
+          result,
+        );
+        this.logger.log(`Rapport d'évaluation généré avec l'ID: ${rapportId}`);
+        return { ...result, rapportId };
+      } catch (rapportError) {
+        this.logger.error(
+          `Erreur lors de la génération du rapport: ${rapportError.message}`,
+        );
+        return result;
+      }
     } else {
       // Utiliser l'implémentation standard du RAG service
-      return this.ragService.validateCollection(collectionName);
+      const result = await this.ragService.validateCollection(collectionName);
+
+      // Générer un rapport d'évaluation
+      try {
+        const rapportId = await this.rapportService.generateRapport(
+          collectionName,
+          result,
+        );
+        this.logger.log(`Rapport d'évaluation généré avec l'ID: ${rapportId}`);
+        return { ...result, rapportId };
+      } catch (rapportError) {
+        this.logger.error(
+          `Erreur lors de la génération du rapport: ${rapportError.message}`,
+        );
+        return result;
+      }
     }
   }
 
