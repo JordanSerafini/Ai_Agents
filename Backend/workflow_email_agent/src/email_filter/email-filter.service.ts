@@ -75,19 +75,20 @@ export class EmailFilterService implements OnModuleInit {
       }
 
       const emailsToDelete: number[] = [];
-      let processedCount = 0;
+      let analyzedCount = 0;
 
       fetch.on('message', (msg: any) => {
         msg.on('body', async (stream: any) => {
           try {
             const parsed = (await simpleParser(stream)) as ParsedMail;
-            processedCount++;
+            analyzedCount++;
+            this.logger.log(`Emails analysés: ${analyzedCount}`);
 
             const hasUnsubscribe =
               parsed.text && parsed.text.toLowerCase().includes('unsubscribe');
 
             if (hasUnsubscribe) {
-              this.logger.log(`[${processedCount}] Email à supprimer trouvé :`);
+              this.logger.log(`[${msg.seqno}] Email à supprimer trouvé :`);
               this.logger.log(`    Sujet: ${parsed.subject}`);
               this.logger.log(`    De: ${parsed.from?.text}`);
               this.logger.log(`    Date: ${parsed.date}`);
@@ -105,7 +106,6 @@ export class EmailFilterService implements OnModuleInit {
 
       fetch.once('end', () => {
         this.logger.log('Analyse terminée !');
-        this.logger.log(`Emails analysés : ${processedCount}`);
         this.logger.log(`Emails à supprimer : ${emailsToDelete.length}`);
 
         if (emailsToDelete.length > 0) {
@@ -190,14 +190,12 @@ export class EmailFilterService implements OnModuleInit {
       }
 
       const emails: any[] = [];
-      let processedCount = 0;
 
       await new Promise<void>((resolve) => {
         fetch.on('message', (msg: any) => {
           msg.on('body', async (stream: any) => {
             try {
               const parsed = (await simpleParser(stream)) as ParsedMail;
-              processedCount++;
               emails.push({
                 subject: parsed.subject,
                 from: parsed.from?.text,
@@ -213,14 +211,14 @@ export class EmailFilterService implements OnModuleInit {
 
         fetch.once('end', () => {
           this.logger.log(
-            `Chargement terminé : ${processedCount} emails analysés`,
+            `Chargement terminé : ${emails.length} emails analysés`,
           );
           this.imap.end();
           resolve();
         });
       });
 
-      return { total: processedCount, emails };
+      return { total: emails.length, emails };
     } catch (err) {
       this.logger.error('Erreur:', err);
       if (this.imap && this.imap.state !== 'disconnected') {
@@ -232,10 +230,6 @@ export class EmailFilterService implements OnModuleInit {
 
   async filterAndDeleteEmails(): Promise<{ deleted: number }> {
     try {
-      this.logger.log(
-        'Démarrage du filtrage et de la suppression des emails...',
-      );
-
       await new Promise<void>((resolve, reject) => {
         this.imap.once('ready', () => resolve());
         this.imap.once('error', (err) => reject(new Error(String(err))));
@@ -253,7 +247,6 @@ export class EmailFilterService implements OnModuleInit {
           if (err) reject(new Error(String(err)));
 
           if (!results || results.length === 0) {
-            this.logger.log('Aucun email trouvé');
             return resolve(null);
           }
 
@@ -271,78 +264,82 @@ export class EmailFilterService implements OnModuleInit {
       }
 
       const emailsToDelete: number[] = [];
-      let processedCount = 0;
+      let analyzedCount = 0;
+      let totalDeleted = 0;
+      let shouldStop = false;
 
       await new Promise<void>((resolve) => {
         fetch.on('message', (msg: any) => {
+          if (shouldStop) return;
+
           msg.on('body', async (stream: any) => {
             try {
               const parsed = (await simpleParser(stream)) as ParsedMail;
-              processedCount++;
+              analyzedCount++;
+              this.logger.log(`Emails analysés: ${analyzedCount}`);
 
-              const hasUnsubscribe =
-                parsed.text &&
-                parsed.text.toLowerCase().includes('unsubscribe');
-
-              if (hasUnsubscribe) {
-                this.logger.log(
-                  `[${processedCount}] Email à supprimer trouvé :`,
-                );
-                this.logger.log(`    Sujet: ${parsed.subject}`);
-                this.logger.log(`    De: ${parsed.from?.text}`);
-                this.logger.log(`    Date: ${parsed.date}`);
+              if (parsed.text?.toLowerCase().includes('unsubscribe')) {
                 emailsToDelete.push(msg.seqno);
               }
+
+              // Arrêter à 5000 emails
+              if (analyzedCount >= 5000) {
+                shouldStop = true;
+                this.logger.log('Arrêt du traitement à 5000 emails');
+
+                if (emailsToDelete.length > 0) {
+                  this.imap.addFlags(emailsToDelete, '\\Deleted', (err) => {
+                    if (err) {
+                      this.logger.error('Erreur lors de la suppression:', err);
+                    } else {
+                      totalDeleted += emailsToDelete.length;
+                      this.logger.log(`Emails supprimés: ${totalDeleted}`);
+                      this.imap.expunge(() => {
+                        this.logger.log(
+                          `Lot de ${emailsToDelete.length} emails supprimé`,
+                        );
+                        this.imap.end();
+                        resolve();
+                      });
+                    }
+                  });
+                } else {
+                  this.imap.end();
+                  resolve();
+                }
+              }
             } catch (err) {
-              this.logger.error("Erreur lors du traitement de l'email:", err);
+              console.log(err);
             }
           });
         });
 
         fetch.once('end', () => {
-          this.logger.log('Analyse terminée !');
-          this.logger.log(`Emails analysés : ${processedCount}`);
-          this.logger.log(`Emails à supprimer : ${emailsToDelete.length}`);
-
-          if (emailsToDelete.length > 0) {
-            this.logger.log('Début de la suppression...');
+          if (!shouldStop && emailsToDelete.length > 0) {
             this.imap.addFlags(emailsToDelete, '\\Deleted', (err) => {
               if (err) {
                 this.logger.error('Erreur lors de la suppression:', err);
-                this.imap.end();
-                resolve();
               } else {
-                this.logger.log(
-                  `${emailsToDelete.length} email(s) marqué(s) pour suppression`,
-                );
-
-                this.imap.expunge((err) => {
-                  if (err) {
-                    this.logger.error(
-                      'Erreur lors de la suppression définitive:',
-                      err,
-                    );
-                  } else {
-                    this.logger.log(
-                      '✓ Emails supprimés définitivement avec succès !',
-                    );
-                  }
+                totalDeleted += emailsToDelete.length;
+                this.logger.log(`Emails supprimés: ${totalDeleted}`);
+                this.imap.expunge(() => {
+                  this.logger.log(
+                    `Dernier lot de ${emailsToDelete.length} emails supprimé`,
+                  );
                   this.imap.end();
                   resolve();
                 });
               }
             });
           } else {
-            this.logger.log('Aucun email à supprimer');
             this.imap.end();
             resolve();
           }
         });
       });
 
-      return { deleted: emailsToDelete.length };
+      return { deleted: totalDeleted };
     } catch (err) {
-      this.logger.error('Erreur:', err);
       if (this.imap && this.imap.state !== 'disconnected') {
         this.imap.end();
       }
