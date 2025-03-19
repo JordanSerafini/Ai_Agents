@@ -447,152 +447,115 @@ export class EmailFilterService implements OnModuleInit {
       await openInbox('INBOX');
 
       const searchCriteria = ['ALL'];
-      const fetch = await new Promise<any>((resolve, reject) => {
+      const results = await new Promise<number[]>((resolve, reject) => {
         this.imap.search(searchCriteria, (err, results) => {
           if (err) reject(new Error(String(err)));
-
           if (!results || results.length === 0) {
-            return resolve(null);
+            resolve([]);
+          } else {
+            this.logger.log(
+              `Nombre total d'emails à analyser : ${results.length}`,
+            );
+            resolve(results);
           }
-
-          this.logger.log(
-            `Nombre total d'emails à analyser : ${results.length}`,
-          );
-          const fetch = this.imap.fetch(results, { bodies: '' });
-          resolve(fetch);
         });
       });
 
-      if (!fetch) {
+      if (results.length === 0) {
         this.imap.end();
         return { deleted: 0 };
       }
 
+      // Limiter le nombre d'emails à traiter
+      const maxEmails = 100;
+      const emailsToProcess = results.slice(0, maxEmails);
+
+      this.logger.log(
+        `Traitement de ${emailsToProcess.length} emails sur ${results.length}...`,
+      );
+
       let analyzedCount = 0;
       let totalDeleted = 0;
-      let shouldStop = false;
 
-      await new Promise<void>((resolve) => {
-        fetch.on('message', (msg: Imap.ImapMessage) => {
-          let uid: number | null = null;
-          let buffer = '';
+      // Traitement séquentiel
+      for (const uid of emailsToProcess) {
+        try {
+          // Récupérer les données de l'email
+          const emailData = await this.fetchEmailData(uid);
+          analyzedCount++;
 
-          msg.on('attributes', (attrs) => {
-            uid = attrs.uid;
-          });
+          if (analyzedCount <= 10) {
+            this.logger.log("=== Détails de l'email ===");
+            this.logger.log(`Sujet: ${emailData.subject}`);
+            this.logger.log(`De: ${emailData.from}`);
+            this.logger.log(
+              `Texte brut: ${emailData.textContent ? emailData.textContent.substring(0, 200) : 'Non disponible'}`,
+            );
+            this.logger.log(
+              `HTML: ${emailData.htmlContent ? emailData.htmlContent.substring(0, 200) : 'Non disponible'}`,
+            );
+            this.logger.log('=======================');
+          }
 
-          msg.on('body', (stream: Stream) => {
-            stream.on('data', (chunk) => {
-              buffer += chunk.toString('utf8');
-            });
-          });
+          const subject = emailData.subject || '';
+          const textContent = (emailData.textContent || '').toLowerCase();
+          const htmlContent = (emailData.htmlContent || '').toLowerCase();
+          const subjectContent = subject.toLowerCase();
 
-          msg.once('end', async () => {
-            if (!uid) {
-              this.logger.warn(`❌ UID manquant pour un email`);
-              return;
-            }
+          const keywords = [
+            'unsubscribe',
+            'désabonnement',
+            'desabonnement',
+            'no-reply',
+            'noreply',
+          ];
 
-            if (shouldStop) {
-              return;
-            }
-
-            // Attendre que l'analyse et le traitement de cet email soit terminé avant de passer au suivant
-            try {
-              const parsed = await simpleParser(buffer);
-              analyzedCount++;
-
-              if (analyzedCount % 100 === 0) {
-                this.logger.log(`Emails analysés: ${analyzedCount}`);
-              }
-
-              if (analyzedCount <= 10) {
-                this.logger.log("=== Détails de l'email ===");
-                this.logger.log(`Sujet: ${parsed.subject}`);
-                this.logger.log(`De: ${parsed.from?.text}`);
-                this.logger.log(
-                  `Texte brut: ${parsed.text ? parsed.text.substring(0, 200) : 'Non disponible'}`,
-                );
-                this.logger.log(
-                  `HTML: ${parsed.html ? parsed.html.substring(0, 200) : 'Non disponible'}`,
-                );
-                this.logger.log('=======================');
-              }
-
-              const subject = parsed.subject || '';
-              const textContent = (parsed.text || '').toLowerCase();
-              const htmlContent = (parsed.html || '').toLowerCase();
-              const subjectContent = subject.toLowerCase();
-
-              const keywords = [
-                'unsubscribe',
-                'désabonnement',
-                'desabonnement',
-                'no-reply',
-                'noreply',
-              ];
-
-              const hasUnsubscribe = keywords.some(
-                (keyword) =>
-                  textContent.includes(keyword) ||
-                  htmlContent.includes(keyword) ||
-                  subjectContent.includes(keyword),
-              );
-
-              if (hasUnsubscribe) {
-                this.logger.log(
-                  `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
-                );
-
-                // Supprimer l'email immédiatement et ATTENDRE la fin de la suppression
-                this.logger.log(
-                  `⏱️ Début de la suppression de l'email ${uid}...`,
-                );
-                const success = await this.testDeleteSingleEmail(uid);
-
-                if (success) {
-                  this.logger.log(
-                    `✅ Email [UID: ${uid}] supprimé avec succès - continuation du traitement`,
-                  );
-                  totalDeleted++;
-                } else {
-                  this.logger.error(
-                    `❌ Échec de la suppression de l'email [UID: ${uid}] - continuation du traitement`,
-                  );
-                }
-
-                // Pause de 2 secondes après chaque suppression pour éviter de surcharger le serveur
-                this.logger.log(
-                  `⏱️ Pause de 2 secondes après la suppression de l'email ${uid}...`,
-                );
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-                this.logger.log(
-                  `✅ Fin de la pause, passage à l'email suivant`,
-                );
-              }
-
-              // Limiter le nombre d'emails analysés
-              if (analyzedCount >= 100) {
-                this.logger.log(
-                  '🔸 Arrêt du traitement après 100 emails analysés',
-                );
-                shouldStop = true;
-              }
-            } catch (err) {
-              this.logger.error('Erreur lors du parsing:', err);
-            }
-          });
-        });
-
-        fetch.once('end', () => {
-          this.logger.log(
-            `🎉 Traitement terminé - Total d'emails analysés: ${analyzedCount}, supprimés: ${totalDeleted}`,
+          const hasUnsubscribe = keywords.some(
+            (keyword) =>
+              textContent.includes(keyword) ||
+              htmlContent.includes(keyword) ||
+              subjectContent.includes(keyword),
           );
-          this.imap.end();
-          resolve();
-        });
-      });
 
+          if (hasUnsubscribe) {
+            this.logger.log(
+              `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
+            );
+
+            // Supprimer l'email immédiatement et ATTENDRE la fin de la suppression
+            this.logger.log(`⏱️ Début de la suppression de l'email ${uid}...`);
+            const success = await this.testDeleteSingleEmail(uid);
+
+            if (success) {
+              this.logger.log(
+                `✅ Email [UID: ${uid}] supprimé avec succès - continuation du traitement`,
+              );
+              totalDeleted++;
+            } else {
+              this.logger.error(
+                `❌ Échec de la suppression de l'email [UID: ${uid}] - continuation du traitement`,
+              );
+            }
+
+            // Pause de 2 secondes après chaque suppression pour éviter de surcharger le serveur
+            this.logger.log(
+              `⏱️ Pause de 2 secondes après la suppression de l'email ${uid}...`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            this.logger.log(`✅ Fin de la pause, passage à l'email suivant`);
+          }
+        } catch (err) {
+          this.logger.error(
+            `Erreur lors du traitement de l'email ${uid}:`,
+            err,
+          );
+        }
+      }
+
+      this.logger.log(
+        `🎉 Traitement terminé - Total d'emails analysés: ${analyzedCount}, supprimés: ${totalDeleted}`,
+      );
+      this.imap.end();
       return { deleted: totalDeleted };
     } catch (err) {
       this.logger.error('Erreur lors du filtrage:', err);
@@ -601,6 +564,54 @@ export class EmailFilterService implements OnModuleInit {
       }
       throw err;
     }
+  }
+
+  // Nouvelle méthode pour récupérer les données d'un email
+  private async fetchEmailData(uid: number): Promise<{
+    subject: string;
+    from: string;
+    textContent: string;
+    htmlContent: string;
+  }> {
+    return new Promise((resolve, reject) => {
+      const fetch = this.imap.fetch([uid], { bodies: '' });
+      let buffer = '';
+      let subject = '';
+      let from = '';
+      let textContent = '';
+      let htmlContent = '';
+
+      fetch.on('message', (msg: Imap.ImapMessage) => {
+        msg.on('body', (stream: Stream) => {
+          stream.on('data', (chunk) => {
+            buffer += chunk.toString('utf8');
+          });
+        });
+
+        msg.once('end', async () => {
+          try {
+            const parsed = await simpleParser(buffer);
+            subject = parsed.subject || '';
+            from = parsed.from?.text || '';
+            textContent = parsed.text || '';
+            htmlContent = parsed.html || '';
+            resolve({ subject, from, textContent, htmlContent });
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
+          }
+        });
+      });
+
+      fetch.once('error', (err) => {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
+
+      fetch.once('end', () => {
+        if (!buffer) {
+          reject(new Error(`Impossible de récupérer l'email ${uid}`));
+        }
+      });
+    });
   }
 
   private async ensureConnection(): Promise<void> {
