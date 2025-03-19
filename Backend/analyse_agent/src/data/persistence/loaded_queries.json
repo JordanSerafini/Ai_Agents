@@ -1,0 +1,27 @@
+{
+  "projects.query.json": {
+    "lastModified": 1742375493000,
+    "lastLoaded": 1742376607436,
+    "queriesCount": 583
+  },
+  "quotations.query.json": {
+    "lastModified": 1742369741000,
+    "lastLoaded": 1742376645094,
+    "queriesCount": 233
+  },
+  "invoices.query.json": {
+    "lastModified": 1742371385000,
+    "lastLoaded": 1742376663171,
+    "queriesCount": 110
+  },
+  "clients.query.json": {
+    "lastModified": 1742371381000,
+    "lastLoaded": 1742376671919,
+    "queriesCount": 52
+  },
+  "planning.query.json": {
+    "lastModified": 1742373426000,
+    "lastLoaded": 1742376722856,
+    "queriesCount": 317
+  }
+}

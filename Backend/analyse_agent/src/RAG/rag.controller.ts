@@ -1,4 +1,14 @@
-import { Controller, Post, Get, Body, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Query,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { RagService } from './rag.service';
 
 @Controller('rag')
@@ -54,5 +64,26 @@ export class RagController {
       prompt,
       threshold ? parseFloat(threshold.toString()) : undefined,
     );
+  }
+
+  @Post('question')
+  async processQuestion(@Body() body: { question: string }): Promise<any> {
+    try {
+      const { question } = body;
+
+      if (!question) {
+        throw new BadRequestException('La question est requise');
+      }
+
+      // Utiliser la nouvelle méthode processQuestion qui intègre la recherche de questions similaires
+      const result = await this.ragService.processQuestion(question);
+
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        `Erreur lors du traitement de la question: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }

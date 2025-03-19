@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { RagService } from '../RAG/rag.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -8,10 +14,15 @@ import * as fsSync from 'fs';
 export class SqlQueriesService implements OnModuleInit {
   private readonly logger = new Logger(SqlQueriesService.name);
   private readonly sqlQueryCacheName = 'sql_queries';
-  private readonly markerFilePath = '/data/sql_queries_initialized.marker';
-  private readonly loadedQueriesMetaPath = '/data/loaded_queries.json';
+  private readonly markerFilePath =
+    '/app/data/persistence/sql_queries_initialized.marker';
+  private readonly loadedQueriesMetaPath =
+    '/app/data/persistence/loaded_queries.json';
 
-  constructor(private readonly ragService: RagService) {}
+  constructor(
+    @Inject(forwardRef(() => RagService))
+    private readonly ragService: RagService,
+  ) {}
 
   /**
    * Charge toutes les requêtes prédéfinies au démarrage de l'application
@@ -299,5 +310,39 @@ export class SqlQueriesService implements OnModuleInit {
       hash = hash & hash; // Convert to 32bit integer
     }
     return Math.abs(hash).toString(16);
+  }
+
+  // Ajouter cette méthode au service ChromaDB ou SQL Queries
+  async getAllQueries(): Promise<any[]> {
+    try {
+      // Récupérer toutes les requêtes de ChromaDB
+      const collection = await this.ragService.getOrCreateCollection(
+        this.sqlQueryCacheName,
+      );
+      const response = await collection.get();
+
+      if (!response || !response.metadatas || response.metadatas.length === 0) {
+        return [];
+      }
+
+      // Formatter les résultats pour qu'ils soient plus faciles à utiliser
+      const queries = response.metadatas.map((metadata, index) => {
+        return {
+          id: response.ids ? response.ids[index] : undefined,
+          metadata: metadata,
+          document: response.documents ? response.documents[index] : undefined,
+          embedding: response.embeddings
+            ? response.embeddings[index]
+            : undefined,
+        };
+      });
+
+      return queries;
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la récupération des requêtes: ${error.message}`,
+      );
+      return [];
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { HuggingFaceService } from './huggingface.service';
 import { HuggingFaceController } from './huggingface.controller';
 import { ConfigModule } from '@nestjs/config';
@@ -7,7 +7,12 @@ import { SqlQueriesModule } from '../sql-queries/sql-queries.module';
 import { QueryBuilderModule } from 'src/querybuilder/querybuilder.module';
 
 @Module({
-  imports: [ConfigModule, RagModule, SqlQueriesModule, QueryBuilderModule],
+  imports: [
+    ConfigModule,
+    forwardRef(() => RagModule),
+    SqlQueriesModule,
+    QueryBuilderModule,
+  ],
   controllers: [HuggingFaceController],
   providers: [HuggingFaceService],
   exports: [HuggingFaceService],

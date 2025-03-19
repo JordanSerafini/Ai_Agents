@@ -329,44 +329,201 @@ export class HuggingFaceService {
     // Utiliser un champ par défaut si aucun champ n'est spécifié
     const selectFields = fields.length > 0 ? fields.join(', ') : '*';
 
+    // Extraire les différentes parties des conditions
+    const joinConditions: string[] = [];
+    let whereConditions = '';
+    let groupByClause = '';
+    let orderByClause = '';
+    let limitClause = '';
+
+    // Traiter les conditions pour extraire les différentes clauses
+    if (conditions && conditions.trim() !== '') {
+      const conditionsUpper = conditions.toUpperCase();
+
+      // Extraire les jointures des conditions (si présentes)
+      const joinMatches = conditions.match(/JOIN\s+\w+\s+ON\s+[^,;]+/gi) || [];
+      joinMatches.forEach((joinClause) => {
+        joinConditions.push(joinClause);
+      });
+
+      // Extraire la clause WHERE
+      const whereStart = conditionsUpper.indexOf('WHERE');
+      if (whereStart !== -1) {
+        let whereEnd = conditions.length;
+
+        // Chercher les autres clauses après WHERE
+        const groupByStart = conditionsUpper.indexOf('GROUP BY');
+        const orderByStart = conditionsUpper.indexOf('ORDER BY');
+        const limitStart = conditionsUpper.indexOf('LIMIT');
+
+        // Déterminer où se termine la clause WHERE
+        if (
+          groupByStart !== -1 &&
+          (whereEnd > groupByStart || whereEnd === conditions.length)
+        )
+          whereEnd = groupByStart;
+        if (
+          orderByStart !== -1 &&
+          (whereEnd > orderByStart || whereEnd === conditions.length)
+        )
+          whereEnd = orderByStart;
+        if (
+          limitStart !== -1 &&
+          (whereEnd > limitStart || whereEnd === conditions.length)
+        )
+          whereEnd = limitStart;
+
+        whereConditions = conditions.substring(whereStart + 5, whereEnd).trim();
+      } else {
+        // Si pas de WHERE explicite, prendre tout ce qui n'est pas un JOIN comme condition WHERE
+        let nonJoinCondition = conditions;
+        joinMatches.forEach((joinClause) => {
+          nonJoinCondition = nonJoinCondition.replace(joinClause, '');
+        });
+        nonJoinCondition = nonJoinCondition.trim();
+
+        // Si après avoir retiré les JOINs il reste quelque chose, c'est une condition WHERE
+        if (
+          nonJoinCondition &&
+          !nonJoinCondition.toUpperCase().startsWith('GROUP BY') &&
+          !nonJoinCondition.toUpperCase().startsWith('ORDER BY') &&
+          !nonJoinCondition.toUpperCase().startsWith('LIMIT')
+        ) {
+          whereConditions = nonJoinCondition;
+        }
+      }
+
+      // Extraire GROUP BY
+      const groupByStart = conditionsUpper.indexOf('GROUP BY');
+      if (groupByStart !== -1) {
+        let groupByEnd = conditions.length;
+
+        const orderByStart = conditionsUpper.indexOf('ORDER BY');
+        const limitStart = conditionsUpper.indexOf('LIMIT');
+
+        if (
+          orderByStart !== -1 &&
+          (groupByEnd > orderByStart || groupByEnd === conditions.length)
+        )
+          groupByEnd = orderByStart;
+        if (
+          limitStart !== -1 &&
+          (groupByEnd > limitStart || groupByEnd === conditions.length)
+        )
+          groupByEnd = limitStart;
+
+        groupByClause = conditions.substring(groupByStart, groupByEnd).trim();
+      }
+
+      // Extraire ORDER BY
+      const orderByStart = conditionsUpper.indexOf('ORDER BY');
+      if (orderByStart !== -1) {
+        let orderByEnd = conditions.length;
+
+        const limitStart = conditionsUpper.indexOf('LIMIT');
+        if (
+          limitStart !== -1 &&
+          (orderByEnd > limitStart || orderByEnd === conditions.length)
+        )
+          orderByEnd = limitStart;
+
+        orderByClause = conditions.substring(orderByStart, orderByEnd).trim();
+      }
+
+      // Extraire LIMIT
+      const limitStart = conditionsUpper.indexOf('LIMIT');
+      if (limitStart !== -1) {
+        limitClause = conditions.substring(limitStart).trim();
+      }
+    }
+
+    // Si nous avons des agrégations dans les champs (SUM, AVG, etc) mais pas de GROUP BY,
+    // essayer d'ajouter un GROUP BY automatique avec les champs non agrégés
+    if (
+      groupByClause === '' &&
+      fields.some((field) => /SUM\(|AVG\(|COUNT\(|MIN\(|MAX\(/i.test(field))
+    ) {
+      const nonAggregatedFields = fields.filter(
+        (field) => !/SUM\(|AVG\(|COUNT\(|MIN\(|MAX\(/i.test(field),
+      );
+
+      if (nonAggregatedFields.length > 0) {
+        groupByClause = `GROUP BY ${nonAggregatedFields.join(', ')}`;
+      }
+    }
+
+    // Créer un ensemble des tables déjà jointes pour éviter les doublons
+    const joinedTables = new Set<string>();
+    tables.forEach((table) => joinedTables.add(table));
+
+    // Ajouter les tables des conditions JOIN
+    joinConditions.forEach((joinClause) => {
+      const tableMatch = joinClause.match(/JOIN\s+(\w+)/i);
+      if (tableMatch && tableMatch[1]) {
+        joinedTables.add(tableMatch[1]);
+      }
+    });
+
     // Si nous avons plus d'une table, nous devons ajouter des relations de jointure
-    if (tables.length > 1) {
+    if (tables.length > 1 || joinConditions.length > 0) {
       // Construire la requête avec des JOINs appropriés
       const primaryTable = tables[0]; // La première table est considérée comme principale
 
       // Commencer la requête avec la table principale
       let query = `SELECT ${selectFields} FROM ${primaryTable}`;
 
-      // Ajouter les jointures en fonction des relations connues dans le schéma
+      // Ajouter d'abord les jointures explicites des conditions
+      joinConditions.forEach((joinClause) => {
+        query += ` ${joinClause}`;
+      });
+
+      // Puis ajouter les jointures pour les tables restantes si elles ne sont pas déjà jointes
       for (let i = 1; i < tables.length; i++) {
         const secondaryTable = tables[i];
 
-        // Déterminer la relation appropriée entre les tables
-        const joinClause = this.determineJoinClause(
-          primaryTable,
-          secondaryTable,
-        );
-
-        if (joinClause) {
-          query += ` ${joinClause}`;
-        } else {
-          // Si aucune relation directe n'est trouvée, utiliser CROSS JOIN avec avertissement
-          this.logger.warn(
-            `Aucune relation connue entre ${primaryTable} et ${secondaryTable}, utilisation de CROSS JOIN`,
+        // Vérifier si cette table est déjà jointe
+        if (
+          !this.isTableAlreadyJoined(query, secondaryTable) &&
+          !joinConditions.some((jc) => jc.includes(` ${secondaryTable} `))
+        ) {
+          // Déterminer la relation appropriée entre les tables
+          const joinClause = this.determineJoinClause(
+            primaryTable,
+            secondaryTable,
           );
-          query += ` CROSS JOIN ${secondaryTable}`;
+
+          if (joinClause) {
+            query += ` ${joinClause}`;
+          } else {
+            // Si aucune relation directe n'est trouvée, utiliser CROSS JOIN avec avertissement
+            this.logger.warn(
+              `Aucune relation connue entre ${primaryTable} et ${secondaryTable}, utilisation de CROSS JOIN`,
+            );
+            query += ` CROSS JOIN ${secondaryTable}`;
+          }
         }
       }
 
       // Ajouter les conditions si elles existent
-      if (conditions && conditions.trim() !== '') {
+      if (whereConditions && whereConditions.trim() !== '') {
         // Si la condition ne commence pas par WHERE, l'ajouter
-        if (!conditions.trim().toUpperCase().startsWith('WHERE')) {
+        if (!whereConditions.trim().toUpperCase().startsWith('WHERE')) {
           query += ' WHERE ';
         } else {
           query += ' ';
         }
-        query += conditions;
+        query += whereConditions;
+      }
+
+      // Ajouter GROUP BY, ORDER BY et LIMIT si nécessaires
+      if (groupByClause) {
+        query += ` ${groupByClause}`;
+      }
+      if (orderByClause) {
+        query += ` ${orderByClause}`;
+      }
+      if (limitClause) {
+        query += ` ${limitClause}`;
       }
 
       return query;
@@ -375,14 +532,14 @@ export class HuggingFaceService {
       let query = `SELECT ${selectFields} FROM ${tables.join(', ')}`;
 
       // Ajouter les conditions si elles existent
-      if (conditions && conditions.trim() !== '') {
+      if (whereConditions && whereConditions.trim() !== '') {
         // Si la condition ne commence pas par WHERE, l'ajouter
-        if (!conditions.trim().toUpperCase().startsWith('WHERE')) {
+        if (!whereConditions.trim().toUpperCase().startsWith('WHERE')) {
           query += ' WHERE ';
         } else {
           query += ' ';
         }
-        query += conditions;
+        query += whereConditions;
       }
 
       return query;
@@ -648,18 +805,38 @@ export class HuggingFaceService {
         'employé',
       ])
     ) {
-      result.tables = ['staff', 'timesheet_entries', 'projects'];
+      result.tables = ['staff', 'timesheet_entries'];
       result.fields = [
-        'DISTINCT staff.firstname',
+        'DISTINCT staff.id',
+        'staff.firstname',
         'staff.lastname',
         'staff.role',
-        'projects.name as project_name',
       ];
 
-      // Déterminer la période temporelle
-      const timeCondition = this.determineTimeCondition(lowerQuestion);
-      if (timeCondition) {
-        result.conditions = timeCondition;
+      // Déterminer la période temporelle pour les timesheet_entries
+      if (
+        this.containsAny(lowerQuestion, [
+          'mois courant',
+          'ce mois',
+          'mois en cours',
+          'mois actuel',
+        ])
+      ) {
+        result.conditions =
+          'WHERE staff.is_active = true AND EXISTS (SELECT 1 FROM timesheet_entries WHERE timesheet_entries.staff_id = staff.id AND EXTRACT(MONTH FROM timesheet_entries.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM timesheet_entries.date) = EXTRACT(YEAR FROM CURRENT_DATE))';
+      } else if (
+        this.containsAny(lowerQuestion, ['semaine', 'cette semaine'])
+      ) {
+        result.conditions =
+          "WHERE staff.is_active = true AND EXISTS (SELECT 1 FROM timesheet_entries WHERE timesheet_entries.staff_id = staff.id AND timesheet_entries.date BETWEEN date_trunc('week', CURRENT_DATE)::date AND (date_trunc('week', CURRENT_DATE)::date + INTERVAL '6 days'))";
+      } else if (this.containsAny(lowerQuestion, ['aujourd', 'ce jour'])) {
+        result.conditions =
+          'WHERE staff.is_active = true AND EXISTS (SELECT 1 FROM timesheet_entries WHERE timesheet_entries.staff_id = staff.id AND timesheet_entries.date = CURRENT_DATE)';
+      } else if (this.containsAny(lowerQuestion, ['demain'])) {
+        result.conditions =
+          "WHERE staff.is_active = true AND EXISTS (SELECT 1 FROM timesheet_entries WHERE timesheet_entries.staff_id = staff.id AND timesheet_entries.date = CURRENT_DATE + INTERVAL '1 day')";
+      } else {
+        result.conditions = 'WHERE staff.is_active = true';
       }
     } else if (this.containsAny(lowerQuestion, ['projet', 'chantier'])) {
       result.tables = ['projects', 'clients', 'ref_status'];
@@ -695,5 +872,17 @@ export class HuggingFaceService {
     }
 
     return result.tables.length > 0 ? result : null;
+  }
+
+  /**
+   * Vérifie si une table est déjà jointe dans une requête
+   * @param query La requête SQL
+   * @param tableName Le nom de la table à vérifier
+   * @returns true si la table est déjà jointe, false sinon
+   */
+  private isTableAlreadyJoined(query: string, tableName: string): boolean {
+    const lowerQuery = query.toLowerCase();
+    const lowerTableName = tableName.toLowerCase();
+    return lowerQuery.includes(` ${lowerTableName} `);
   }
 }

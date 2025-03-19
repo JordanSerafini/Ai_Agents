@@ -75,7 +75,7 @@ services:
     container_name: ChromaDB
     image: ghcr.io/chroma-core/chroma
     volumes:
-      - chroma_data:/data
+      - ./Backend/analyse_agent/src/data/chroma:/data
     ports:
       - "8000:8000"
     networks:
@@ -84,6 +84,7 @@ services:
       - CHROMA_OPEN_TELEMETRY__ENDPOINT=http://otel-collector:4317/
       - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
+      - CHROMA_PERSIST_DIRECTORY=/data
     depends_on:
       - otel-collector
       - zipkin
@@ -91,7 +92,6 @@ services:
 networks:
   app-network:
     driver: bridge
-
 
 volumes:
   chroma_data:

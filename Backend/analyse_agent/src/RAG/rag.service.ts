@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ChromaClient } from 'chromadb';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
+import { HuggingFaceService } from '../huggingface/huggingface.service';
 
 interface BestMatch {
   prompt: string;
@@ -16,7 +17,11 @@ export class RagService {
   private readonly logger = new Logger(RagService.name);
   private readonly collections = new Map();
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @Inject(forwardRef(() => HuggingFaceService))
+    private readonly huggingFaceService: HuggingFaceService,
+  ) {
     this.client = new ChromaClient({
       path:
         this.configService.get<string>('CHROMA_URL') || 'http://localhost:8000',
@@ -366,20 +371,20 @@ export class RagService {
 
     // Mots-clés discriminants avec leur poids
     const keywordWeights = {
-      'qui': 2.0,
-      'personne': 2.0,
-      'personnel': 2.0,
-      'staff': 2.0, 
-      'employe': 2.0,
-      'travaille': 1.5,
-      'projet': 1.5, 
-      'quels': 1.5,
-      'quelles': 1.5,
-      'chantier': 1.5,
-      'mois': 1.0,
-      'semaine': 1.0,
-      'prochain': 1.0,
-      'prochaine': 1.0
+      qui: 2.0,
+      personne: 2.0,
+      personnel: 2.0,
+      staff: 2.0,
+      employe: 2.0,
+      travaille: 1.5,
+      projet: 1.5,
+      quels: 1.5,
+      quelles: 1.5,
+      chantier: 1.5,
+      mois: 1.0,
+      semaine: 1.0,
+      prochain: 1.0,
+      prochaine: 1.0,
     };
 
     let commonWords = 0;
@@ -390,7 +395,7 @@ export class RagService {
     for (const word of words1) {
       const wordWeight = keywordWeights[word] || 1.0;
       totalWeight += wordWeight;
-      
+
       if (words2.includes(word)) {
         commonWords++;
         weightedCommonWords += wordWeight;
@@ -400,10 +405,11 @@ export class RagService {
     // Calculer le score Jaccard standard (intersection/union)
     const uniqueWords = new Set([...words1, ...words2]);
     const jaccardScore = commonWords / uniqueWords.size;
-    
+
     // Calculer le score pondéré
-    const weightedScore = totalWeight > 0 ? weightedCommonWords / totalWeight : 0;
-    
+    const weightedScore =
+      totalWeight > 0 ? weightedCommonWords / totalWeight : 0;
+
     // Combiner les deux scores (70% poids sur le score pondéré, 30% sur Jaccard)
     return weightedScore * 0.7 + jaccardScore * 0.3;
   }
@@ -435,5 +441,168 @@ export class RagService {
     }
 
     return 0;
+  }
+
+  // Méthode pour trouver une question similaire dans le stockage
+  private async findSimilarStoredQuestion(
+    question: string,
+    reformulatedQuestion: string,
+  ): Promise<{
+    found: boolean;
+    queryId?: string;
+    sql?: string;
+    description?: string;
+    similarity?: number;
+    parameters?: any[];
+  }> {
+    try {
+      // Vérifier si nous avons des requêtes stockées
+      const result = await this.findSimilarPrompt('queries', question, 0.7);
+
+      if (result && result.found && result.metadata) {
+        return {
+          found: true,
+          queryId: result.metadata.id || '',
+          sql: result.metadata.finalQuery || '',
+          description: result.metadata.questionReformulated || '',
+          similarity: result.similarity || 0,
+          parameters: result.metadata.parameters || [],
+        };
+      }
+
+      // Si rien n'a été trouvé avec la question originale, essayer avec la reformulation
+      if (reformulatedQuestion && reformulatedQuestion !== question) {
+        const reformulatedResult = await this.findSimilarPrompt(
+          'queries',
+          reformulatedQuestion,
+          0.7,
+        );
+
+        if (
+          reformulatedResult &&
+          reformulatedResult.found &&
+          reformulatedResult.metadata
+        ) {
+          return {
+            found: true,
+            queryId: reformulatedResult.metadata.id || '',
+            sql: reformulatedResult.metadata.finalQuery || '',
+            description: reformulatedResult.metadata.questionReformulated || '',
+            similarity: reformulatedResult.similarity || 0,
+            parameters: reformulatedResult.metadata.parameters || [],
+          };
+        }
+      }
+
+      // Aucune correspondance trouvée
+      this.logger.log(
+        'Aucune question similaire trouvée avec un seuil de similarité suffisant',
+      );
+      return { found: false };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la recherche de questions similaires: ${error.message}`,
+      );
+      return { found: false };
+    }
+  }
+
+  // Nettoyer le texte pour une meilleure comparaison
+  private cleanText(text: string): string {
+    if (!text) return '';
+
+    return text
+      .toLowerCase()
+      .replace(/[.,/#!$%&*;:{}=\-_`~()]/g, '')
+      .replace(/\s{2,}/g, ' ') // Réduire les espaces multiples
+      .trim();
+  }
+
+  // Calculer la similarité entre deux textes (méthode simple basée sur les mots communs)
+  private calculateSimilarity(text1: string, text2: string): number {
+    if (!text1 || !text2) return 0;
+
+    const words1 = new Set(text1.split(' ').filter((word) => word.length > 2));
+    const words2 = new Set(text2.split(' ').filter((word) => word.length > 2));
+
+    if (words1.size === 0 || words2.size === 0) return 0;
+
+    // Compter les mots communs
+    let commonWords = 0;
+    for (const word of words1) {
+      if (words2.has(word)) {
+        commonWords++;
+      }
+    }
+
+    // Calculer le score de Jaccard (intersection/union)
+    const union = words1.size + words2.size - commonWords;
+    return commonWords / union;
+  }
+
+  // Fonction utilitaire pour calculer la similarité cosinus
+  private cosineSimilarity(embedding1: number[], embedding2: number[]): number {
+    if (!embedding1 || !embedding2 || embedding1.length !== embedding2.length) {
+      return 0;
+    }
+
+    let dotProduct = 0;
+    let norm1 = 0;
+    let norm2 = 0;
+
+    for (let i = 0; i < embedding1.length; i++) {
+      dotProduct += embedding1[i] * embedding2[i];
+      norm1 += embedding1[i] * embedding1[i];
+      norm2 += embedding2[i] * embedding2[i];
+    }
+
+    if (norm1 === 0 || norm2 === 0) return 0;
+
+    return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+  }
+
+  async processQuestion(question: string): Promise<any> {
+    try {
+      // 1. D'abord, obtenir l'analyse et la reformulation de HuggingFace
+      const huggingFaceAnalysis =
+        await this.huggingFaceService.analyseQuestion(question);
+
+      // 2. Chercher si une question similaire existe déjà dans la base de connaissances
+      const similarQuestion = await this.findSimilarStoredQuestion(
+        question,
+        huggingFaceAnalysis.questionReformulated,
+      );
+
+      // 3. Si une question similaire est trouvée avec une bonne confiance
+      if (similarQuestion.found && similarQuestion.sql) {
+        this.logger.log(
+          `Utilisation d'une requête SQL existante: ${similarQuestion.queryId}`,
+        );
+
+        // Utiliser la requête SQL existante au lieu d'en générer une nouvelle
+        return {
+          ...huggingFaceAnalysis,
+          finalQuery: similarQuestion.sql,
+          fromStoredQuery: true,
+          storedQueryId: similarQuestion.queryId,
+          similarity: similarQuestion.similarity,
+          source: 'rag', // Indiquer que la requête vient du RAG et non de la génération
+          confidence: similarQuestion.similarity, // Utiliser la similarité comme score de confiance
+        };
+      }
+
+      // 4. Si aucune correspondance n'est trouvée, continuer avec le processus normal
+      this.logger.log(
+        'Aucune requête existante trouvée, utilisation de la génération standard',
+      );
+
+      // Continuer avec la logique existante pour traiter la question
+      return huggingFaceAnalysis;
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors du traitement de la question: ${error.message}`,
+      );
+      throw error;
+    }
   }
 }
