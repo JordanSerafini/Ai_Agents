@@ -218,7 +218,6 @@ export class EmailFilterService implements OnModuleInit {
       const fetch = this.imap.fetch(results, { bodies: '' });
 
       let analyzedCount = 0;
-      const emailsToDelete: number[] = [];
       let totalDeleted = 0;
       let shouldStop = false;
 
@@ -247,11 +246,12 @@ export class EmailFilterService implements OnModuleInit {
               return;
             }
 
+            // Attendre que l'analyse et le traitement de cet email soit terminé avant de passer au suivant
             try {
               const parsed = await simpleParser(buffer);
               analyzedCount++;
 
-              if (analyzedCount % 1000 === 0) {
+              if (analyzedCount % 100 === 0) {
                 this.logger.log(`Emails analysés: ${analyzedCount}`);
               }
 
@@ -289,30 +289,43 @@ export class EmailFilterService implements OnModuleInit {
               );
 
               if (hasUnsubscribe) {
-                emailsToDelete.push(uid);
                 this.logger.log(
                   `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
                 );
+
+                // Supprimer l'email immédiatement et ATTENDRE la fin de la suppression
+                this.logger.log(
+                  `⏱️ Début de la suppression de l'email ${uid}...`,
+                );
+                const success = await this.testDeleteSingleEmail(uid);
+
+                if (success) {
+                  this.logger.log(
+                    `✅ Email [UID: ${uid}] supprimé avec succès - continuation du traitement`,
+                  );
+                  totalDeleted++;
+                } else {
+                  this.logger.error(
+                    `❌ Échec de la suppression de l'email [UID: ${uid}] - continuation du traitement`,
+                  );
+                }
+
+                // Pause de 2 secondes après chaque suppression pour éviter de surcharger le serveur
+                this.logger.log(
+                  `⏱️ Pause de 2 secondes après la suppression de l'email ${uid}...`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                this.logger.log(
+                  `✅ Fin de la pause, passage à l'email suivant`,
+                );
               }
 
+              // Limiter le nombre d'emails analysés
               if (analyzedCount >= 100) {
-                this.logger.log('🔸 Arrêt du traitement à 100 emails');
+                this.logger.log(
+                  '🔸 Arrêt du traitement après 100 emails analysés',
+                );
                 shouldStop = true;
-
-                const emailsBatch = [...emailsToDelete];
-                emailsToDelete.length = 0;
-                analyzedCount = 0;
-
-                this.logger.log(
-                  `Suppression du lot de ${emailsBatch.length} emails...`,
-                );
-                const deletedInBatch = await this.deleteEmailBatch(emailsBatch);
-                totalDeleted += deletedInBatch;
-
-                shouldStop = false;
-                this.logger.log(
-                  '▶️ Reprise du traitement du prochain lot de 100 emails',
-                );
               }
             } catch (err) {
               this.logger.error('Erreur lors du parsing:', err);
@@ -320,19 +333,9 @@ export class EmailFilterService implements OnModuleInit {
           });
         });
 
-        fetch.once('end', async () => {
-          // Traiter le dernier lot s'il reste des emails
-          if (emailsToDelete.length > 0) {
-            this.logger.log(
-              `Traitement du dernier lot (${emailsToDelete.length} emails)`,
-            );
-            const deletedFinal = await this.deleteEmailBatch(emailsToDelete);
-            totalDeleted += deletedFinal;
-            this.logger.log(`✓ Dernier lot: ${deletedFinal} emails supprimés`);
-          }
-
+        fetch.once('end', () => {
           this.logger.log(
-            `🎉 Traitement terminé - Total d'emails supprimés : ${totalDeleted}`,
+            `🎉 Traitement terminé - Total d'emails analysés: ${analyzedCount}, supprimés: ${totalDeleted}`,
           );
           this.imap.end();
           resolve();
@@ -465,7 +468,6 @@ export class EmailFilterService implements OnModuleInit {
         return { deleted: 0 };
       }
 
-      const emailsToDelete: number[] = [];
       let analyzedCount = 0;
       let totalDeleted = 0;
       let shouldStop = false;
@@ -495,11 +497,12 @@ export class EmailFilterService implements OnModuleInit {
               return;
             }
 
+            // Attendre que l'analyse et le traitement de cet email soit terminé avant de passer au suivant
             try {
               const parsed = await simpleParser(buffer);
               analyzedCount++;
 
-              if (analyzedCount % 1000 === 0) {
+              if (analyzedCount % 100 === 0) {
                 this.logger.log(`Emails analysés: ${analyzedCount}`);
               }
 
@@ -537,37 +540,43 @@ export class EmailFilterService implements OnModuleInit {
               );
 
               if (hasUnsubscribe) {
-                emailsToDelete.push(uid);
                 this.logger.log(
                   `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
                 );
+
+                // Supprimer l'email immédiatement et ATTENDRE la fin de la suppression
+                this.logger.log(
+                  `⏱️ Début de la suppression de l'email ${uid}...`,
+                );
+                const success = await this.testDeleteSingleEmail(uid);
+
+                if (success) {
+                  this.logger.log(
+                    `✅ Email [UID: ${uid}] supprimé avec succès - continuation du traitement`,
+                  );
+                  totalDeleted++;
+                } else {
+                  this.logger.error(
+                    `❌ Échec de la suppression de l'email [UID: ${uid}] - continuation du traitement`,
+                  );
+                }
+
+                // Pause de 2 secondes après chaque suppression pour éviter de surcharger le serveur
+                this.logger.log(
+                  `⏱️ Pause de 2 secondes après la suppression de l'email ${uid}...`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                this.logger.log(
+                  `✅ Fin de la pause, passage à l'email suivant`,
+                );
               }
 
-              // Traiter les emails par petits lots de 20 pour éviter les timeouts
-              if (analyzedCount >= 50 || emailsToDelete.length >= 20) {
+              // Limiter le nombre d'emails analysés
+              if (analyzedCount >= 100) {
                 this.logger.log(
-                  `🔸 Arrêt du traitement après ${analyzedCount} emails analysés`,
+                  '🔸 Arrêt du traitement après 100 emails analysés',
                 );
                 shouldStop = true;
-
-                const emailsBatch = [...emailsToDelete];
-                emailsToDelete.length = 0;
-                analyzedCount = 0;
-
-                this.logger.log(
-                  `Suppression du lot de ${emailsBatch.length} emails...`,
-                );
-                const deletedInBatch = await this.deleteEmailBatch(emailsBatch);
-                totalDeleted += deletedInBatch;
-
-                // Pause de 5 secondes entre les lots pour éviter de surcharger le serveur
-                this.logger.log('⏱️ Pause de 5 secondes entre les lots...');
-                await new Promise((resolve) => setTimeout(resolve, 5000));
-
-                shouldStop = false;
-                this.logger.log(
-                  '▶️ Reprise du traitement du prochain lot de 50 emails',
-                );
               }
             } catch (err) {
               this.logger.error('Erreur lors du parsing:', err);
@@ -575,23 +584,12 @@ export class EmailFilterService implements OnModuleInit {
           });
         });
 
-        fetch.once('end', async () => {
-          if (!shouldStop && emailsToDelete.length > 0) {
-            this.logger.log(
-              `Suppression finale de ${emailsToDelete.length} emails...`,
-            );
-            const deletedFinal = await this.deleteEmailBatch(emailsToDelete);
-            totalDeleted += deletedFinal;
-            this.logger.log(
-              `🎉 Traitement terminé - Total d'emails supprimés: ${totalDeleted}`,
-            );
-            this.imap.end();
-            resolve();
-          } else if (!shouldStop) {
-            this.logger.log('Traitement terminé, aucun email à supprimer');
-            this.imap.end();
-            resolve();
-          }
+        fetch.once('end', () => {
+          this.logger.log(
+            `🎉 Traitement terminé - Total d'emails analysés: ${analyzedCount}, supprimés: ${totalDeleted}`,
+          );
+          this.imap.end();
+          resolve();
         });
       });
 
