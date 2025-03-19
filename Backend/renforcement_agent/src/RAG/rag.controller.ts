@@ -1,22 +1,5 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Body,
-  Param,
-  Query,
-  BadRequestException,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query } from '@nestjs/common';
 import { RagService } from './rag.service';
-
-interface BestMatch {
-  prompt: string;
-  id: string;
-  similarity: number;
-  metadata?: Record<string, any>;
-}
 
 @Controller('rag')
 export class RagController {
@@ -24,7 +7,7 @@ export class RagController {
 
   @Post('collection/:name')
   async createCollection(@Param('name') name: string) {
-    return this.ragService.createCollection(name);
+    return this.ragService.getOrCreateCollection(name);
   }
 
   @Post('collection/:name/documents')

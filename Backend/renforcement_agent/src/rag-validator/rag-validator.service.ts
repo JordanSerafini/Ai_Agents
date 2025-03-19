@@ -135,7 +135,12 @@ export class RagValidatorService {
         (doc) => doc.rating.overall < threshold,
       );
 
-      const documentsToImprove = [];
+      const documentsToImprove: Array<{
+        id: string;
+        content: string;
+        rating: RagRating;
+        improvementSuggestions: string;
+      }> = [];
 
       // Pour chaque document de faible qualité, générer des suggestions d'amélioration
       for (const doc of lowQualityDocs) {
