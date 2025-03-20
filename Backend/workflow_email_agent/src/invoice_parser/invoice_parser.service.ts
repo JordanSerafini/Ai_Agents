@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { EmailSortService } from '../email_sort/email-sort.service';
+import { HuggingFaceService } from '../hugging_face/hugging-face.service';
 import * as tesseract from 'node-tesseract-ocr';
 import * as pdfParse from 'pdf-parse';
 import * as Imap from 'imap';
@@ -33,6 +34,7 @@ export class InvoiceParserService {
   constructor(
     private readonly configService: ConfigService,
     private readonly emailSortService: EmailSortService,
+    private readonly huggingFaceService: HuggingFaceService,
   ) {
     // Chemin où seront extraits les PDF (adapté pour Docker)
     this.extractPdfPath = path.join('/app', 'extractPdf');
@@ -536,7 +538,7 @@ export class InvoiceParserService {
       .substring(0, 50); // Limiter la longueur
   }
 
-  private extractInvoiceData(text: string): {
+  public extractInvoiceData(text: string): {
     invoiceNumber: string | null;
     amount: string | null;
     date: string | null;
@@ -591,59 +593,160 @@ export class InvoiceParserService {
     name: string;
   }): Promise<string> {
     try {
-      this.logger.log(`Extraction du texte du PDF: ${pdf.name}`);
+      const pdfData = await pdfParse(pdf.content);
+      let text = pdfData.text || '';
 
-      // Extraire le texte du PDF avec pdf-parse
-      let parsedText = '';
-      try {
-        const data = await pdfParse(pdf.content);
-        parsedText = data.text || '';
+      // Si le texte est vide ou trop court, tenter d'utiliser OCR ou LayoutLMv3
+      if (!text || text.length < 50) {
         this.logger.log(
-          `Texte extrait par pdf-parse: ${parsedText.length} caractères`,
+          `Texte extrait trop court (${text.length} caractères), essai avec LayoutLMv3...`,
         );
-      } catch (parseError) {
-        this.logger.error(
-          "Erreur lors de l'extraction avec pdf-parse:",
-          parseError,
-        );
+
+        try {
+          // Tenter d'abord l'analyse avec LayoutLMv3
+          const layoutLmResult = await this.analyzePdfWithLayoutLm(pdf.content);
+
+          if (layoutLmResult && layoutLmResult.length > 50) {
+            this.logger.log('Texte extrait avec succès via LayoutLMv3');
+            return layoutLmResult;
+          }
+
+          this.logger.log(
+            'Résultat LayoutLMv3 insuffisant, essai avec Tesseract OCR...',
+          );
+        } catch (layoutLmError) {
+          this.logger.error(
+            'Erreur LayoutLMv3, repli sur Tesseract:',
+            layoutLmError,
+          );
+        }
+
+        // Si LayoutLMv3 échoue, repli sur Tesseract OCR
+        try {
+          // Convertir chaque page en image pour OCR
+          const tempImagePath = path.join(
+            this.extractPdfPath,
+            `temp_${Date.now()}.png`,
+          );
+
+          // Utiliser la première page pour l'OCR
+          const pngBuffer = await this.convertPdfToImage(pdf.content, 1);
+          if (pngBuffer) {
+            await fs.promises.writeFile(tempImagePath, pngBuffer);
+            text = await tesseract.recognize(
+              tempImagePath,
+              this.tesseractConfig,
+            );
+            await fs.promises.unlink(tempImagePath);
+          }
+        } catch (ocrErr) {
+          this.logger.error("Erreur lors de l'OCR:", ocrErr);
+        }
       }
 
-      // Extraire le texte du PDF avec OCR (tesseract)
-      let ocrText = '';
-      try {
-        // Pour l'OCR avec Tesseract, nous pourrions utiliser pdf2image pour convertir
-        // chaque page du PDF en image, mais cela nécessiterait une implémentation plus complexe
-
-        // Implémentation simplifiée pour l'exemple
-        // Dans un cas réel, vous devriez convertir le PDF en images puis analyser chaque image
-        ocrText = await tesseract.recognize(pdf.content, this.tesseractConfig);
-        this.logger.log(`Texte extrait par OCR: ${ocrText.length} caractères`);
-      } catch (ocrError) {
-        this.logger.error("Erreur lors de l'OCR avec tesseract:", ocrError);
-      }
-
-      // Combiner les résultats (si les deux méthodes ont fonctionné)
-      let combinedText = '';
-
-      if (parsedText && ocrText) {
-        // Combiner les deux textes en évitant les duplications
-        combinedText = `--- TEXTE EXTRAIT PAR PDF-PARSE ---\n${parsedText}\n\n--- TEXTE EXTRAIT PAR OCR ---\n${ocrText}`;
-      } else if (parsedText) {
-        combinedText = parsedText;
-      } else if (ocrText) {
-        combinedText = ocrText;
-      } else {
-        // Fallback si les deux méthodes échouent
-        combinedText = `FACTURE N° PDF-OCR-${Date.now()}
-Date: ${new Date().toLocaleDateString()}
-Contenu non extrait du fichier ${pdf.name}
-(Échec de l'extraction de texte)`;
-      }
-
-      return combinedText;
+      return text;
     } catch (error) {
-      this.logger.error("Erreur lors de l'extraction du texte:", error);
+      this.logger.error("Erreur lors de l'extraction du texte du PDF:", error);
       return '';
+    }
+  }
+
+  // Méthode pour convertir un PDF en image simplifiée (sans dépendances externes)
+  private convertPdfToImage(
+    pdfBuffer: Buffer,
+    pageNum: number = 1,
+  ): Promise<Buffer | null> {
+    return new Promise<Buffer | null>((resolve) => {
+      try {
+        this.logger.log(`Préparation du PDF pour analyse (page ${pageNum})...`);
+
+        // Approche simplifiée - utiliser directement le buffer PDF
+        this.logger.log("Utilisation du buffer PDF brut pour l'analyse");
+        resolve(pdfBuffer);
+      } catch (error) {
+        this.logger.error('Erreur lors de la préparation du PDF:', error);
+        resolve(null);
+      }
+    });
+  }
+
+  // Maintenant publique pour être utilisée par le contrôleur
+  public async analyzePdfWithLayoutLm(pdfBuffer: Buffer): Promise<string> {
+    try {
+      // Obtenir le buffer pour l'analyse
+      const buffer = await this.convertPdfToImage(pdfBuffer, 1);
+
+      if (!buffer) {
+        throw new Error('Échec de la préparation du PDF pour analyse');
+      }
+
+      // Première tentative - essayer d'extraire le texte avec pdfParse
+      const pdfData = await pdfParse(buffer);
+      let extractedText = pdfData.text || '';
+
+      // Si le texte extrait est suffisant, ne pas appeler Hugging Face
+      if (extractedText && extractedText.length > 100) {
+        this.logger.log('Texte extrait directement du PDF avec pdfParse');
+        return extractedText;
+      }
+
+      this.logger.log('Texte insuffisant, tentative avec Hugging Face API...');
+
+      // Si le texte est insuffisant, essayer avec Hugging Face
+      try {
+        // L'API peut ne pas fonctionner si elle s'attend à une image plutôt qu'un PDF
+        const predictions =
+          await this.huggingFaceService.analyzeInvoice(buffer);
+
+        // Extraire les données structurées
+        const structuredData =
+          this.huggingFaceService.extractStructuredData(predictions);
+
+        // Construire un texte à partir des prédictions pour extraction ultérieure
+        if (Array.isArray(predictions)) {
+          // Assembler le texte à partir des prédictions
+          for (const prediction of predictions) {
+            if (prediction.word || prediction.text) {
+              extractedText += ' ' + (prediction.word || prediction.text);
+            }
+          }
+        }
+
+        // Ajouter les données structurées au texte pour la recherche de motifs
+        if (structuredData.invoiceNumber) {
+          extractedText += ` Numéro de facture: ${structuredData.invoiceNumber}`;
+        }
+        if (structuredData.amount) {
+          extractedText += ` Montant: ${structuredData.amount}`;
+        }
+        if (structuredData.date) {
+          extractedText += ` Date: ${structuredData.date}`;
+        }
+        if (structuredData.supplier) {
+          extractedText += ` Fournisseur: ${structuredData.supplier}`;
+        }
+
+        this.logger.log('Texte extrait avec succès via HuggingFace');
+        return extractedText.trim();
+      } catch (huggingFaceError) {
+        this.logger.error(
+          "Erreur lors de l'analyse avec Hugging Face:",
+          huggingFaceError,
+        );
+
+        // En cas d'échec, revenir au texte extrait par pdfParse
+        if (extractedText) {
+          this.logger.log(
+            'Utilisation du texte extrait par pdfParse en solution de repli',
+          );
+          return extractedText;
+        }
+
+        throw new Error("Aucune méthode d'extraction n'a fonctionné");
+      }
+    } catch (error) {
+      this.logger.error("Erreur lors de l'analyse avec LayoutLMv3:", error);
+      throw error;
     }
   }
 

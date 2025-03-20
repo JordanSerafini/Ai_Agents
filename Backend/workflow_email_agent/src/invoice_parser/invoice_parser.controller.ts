@@ -1,4 +1,13 @@
-import { Controller, Post, Get, Param, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Logger,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { InvoiceParserService } from './invoice_parser.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -286,6 +295,51 @@ export class InvoiceParserController {
         success: false,
         message: `Erreur: ${error.message}`,
         invoice: null,
+      };
+    }
+  }
+
+  @Post('analyze-pdf')
+  @UseInterceptors(FileInterceptor('file'))
+  async analyzePdfWithHuggingFace(@UploadedFile() file) {
+    this.logger.log('Analyse de facture avec Hugging Face');
+
+    if (!file) {
+      return {
+        success: false,
+        message: 'Aucun fichier fourni',
+        data: null,
+      };
+    }
+
+    try {
+      // Récupérer le buffer du fichier
+      const pdfBuffer = file.buffer;
+
+      // Utiliser la méthode analyzePdfWithLayoutLm directement
+      const extractedText =
+        await this.invoiceParserService.analyzePdfWithLayoutLm(pdfBuffer);
+
+      // Extraire les données structurées à partir du texte
+      const invoiceData =
+        this.invoiceParserService.extractInvoiceData(extractedText);
+
+      return {
+        success: true,
+        message: 'Analyse réussie',
+        data: {
+          text:
+            extractedText.substring(0, 1000) +
+            (extractedText.length > 1000 ? '...' : ''),
+          extractedData: invoiceData,
+        },
+      };
+    } catch (error) {
+      this.logger.error("Erreur lors de l'analyse de la facture:", error);
+      return {
+        success: false,
+        message: `Erreur: ${error.message}`,
+        data: null,
       };
     }
   }
