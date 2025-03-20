@@ -134,24 +134,36 @@ export class EmailFilterService implements OnModuleInit {
 
       this.logger.log(`Nombre total d'emails trouvés : ${results.length}`);
 
-      // Traiter par lots de 100 emails maximum
-      const batchSize = 100;
+      // Augmenter drastiquement la taille des lots pour accélérer le traitement
+      const batchSize = 500; // 5x plus qu'avant
       let totalAnalyzed = 0;
       let totalDeleted = 0;
 
+      // Traiter plusieurs lots en parallèle pour encore plus de vitesse
+      const batches: number[][] = [];
       for (let i = 0; i < results.length; i += batchSize) {
-        const currentBatch = results.slice(i, i + batchSize);
+        batches.push(results.slice(i, i + batchSize));
+      }
+
+      // Traiter jusqu'à 3 lots en parallèle
+      const concurrentBatches = 3;
+      for (let i = 0; i < batches.length; i += concurrentBatches) {
+        const currentBatches = batches.slice(i, i + concurrentBatches);
         this.logger.log(
-          `Traitement du lot ${Math.floor(i / batchSize) + 1}/${Math.ceil(results.length / batchSize)} (${currentBatch.length} emails)`,
+          `Traitement des lots ${i + 1} à ${Math.min(i + concurrentBatches, batches.length)}/${batches.length} en parallèle...`,
         );
 
-        const { analyzed, deleted } = await this.processBatch(currentBatch);
+        const batchResults = await Promise.all(
+          currentBatches.map((batch) => this.processBatch(batch)),
+        );
 
-        totalAnalyzed += analyzed;
-        totalDeleted += deleted;
+        for (const { analyzed, deleted } of batchResults) {
+          totalAnalyzed += analyzed;
+          totalDeleted += deleted;
+        }
 
         this.logger.log(
-          `Lot traité: ${analyzed} analysés, ${deleted} supprimés. Total: ${totalAnalyzed}/${results.length} analysés, ${totalDeleted} supprimés.`,
+          `Lots traités - Total: ${totalAnalyzed}/${results.length} analysés, ${totalDeleted} supprimés.`,
         );
       }
 
@@ -174,7 +186,9 @@ export class EmailFilterService implements OnModuleInit {
     uids: number[],
   ): Promise<{ analyzed: number; deleted: number }> {
     return new Promise((resolve) => {
-      const fetch = this.imap.fetch(uids, { bodies: '' });
+      const fetch = this.imap.fetch(uids, {
+        bodies: ['HEADER.FIELDS (SUBJECT FROM)'],
+      });
       let analyzed = 0;
       const toDelete: number[] = [];
 
@@ -195,31 +209,20 @@ export class EmailFilterService implements OnModuleInit {
         msg.once('end', () => {
           if (!uid) return;
 
-          void (async () => {
+          (() => {
             try {
-              const parsed = await simpleParser(buffer);
+              // Réduire la charge en ne récupérant que les données nécessaires
               analyzed++;
 
-              // Vérifier si c'est un email à supprimer
-              const subject = parsed.subject || '';
-              const text = (parsed.text || '').toLowerCase();
-              const html = (parsed.html || '').toLowerCase();
+              // Analyse rapide pour déterminer si c'est un email à supprimer
+              const hasKeyword =
+                buffer.toLowerCase().includes('unsubscribe') ||
+                buffer.toLowerCase().includes('désabonnement') ||
+                buffer.toLowerCase().includes('desabonnement') ||
+                buffer.toLowerCase().includes('no-reply') ||
+                buffer.toLowerCase().includes('noreply');
 
-              const keywords = [
-                'unsubscribe',
-                'désabonnement',
-                'desabonnement',
-                'no-reply',
-                'noreply',
-              ];
-              if (
-                keywords.some(
-                  (kw) =>
-                    text.includes(kw) ||
-                    html.includes(kw) ||
-                    subject.toLowerCase().includes(kw),
-                )
-              ) {
+              if (hasKeyword) {
                 toDelete.push(uid);
               }
 
@@ -236,12 +239,14 @@ export class EmailFilterService implements OnModuleInit {
         void (async () => {
           let deleted = 0;
           if (toDelete.length > 0) {
+            // Copie du tableau toDelete pour éviter les modifications pendant le traitement
+            const emailsToDelete = [...toDelete];
             this.logger.log(
-              `${toDelete.length}/${analyzed} emails à supprimer identifiés`,
+              `${emailsToDelete.length}/${analyzed} emails à supprimer identifiés`,
             );
-            deleted = await this.deleteEmailBatch(toDelete);
+            deleted = await this.deleteEmailBatch(emailsToDelete);
             this.logger.log(
-              `${deleted}/${toDelete.length} emails effectivement supprimés`,
+              `${deleted}/${emailsToDelete.length} emails effectivement supprimés`,
             );
           }
           resolve({ analyzed, deleted });
@@ -371,24 +376,34 @@ export class EmailFilterService implements OnModuleInit {
         return { deleted: 0 };
       }
 
-      // Traiter par lots de 100 emails maximum
-      const batchSize = 100;
+      // Appliquer la même optimisation que processEmails
+      const batchSize = 500;
+      const batches: number[][] = [];
       let totalAnalyzed = 0;
       let totalDeleted = 0;
 
       for (let i = 0; i < results.length; i += batchSize) {
-        const currentBatch = results.slice(i, i + batchSize);
+        batches.push(results.slice(i, i + batchSize));
+      }
+
+      const concurrentBatches = 3;
+      for (let i = 0; i < batches.length; i += concurrentBatches) {
+        const currentBatches = batches.slice(i, i + concurrentBatches);
         this.logger.log(
-          `Traitement du lot ${Math.floor(i / batchSize) + 1}/${Math.ceil(results.length / batchSize)} (${currentBatch.length} emails)`,
+          `Traitement des lots ${i + 1} à ${Math.min(i + concurrentBatches, batches.length)}/${batches.length} en parallèle...`,
         );
 
-        const { analyzed, deleted } = await this.processBatch(currentBatch);
+        const batchResults = await Promise.all(
+          currentBatches.map((batch) => this.processBatch(batch)),
+        );
 
-        totalAnalyzed += analyzed;
-        totalDeleted += deleted;
+        for (const { analyzed, deleted } of batchResults) {
+          totalAnalyzed += analyzed;
+          totalDeleted += deleted;
+        }
 
         this.logger.log(
-          `Lot traité: ${analyzed} analysés, ${deleted} supprimés. Total: ${totalAnalyzed}/${results.length}`,
+          `Lots traités - Total: ${totalAnalyzed}/${results.length} analysés, ${totalDeleted} supprimés.`,
         );
       }
 
