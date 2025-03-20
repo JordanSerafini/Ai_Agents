@@ -58,7 +58,7 @@ Question utilisateur originale :
 ${originalQuestion}
 """
 
-Voici la structure de la base de données :
+Voici la structure de la base de données, cest très important de bien la prendre en compte et de verifier l'exactitude des tables et des champs :
 """
 ${getSchemaForPrompt()}
 """

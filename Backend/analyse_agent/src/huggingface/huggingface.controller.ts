@@ -1,24 +1,78 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Logger,
+  OnModuleInit,
+  UsePipes,
+  ValidationPipe,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { HuggingFaceService, AnalysisResult } from './huggingface.service';
 import { RagService } from '../RAG/rag.service';
 import { PredefinedQueriesService } from '../sql-queries/predefined-queries.service';
 import { QueryBuilderService } from '../querybuilder/querybuilder.service';
+import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
+import { IsNotEmpty, IsString } from 'class-validator';
+import * as crypto from 'crypto';
+
+export class AnalyseQuestionDto {
+  @IsNotEmpty()
+  @IsString()
+  question: string;
+}
+
+interface AnalyseQuestionResponse {
+  source: string;
+  result: AnalysisResult;
+  data?: any[];
+  rowCount?: number;
+  duration?: number;
+  error?: any;
+  similarity?: number;
+  confidence?: number;
+  warning?: string;
+  parameters?: any;
+  predefinedParameters?: any;
+  id?: string;
+}
+
+interface SqlExecutionResult {
+  rows: any[];
+  rowCount: number;
+  duration: number;
+}
+
+class QueryExecutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'QueryExecutionError';
+  }
+}
 
 @Controller('analyse')
-export class HuggingFaceController {
+export class HuggingFaceController implements OnModuleInit {
   private readonly logger = new Logger(HuggingFaceController.name);
   private readonly promptCollectionName = 'user_prompts';
   private readonly sqlQueryCacheName = 'sql_queries';
+  private readonly SIMILARITY_THRESHOLD: number;
 
   constructor(
     private readonly huggingFaceService: HuggingFaceService,
     private readonly ragService: RagService,
     private readonly predefinedQueriesService: PredefinedQueriesService,
     private readonly queryBuilderService: QueryBuilderService,
+    private readonly configService: ConfigService,
   ) {
-    // Créer les collections si elles n'existent pas
-    void this.initCollections();
+    this.SIMILARITY_THRESHOLD = Number(
+      this.configService.get('SIMILARITY_THRESHOLD', '0.65'),
+    );
+  }
+
+  async onModuleInit() {
+    await this.initCollections();
   }
 
   private async initCollections() {
@@ -34,15 +88,110 @@ export class HuggingFaceController {
   }
 
   @Post('question')
-  async analyseQuestion(@Body() body: { question: string }) {
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async analyseQuestion(
+    @Body() body: AnalyseQuestionDto,
+  ): Promise<AnalyseQuestionResponse> {
     const { question } = body;
+    const sanitizedQuestion = this.sanitizeInput(question);
 
-    // Vérifier d'abord si nous avons une requête prédéfinie correspondante
+    // Vérification avancée
+    if (sanitizedQuestion.length > 500) {
+      this.logger.warn(
+        `❌ Question trop longue: "${sanitizedQuestion.substring(0, 50)}..."`,
+      );
+      throw new HttpException(
+        'La question est trop longue. Limite: 500 caractères.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (/[^a-zA-Z0-9éèêëàâäôöùûüç?!.,\s-]/.test(sanitizedQuestion)) {
+      this.logger.warn(
+        `❌ Caractères non autorisés détectés: "${sanitizedQuestion}"`,
+      );
+      throw new HttpException(
+        'Caractères spéciaux non autorisés dans la question.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    this.logger.log(`📢 Analyse de la question: "${sanitizedQuestion}"`);
+
+    try {
+      // Vérifier d'abord les requêtes prédéfinies
+      const predefinedQueryResult =
+        await this.checkPredefinedQueries(sanitizedQuestion);
+      if (predefinedQueryResult) return predefinedQueryResult;
+
+      // Analyser la question avec Hugging Face
+      const result =
+        await this.huggingFaceService.analyseQuestion(sanitizedQuestion);
+
+      // Vérifier avec la question reformulée
+      if (
+        result.questionReformulated &&
+        result.questionReformulated !== sanitizedQuestion
+      ) {
+        const reformulatedResult = await this.checkReformulatedQuestion(
+          sanitizedQuestion,
+          result.questionReformulated,
+        );
+        if (reformulatedResult) return reformulatedResult;
+      }
+
+      // Vérifier dans le cache SQL
+      const cachedSqlResult = await this.checkSqlCache(sanitizedQuestion);
+      if (cachedSqlResult) return cachedSqlResult;
+
+      // Vérifier les questions similaires
+      const similarQuestionResult =
+        await this.checkSimilarQuestions(sanitizedQuestion);
+      if (similarQuestionResult) return similarQuestionResult;
+
+      // Si aucune réponse n'a été trouvée, procéder à l'analyse complète
+      return await this.processAndValidateAnalysis(sanitizedQuestion);
+    } catch (error) {
+      if (error instanceof QueryExecutionError) {
+        throw new HttpException(
+          {
+            source: 'query_execution',
+            error: error.message,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return this.handleError(error, 'analyse_question');
+    }
+  }
+
+  /**
+   * Sécurise les entrées utilisateur contre les injections
+   * @param input Entrée utilisateur à nettoyer
+   * @returns Entrée nettoyée
+   */
+  private sanitizeInput(input: string): string {
+    if (!input) return '';
+
+    return input
+      .replace(/['"<>;]/g, '') // Évite les attaques XSS et SQL Injection
+      .replace(/\s{2,}/g, ' ') // Supprime les espaces excessifs
+      .trim(); // Supprime les espaces au début et à la fin
+  }
+
+  private async checkPredefinedQueries(
+    question: string,
+  ): Promise<AnalyseQuestionResponse | null> {
     this.logger.log(`Recherche de requête prédéfinie pour: "${question}"`);
-    const predefinedQuery =
-      await this.predefinedQueriesService.findPredefinedQuery(question);
 
-    if (predefinedQuery.found) {
+    try {
+      const predefinedQuery =
+        await this.predefinedQueriesService.findPredefinedQuery(question);
+
+      if (!predefinedQuery.found) {
+        return null;
+      }
+
       this.logger.log(`Requête prédéfinie trouvée: ${predefinedQuery.id}`);
 
       const analysisResult: AnalysisResult = {
@@ -55,11 +204,8 @@ export class HuggingFaceController {
         conditions: '',
       };
 
-      // Exécuter la requête SQL
       try {
-        const queryResult = await this.queryBuilderService.executeQuery(
-          predefinedQuery.query,
-        );
+        const queryResult = await this.executeSqlQuery(predefinedQuery.query);
         return {
           source: 'predefined_query',
           result: analysisResult,
@@ -70,259 +216,271 @@ export class HuggingFaceController {
           duration: queryResult.duration,
         };
       } catch (error) {
-        this.logger.error(
-          `Erreur lors de l'exécution de la requête: ${error.message}`,
-        );
-        return {
-          source: 'predefined_query',
+        return this.handleError(error, 'predefined_query', {
           result: analysisResult,
-          error: this.queryBuilderService.parsePostgresError(error),
-        };
+        });
       }
+    } catch (error) {
+      return this.handleError(error, 'check_predefined_queries');
+    }
+  }
+
+  private async checkReformulatedQuestion(
+    originalQuestion: string,
+    reformulatedQuestion: string,
+  ): Promise<AnalyseQuestionResponse | null> {
+    // Éviter de rechercher si la question reformulée est identique à l'originale
+    if (originalQuestion === reformulatedQuestion) {
+      return null;
     }
 
-    // Si pas de requête prédéfinie trouvée avec la question originale, analyser la question avec Hugging Face
+    this.logger.log(`Question originale: "${originalQuestion}"`);
+    this.logger.log(`Question reformulée: "${reformulatedQuestion}"`);
+
     try {
-      // Analyser la question avec Hugging Face
-      const result = await this.huggingFaceService.analyseQuestion(question);
-
-      // Vérifier si nous avons une requête prédéfinie correspondante avec la question reformulée
-      if (
-        result.questionReformulated &&
-        result.questionReformulated !== question
-      ) {
-        const reformulatedQuestion = result.questionReformulated;
-
-        this.logger.log(`Question originale: "${question}"`);
-        this.logger.log(`Question reformulée: "${reformulatedQuestion}"`);
-
-        // Rechercher avec la question reformulée
-        const reformulatedPredefinedQuery =
-          await this.predefinedQueriesService.findPredefinedQuery(
-            reformulatedQuestion,
-          );
-
-        // Créer un log détaillé sur la correspondance trouvée
-        if (reformulatedPredefinedQuery.found) {
-          const similarity = reformulatedPredefinedQuery.similarity || 0;
-          this.logger.log(
-            `Requête prédéfinie trouvée avec question reformulée: ${reformulatedPredefinedQuery.id} (similarité: ${similarity})`,
-          );
-
-          // Afficher les questions associées à cette requête pour debug
-          if (
-            reformulatedPredefinedQuery.predefinedParameters &&
-            reformulatedPredefinedQuery.predefinedParameters.questions
-          ) {
-            this.logger.log(
-              `Questions associées à cette requête: ${JSON.stringify(reformulatedPredefinedQuery.predefinedParameters.questions)}`,
-            );
-          }
-
-          // Vérifier si la similarité est suffisante (seuil configurable)
-          const SIMILARITY_THRESHOLD = 0.65;
-          if (similarity >= SIMILARITY_THRESHOLD) {
-            this.logger.log(
-              `Similarité suffisante: ${similarity} >= ${SIMILARITY_THRESHOLD}`,
-            );
-
-            const analysisResult: AnalysisResult = {
-              question: question,
-              questionReformulated:
-                reformulatedPredefinedQuery.description || reformulatedQuestion,
-              agent: 'querybuilder',
-              finalQuery: reformulatedPredefinedQuery.query,
-              tables: [],
-              fields: [],
-              conditions: '',
-            };
-
-            try {
-              const queryResult = await this.queryBuilderService.executeQuery(
-                reformulatedPredefinedQuery.query,
-              );
-              return {
-                source: 'predefined_query_reformulated',
-                result: analysisResult,
-                parameters: reformulatedPredefinedQuery.parameters,
-                predefinedParameters:
-                  reformulatedPredefinedQuery.predefinedParameters,
-                id: reformulatedPredefinedQuery.id,
-                data: queryResult.rows,
-                rowCount: queryResult.rowCount,
-                duration: queryResult.duration,
-                similarity: similarity,
-              };
-            } catch (error) {
-              this.logger.error(
-                `Erreur lors de l'exécution de la requête (reformulée): ${error.message}`,
-              );
-              return {
-                source: 'predefined_query_reformulated',
-                result: analysisResult,
-                error: this.queryBuilderService.parsePostgresError(error),
-              };
-            }
-          } else {
-            this.logger.log(
-              `Similarité insuffisante: ${similarity} < ${SIMILARITY_THRESHOLD}`,
-            );
-          }
-        } else {
-          this.logger.log(
-            `Aucune requête prédéfinie trouvée pour la question reformulée: "${reformulatedQuestion}"`,
-          );
-        }
-      }
-
-      // Continuer avec le flux normal si aucune requête prédéfinie n'est trouvée
-      this.logger.log(
-        `Recherche directe dans le cache SQL pour: "${question}"`,
-      );
-      const cachedSql = await this.findCachedSqlQuery(question);
-
-      if (cachedSql) {
-        this.logger.log(
-          `Requête SQL pré-construite trouvée directement dans le cache`,
+      const reformulatedPredefinedQuery =
+        await this.predefinedQueriesService.findPredefinedQuery(
+          reformulatedQuestion,
         );
 
-        // Vérifier que finalQuery existe
-        if (!cachedSql.result.finalQuery) {
-          this.logger.error('Requête SQL finale manquante dans le cache');
-          return {
-            source: 'cache_sql',
-            result: cachedSql.result,
-            error: 'Requête SQL finale manquante',
-          };
-        }
-
-        // Exécuter la requête SQL
-        try {
-          const queryResult = await this.queryBuilderService.executeQuery(
-            cachedSql.result.finalQuery,
-          );
-          return {
-            source: 'cache_sql',
-            result: cachedSql.result,
-            data: queryResult.rows,
-            rowCount: queryResult.rowCount,
-            duration: queryResult.duration,
-          };
-        } catch (error) {
-          this.logger.error(
-            `Erreur lors de l'exécution de la requête: ${error.message}`,
-          );
-          return {
-            source: 'cache_sql',
-            result: cachedSql.result,
-            error: this.queryBuilderService.parsePostgresError(error),
-          };
-        }
+      if (!reformulatedPredefinedQuery.found) {
+        this.logger.log(
+          `Aucune requête prédéfinie trouvée pour la question reformulée: "${reformulatedQuestion}"`,
+        );
+        return null;
       }
 
-      // Si pas de SQL direct, vérifier si une question similaire existe déjà
+      const similarity = reformulatedPredefinedQuery.similarity || 0;
+      this.logger.log(
+        `Requête prédéfinie trouvée avec question reformulée: ${reformulatedPredefinedQuery.id} (similarité: ${similarity})`,
+      );
+
+      if (reformulatedPredefinedQuery.predefinedParameters?.questions) {
+        this.logger.log(
+          `Questions associées à cette requête: ${JSON.stringify(
+            reformulatedPredefinedQuery.predefinedParameters.questions,
+          )}`,
+        );
+      }
+
+      if (similarity < this.SIMILARITY_THRESHOLD) {
+        this.logger.log(
+          `Similarité insuffisante: ${similarity} < ${this.SIMILARITY_THRESHOLD}`,
+        );
+        return null;
+      }
+
+      this.logger.log(
+        `Similarité suffisante: ${similarity} >= ${this.SIMILARITY_THRESHOLD}`,
+      );
+
+      return this.executePredefinedQuery(
+        originalQuestion,
+        reformulatedPredefinedQuery,
+        similarity,
+      );
+    } catch (error) {
+      return this.handleError(error, 'check_reformulated_question');
+    }
+  }
+
+  private async executePredefinedQuery(
+    originalQuestion: string,
+    predefinedQuery: any,
+    similarity?: number,
+  ): Promise<AnalyseQuestionResponse> {
+    const analysisResult: AnalysisResult = {
+      question: originalQuestion,
+      questionReformulated:
+        predefinedQuery.description || predefinedQuery.query,
+      agent: 'querybuilder',
+      finalQuery: predefinedQuery.query,
+      tables: [],
+      fields: [],
+      conditions: '',
+    };
+
+    try {
+      const queryResult = await this.executeSqlQuery(predefinedQuery.query);
+      return {
+        source: similarity
+          ? 'predefined_query_reformulated'
+          : 'predefined_query',
+        result: analysisResult,
+        parameters: predefinedQuery.parameters,
+        predefinedParameters: predefinedQuery.predefinedParameters,
+        id: predefinedQuery.id,
+        data: queryResult.rows,
+        rowCount: queryResult.rowCount,
+        duration: queryResult.duration,
+        ...(similarity && { similarity }),
+      };
+    } catch (error) {
+      return this.handleError(error, 'execute_predefined_query', {
+        result: analysisResult,
+        ...(similarity && { similarity }),
+      });
+    }
+  }
+
+  private async checkSqlCache(
+    question: string,
+  ): Promise<AnalyseQuestionResponse | null> {
+    this.logger.log(`Recherche directe dans le cache SQL pour: "${question}"`);
+
+    try {
+      const cachedSql = await this.findCachedSqlQuery(question);
+
+      if (!cachedSql || !cachedSql.result.finalQuery) {
+        this.logger.warn(
+          `Aucune requête SQL trouvée dans le cache pour: "${question}"`,
+        );
+        return null;
+      }
+
+      this.logger.log(
+        `Requête SQL trouvée dans le cache. Exécution en cours...`,
+      );
+
+      try {
+        const queryResult = await this.executeSqlQuery(
+          cachedSql.result.finalQuery,
+        );
+        return {
+          source: 'cache_sql',
+          result: cachedSql.result,
+          data: queryResult.rows,
+          rowCount: queryResult.rowCount,
+          duration: queryResult.duration,
+        };
+      } catch (error) {
+        return this.handleError(error, 'cache_sql', {
+          result: cachedSql.result,
+        });
+      }
+    } catch (error) {
+      return this.handleError(error, 'check_sql_cache');
+    }
+  }
+
+  private async checkSimilarQuestions(
+    question: string,
+  ): Promise<AnalyseQuestionResponse | null> {
+    try {
       const similarResult = await this.ragService.findSimilarPrompt(
         this.promptCollectionName,
         question,
       );
 
-      if (similarResult.found) {
+      if (!similarResult.found) {
+        return null;
+      }
+
+      this.logger.log(
+        `Question similaire trouvée avec score: ${similarResult.similarity}`,
+      );
+
+      // Rechercher dans le cache SQL avec la question similaire trouvée
+      const cachedSql = await this.findCachedSqlQuery(similarResult.prompt);
+
+      if (cachedSql) {
         this.logger.log(
-          `Question similaire trouvée avec score: ${similarResult.similarity}`,
+          'Requête SQL pré-construite trouvée pour question similaire',
         );
 
-        // Vérifier si nous avons une requête SQL pré-construite pour cette question similaire
-        const cachedSql = await this.findCachedSqlQuery(similarResult.prompt);
+        if (!cachedSql.result.finalQuery) {
+          this.logger.error('Requête SQL finale manquante dans le cache');
+          return {
+            source: 'cache',
+            result: cachedSql.result,
+            similarity: similarResult.similarity,
+            error: 'Requête SQL finale manquante',
+          };
+        }
 
-        if (cachedSql) {
-          this.logger.log(
-            'Requête SQL pré-construite trouvée pour question similaire',
+        try {
+          const queryResult = await this.executeSqlQuery(
+            cachedSql.result.finalQuery,
           );
-
-          // Vérifier que finalQuery existe
-          if (!cachedSql.result.finalQuery) {
-            this.logger.error('Requête SQL finale manquante dans le cache');
-            return {
-              source: 'cache',
-              result: cachedSql.result,
-              similarity: similarResult.similarity,
-              error: 'Requête SQL finale manquante',
-            };
-          }
-
-          // Exécuter la requête SQL
-          try {
-            const queryResult = await this.queryBuilderService.executeQuery(
-              cachedSql.result.finalQuery,
-            );
-            return {
-              source: 'cache',
-              result: cachedSql.result,
-              similarity: similarResult.similarity,
-              data: queryResult.rows,
-              rowCount: queryResult.rowCount,
-              duration: queryResult.duration,
-            };
-          } catch (error) {
-            this.logger.error(
-              `Erreur lors de l'exécution de la requête: ${error.message}`,
-            );
-            return {
-              source: 'cache',
-              result: cachedSql.result,
-              similarity: similarResult.similarity,
-              error: this.queryBuilderService.parsePostgresError(error),
-            };
-          }
+          return {
+            source: 'cache',
+            result: cachedSql.result,
+            similarity: similarResult.similarity,
+            data: queryResult.rows,
+            rowCount: queryResult.rowCount,
+            duration: queryResult.duration,
+          };
+        } catch (error) {
+          return this.handleError(error, 'cache_sql_similar', {
+            result: cachedSql.result,
+            similarity: similarResult.similarity,
+          });
         }
+      }
 
-        // Sinon, effectuer l'analyse avec la question d'origine
-        const result = await this.huggingFaceService.analyseQuestion(question);
+      // Si on n'a pas trouvé de requête mise en cache pour la question similaire,
+      // on réanalyse la question originale
+      const result = await this.huggingFaceService.analyseQuestion(question);
 
-        // Si c'est une requête SQL, l'exécuter
-        if (result.agent === 'querybuilder' && result.finalQuery) {
-          try {
-            const queryResult = await this.queryBuilderService.executeQuery(
-              result.finalQuery,
-            );
-            return {
-              source: 'model',
-              result,
-              similarity: similarResult.similarity,
-              data: queryResult.rows,
-              rowCount: queryResult.rowCount,
-              duration: queryResult.duration,
-            };
-          } catch (error) {
-            this.logger.error(
-              `Erreur lors de l'exécution de la requête: ${error.message}`,
-            );
-            return {
-              source: 'model',
-              result,
-              similarity: similarResult.similarity,
-              error: this.queryBuilderService.parsePostgresError(error),
-            };
-          }
+      if (result.agent === 'querybuilder' && result.finalQuery) {
+        try {
+          const queryResult = await this.executeSqlQuery(
+            result.finalQuery ?? '',
+          );
+          return {
+            source: 'model',
+            result,
+            similarity: similarResult.similarity,
+            data: queryResult.rows,
+            rowCount: queryResult.rowCount,
+            duration: queryResult.duration,
+          };
+        } catch (error) {
+          return this.handleError(error, 'model_similar_query', {
+            result,
+            similarity: similarResult.similarity,
+          });
         }
+      }
 
+      return {
+        source: 'model',
+        result,
+        similarity: similarResult.similarity,
+      };
+    } catch (error) {
+      return this.handleError(error, 'check_similar_questions');
+    }
+  }
+
+  private async processAndValidateAnalysis(
+    question: string,
+  ): Promise<AnalyseQuestionResponse> {
+    try {
+      const result = await this.huggingFaceService.analyseQuestion(question);
+      const validation = this.validateAndAnalyzeResponse(result);
+
+      if (!validation.isValid) {
+        this.logger.warn(
+          `❌ Réponse invalide pour "${question}" (Confiance: ${validation.confidenceScore})`,
+        );
         return {
           source: 'model',
           result,
-          similarity: similarResult.similarity,
+          confidence: validation.confidenceScore,
+          warning:
+            'Réponse potentiellement incorrecte, non enregistrée en cache',
         };
       }
 
-      try {
-        // Analyser la question avec Hugging Face
-        const result = await this.huggingFaceService.analyseQuestion(question);
+      // Stocker en base uniquement si c'est une requête SQL valide
+      const shouldCache = result.agent === 'querybuilder' && result.finalQuery;
 
-        // Analyser la confiance et valider la réponse
-        const validation = this.validateAndAnalyzeResponse(result);
-
-        if (validation.isValid) {
-          // Sauvegarder la question avec les métadonnées de confiance
-          await this.ragService.upsertDocuments(
+      if (shouldCache) {
+        // Exécuter les opérations de cache en parallèle pour optimiser le temps
+        await Promise.all([
+          this.cacheSqlQuery(question, result),
+          this.ragService.upsertDocuments(
             this.promptCollectionName,
             [question],
             [uuidv4()],
@@ -333,116 +491,162 @@ export class HuggingFaceController {
                 timestamp: new Date().toISOString(),
               },
             ],
-          );
+          ),
+        ]);
 
-          // Si c'est une requête querybuilder valide avec une requête SQL,
-          // la sauvegarder dans le cache de requêtes SQL et l'exécuter
-          if (result.agent === 'querybuilder' && result.finalQuery) {
-            await this.cacheSqlQuery(question, result);
-
-            try {
-              const queryResult = await this.queryBuilderService.executeQuery(
-                result.finalQuery,
-              );
-              return {
-                source: 'model',
-                result,
-                confidence: validation.confidenceScore,
-                data: queryResult.rows,
-                rowCount: queryResult.rowCount,
-                duration: queryResult.duration,
-              };
-            } catch (error) {
-              this.logger.error(
-                `Erreur lors de l'exécution de la requête: ${error.message}`,
-              );
-              return {
-                source: 'model',
-                result,
-                confidence: validation.confidenceScore,
-                error: this.queryBuilderService.parsePostgresError(error),
-              };
-            }
-          }
-
-          return {
-            source: 'model',
-            result,
-            confidence: validation.confidenceScore,
-          };
-        } else {
-          this.logger.warn(
-            `Réponse non valide pour la question: ${question}, confiance: ${validation.confidenceScore}`,
+        try {
+          const queryResult = await this.executeSqlQuery(
+            result.finalQuery ?? '',
           );
           return {
             source: 'model',
             result,
             confidence: validation.confidenceScore,
-            warning:
-              'Réponse potentiellement incorrecte, non enregistrée en cache',
+            data: queryResult.rows,
+            rowCount: queryResult.rowCount,
+            duration: queryResult.duration,
           };
+        } catch (error) {
+          return this.handleError(error, 'model_query', {
+            result,
+            confidence: validation.confidenceScore,
+          });
         }
-      } catch (error) {
-        this.logger.error(`Erreur lors de l'analyse: ${error.message}`);
-        throw error;
       }
+
+      // Pour les autres types d'agents ou requêtes sans SQL
+      await this.ragService.upsertDocuments(
+        this.promptCollectionName,
+        [question],
+        [uuidv4()],
+        [
+          {
+            confidenceScore: validation.confidenceScore,
+            agent: result.agent,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      );
+
+      return {
+        source: 'model',
+        result,
+        confidence: validation.confidenceScore,
+      };
     } catch (error) {
-      this.logger.error(`Erreur lors de l'analyse: ${error.message}`);
-      throw error;
+      return this.handleError(error, 'process_validate_analysis');
+    }
+  }
+
+  /**
+   * Gère de manière centralisée les erreurs et uniformise les réponses
+   */
+  private handleError(
+    error: any,
+    source: string,
+    additionalData: Partial<AnalyseQuestionResponse> = {},
+  ): AnalyseQuestionResponse {
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let errorMessage = `Erreur interne: ${error.message || 'Erreur inconnue'}`;
+
+    if (error instanceof HttpException) {
+      status = error.getStatus();
+      errorMessage = error.message;
+    } else if (error instanceof QueryExecutionError) {
+      status = HttpStatus.BAD_REQUEST;
+      errorMessage = error.message;
+    }
+
+    this.logger.error(`⛔ [${source}] ${errorMessage}`);
+
+    // Évite de logger plusieurs fois la même erreur
+    if (!(error instanceof HttpException)) {
+      this.logger.error(error.stack);
+    }
+
+    throw new HttpException(
+      {
+        source,
+        error: errorMessage,
+        ...additionalData,
+      },
+      status,
+    );
+  }
+
+  /**
+   * Exécute une requête SQL en utilisant des paramètres préparés pour éviter les injections
+   */
+  private async executeSqlQuery(
+    query: string,
+    params: any[] = [],
+  ): Promise<SqlExecutionResult> {
+    try {
+      const sanitizedParams = params.map((param) => {
+        if (typeof param === 'string') {
+          return param.replace(/[;'"\\]/g, '').trim(); // Nettoyage avancé
+        }
+        return param;
+      });
+
+      return await this.queryBuilderService.executeQuery(
+        query,
+        sanitizedParams,
+      );
+    } catch (error) {
+      this.logger.error(`❌ Erreur SQL: ${error.message}`);
+      throw new QueryExecutionError(
+        `Erreur SQL: ${this.queryBuilderService.parsePostgresError(error)}`,
+      );
     }
   }
 
   /**
    * Recherche une requête SQL pré-construite dans le cache
-   * @param question La question à rechercher
-   * @returns La requête SQL ou null si non trouvée
    */
   private async findCachedSqlQuery(
     question: string,
   ): Promise<{ result: AnalysisResult } | null> {
     try {
       this.logger.log(
-        `Recherche dans le cache SQL pour la question: "${question}"`,
+        `🔍 Recherche dans le cache SQL pour la question: "${question}"`,
       );
 
       // Utiliser le service PredefinedQueriesService pour rechercher une requête prédéfinie
       const predefinedQuery =
         await this.predefinedQueriesService.findPredefinedQuery(question);
 
+      if (!predefinedQuery.found) {
+        this.logger.log(
+          `⚠️ Aucune requête SQL trouvée en cache pour: "${question}"`,
+        );
+        return null;
+      }
+
+      // Vérification de la validité du cache (ex: vérifier si la table existe toujours)
+      const isValidQuery = await this.validateSqlQuery(predefinedQuery.query);
+      if (!isValidQuery) {
+        this.logger.warn(`⚠️ Requête en cache invalide, suppression du cache.`);
+        return null;
+      }
+
       this.logger.log(
-        `Résultat de la recherche dans le cache SQL - Trouvé: ${predefinedQuery.found}, Similarité: ${predefinedQuery.found ? predefinedQuery.similarity || 'N/A' : 'N/A'}`,
+        `✅ Requête SQL trouvée et validée dans le cache avec score de similarité: ${predefinedQuery.similarity || 'N/A'}`,
       );
 
-      if (predefinedQuery.found) {
-        this.logger.log(
-          `Requête SQL trouvée en cache avec score de similarité: ${predefinedQuery.similarity || 'N/A'}`,
-        );
+      // Transformer les données du cache en AnalysisResult
+      const analysisResult: AnalysisResult = {
+        question: question,
+        questionReformulated: predefinedQuery.description,
+        agent: 'querybuilder',
+        finalQuery: predefinedQuery.query,
+        // Ajouter des valeurs par défaut pour les autres champs requis par AnalysisResult
+        tables: [],
+        fields: [],
+        conditions: '',
+      };
 
-        // Transformer les données du cache en AnalysisResult
-        const analysisResult: AnalysisResult = {
-          question: question,
-          questionReformulated: predefinedQuery.description,
-          agent: 'querybuilder',
-          finalQuery: predefinedQuery.query,
-          // Ajouter des valeurs par défaut pour les autres champs requis par AnalysisResult
-          tables: [],
-          fields: [],
-          conditions: '',
-        };
-
-        return { result: analysisResult };
-      }
-
-      if (predefinedQuery.error) {
-        this.logger.log(
-          `Erreur lors de la recherche en cache pour: "${question}" (Erreur: ${predefinedQuery.error})`,
-        );
-      } else {
-        this.logger.log(
-          `Aucune requête SQL trouvée en cache pour: "${question}"`,
-        );
-      }
-      return null;
+      return { result: analysisResult };
     } catch (error) {
       this.logger.error(
         `Erreur lors de la recherche en cache: ${error.message}`,
@@ -461,7 +665,16 @@ export class HuggingFaceController {
     try {
       if (!sqlResult || !sqlResult.finalQuery) {
         this.logger.warn(
-          `Impossible de mettre en cache une requête SQL invalide pour: "${question}"`,
+          `⚠️ Impossible de mettre en cache une requête SQL invalide pour: "${question}"`,
+        );
+        return false;
+      }
+
+      // Vérifier si la requête est déjà en cache
+      const existingCache = await this.findCachedSqlQuery(question);
+      if (existingCache) {
+        this.logger.log(
+          `🔄 La requête SQL est déjà en cache pour: "${question}"`,
         );
         return false;
       }
@@ -485,12 +698,12 @@ export class HuggingFaceController {
       );
 
       this.logger.log(
-        `Requête SQL mise en cache avec succès pour: "${question}"`,
+        `✅ Requête SQL mise en cache avec succès pour: "${question}"`,
       );
       return true;
     } catch (error) {
       this.logger.error(
-        `Erreur lors de la mise en cache de la requête SQL: ${error.message}`,
+        `❌ Erreur lors de la mise en cache de la requête SQL: ${error.message}`,
       );
       return false;
     }
@@ -500,18 +713,10 @@ export class HuggingFaceController {
    * Génère un ID déterministe à partir d'une chaîne de caractères
    */
   private generateDeterministicId(text: string): string {
-    // Préfixe pour identifier la source (le modèle dans ce cas)
-    const prefix = 'model';
-
-    // Simple hash function
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      const char = text.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-
-    return `${prefix}_${Math.abs(hash).toString(16)}`;
+    return (
+      'model_' +
+      crypto.createHash('sha256').update(text).digest('hex').slice(0, 16)
+    );
   }
 
   /**
@@ -530,8 +735,9 @@ export class HuggingFaceController {
 
     // Vérifier si la question a été correctement reformulée
     if (result.question.trim() === result.questionReformulated.trim()) {
-      confidenceScore -= 0.6; // Pénalité sévère pour non-reformulation
-      this.logger.warn(
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.6,
         'Aucune reformulation effectuée, forte pénalité appliquée',
       );
     }
@@ -541,63 +747,28 @@ export class HuggingFaceController {
       result.question.length < 15 &&
       result.questionReformulated.length < result.question.length * 2
     ) {
-      confidenceScore -= 0.4; // Pénalité pour reformulation insuffisante des questions courtes
-      this.logger.warn('Reformulation insuffisante pour une question courte');
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.4,
+        'Reformulation insuffisante pour une question courte',
+      );
     }
 
     // Analyser la pertinence des champs spécifiques à l'agent
     if (result.agent === 'querybuilder') {
-      // Vérifier les champs spécifiques au querybuilder
-      if (!result.tables || result.tables.length === 0) {
-        confidenceScore -= 0.4; // Pénalité sévère pour absence de tables
-        this.logger.warn(
-          'Aucune table spécifiée pour une requête querybuilder',
-        );
-      }
-
-      if (!result.fields || result.fields.length === 0) {
-        confidenceScore -= 0.3; // Pénalité pour absence de champs à afficher
-        this.logger.warn('Aucun champ à afficher spécifié');
-      }
-
-      if (!result.conditions || result.conditions.trim() === '') {
-        confidenceScore -= 0.3; // Pénalité pour absence de conditions
-        this.logger.warn('Aucune condition spécifiée');
-      }
-
-      // Vérifier si la requête finale a été générée
-      if (!result.finalQuery || result.finalQuery.trim() === '') {
-        confidenceScore -= 0.1; // Légère pénalité
-        this.logger.warn('Requête SQL finale non générée');
-      }
+      confidenceScore = this.evaluateQueryBuilderConfidence(
+        result,
+        confidenceScore,
+      );
     } else if (result.agent === 'workflow') {
-      // Vérifier les champs spécifiques au workflow
-      if (!result.action) {
-        confidenceScore -= 0.2; // Pénalité pour absence d'action
-      }
-
-      if (!result.entities || result.entities.length === 0) {
-        confidenceScore -= 0.15; // Pénalité pour absence d'entités
-      }
-
-      if (!result.parameters || result.parameters.length === 0) {
-        confidenceScore -= 0.1; // Pénalité pour absence de paramètres
-      }
+      confidenceScore = this.evaluateWorkflowConfidence(
+        result,
+        confidenceScore,
+      );
     }
 
     // Analyser la longueur de la reformulation
-    const originalLength = result.question.length;
-    const reformulatedLength = result.questionReformulated.length;
-
-    // Si la reformulation est beaucoup plus courte, réduire la confiance
-    if (reformulatedLength < originalLength * 0.5) {
-      confidenceScore -= 0.2;
-    }
-
-    // Si la reformulation est beaucoup plus longue, augmenter légèrement la confiance
-    if (reformulatedLength > originalLength * 1.5) {
-      confidenceScore += 0.1;
-    }
+    confidenceScore = this.evaluateReformulationLength(result, confidenceScore);
 
     // Limiter le score entre 0 et 1
     confidenceScore = Math.max(0, Math.min(1, confidenceScore));
@@ -606,5 +777,131 @@ export class HuggingFaceController {
     const isValid = confidenceScore >= 0.7; // Seuil plus strict
 
     return { isValid, confidenceScore };
+  }
+
+  /**
+   * Applique une pénalité à un score de confiance avec journalisation
+   */
+  private applyConfidencePenalty(
+    score: number,
+    penalty: number,
+    reason: string,
+  ): number {
+    this.logger.warn(reason);
+    return Math.max(0, score - penalty);
+  }
+
+  private evaluateQueryBuilderConfidence(
+    result: AnalysisResult,
+    confidenceScore: number,
+  ): number {
+    // Vérifier les champs spécifiques au querybuilder
+    if (!result.tables || result.tables.length === 0) {
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.4,
+        'Aucune table spécifiée pour une requête querybuilder',
+      );
+    }
+
+    if (!result.fields || result.fields.length === 0) {
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.3,
+        'Aucun champ à afficher spécifié',
+      );
+    }
+
+    if (!result.conditions || result.conditions.trim() === '') {
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.3,
+        'Aucune condition spécifiée',
+      );
+    }
+
+    // Vérifier si la requête finale a été générée
+    if (!result.finalQuery || result.finalQuery.trim() === '') {
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.1,
+        'Requête SQL finale non générée',
+      );
+    }
+
+    return confidenceScore;
+  }
+
+  private evaluateWorkflowConfidence(
+    result: AnalysisResult,
+    confidenceScore: number,
+  ): number {
+    // Vérifier les champs spécifiques au workflow
+    if (!result.action) {
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.2,
+        'Aucune action spécifiée pour une tâche workflow',
+      );
+    }
+
+    if (!result.entities || result.entities.length === 0) {
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.15,
+        'Aucune entité spécifiée pour une tâche workflow',
+      );
+    }
+
+    if (!result.parameters || result.parameters.length === 0) {
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.1,
+        'Aucun paramètre spécifié pour une tâche workflow',
+      );
+    }
+
+    return confidenceScore;
+  }
+
+  private evaluateReformulationLength(
+    result: AnalysisResult,
+    confidenceScore: number,
+  ): number {
+    const originalLength = result.question.length;
+    const reformulatedLength = result.questionReformulated.length;
+
+    // Si la reformulation est beaucoup plus courte, réduire la confiance
+    if (reformulatedLength < originalLength * 0.5) {
+      confidenceScore = this.applyConfidencePenalty(
+        confidenceScore,
+        0.2,
+        'Reformulation trop courte par rapport à la question originale',
+      );
+    }
+
+    // Si la reformulation est beaucoup plus longue, augmenter légèrement la confiance
+    if (reformulatedLength > originalLength * 1.5) {
+      confidenceScore += 0.1;
+      this.logger.log('Reformulation détaillée, bonus de confiance appliqué');
+    }
+
+    return confidenceScore;
+  }
+
+  /**
+   * Vérifie si une requête SQL est toujours valide
+   */
+  private async validateSqlQuery(query: string): Promise<boolean> {
+    if (!query) return false;
+
+    try {
+      const testQuery = `EXPLAIN ${query}`;
+      await this.queryBuilderService.executeQuery(testQuery, []);
+      return true;
+    } catch (error) {
+      this.logger.warn(`⚠️ Requête SQL invalide détectée: ${error.message}`);
+      return false;
+    }
   }
 }

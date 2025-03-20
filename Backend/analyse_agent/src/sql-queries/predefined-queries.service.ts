@@ -153,7 +153,7 @@ export class PredefinedQueriesService {
       const normalizedQuestion = this.normalizeTextForComparison(question);
       const questionWords = this.extractKeywords(normalizedQuestion);
 
-      // Détecter si la question contient des contraintes temporelles
+      // Détecter des contraintes temporelles spécifiques
       const hasMoisEnCours =
         /mois.*(en)?.*cours|ce mois|mois.*(actuel|courant)/i.test(question);
       const hasSemaineEnCours =
@@ -167,10 +167,17 @@ export class PredefinedQueriesService {
       const hasProchain = /prochain|suivant/i.test(question);
       const hasDernier = /dernier|precedent|passe/i.test(question);
 
+      // Détecter les contraintes temporelles très spécifiques (aujourd'hui, demain, hier)
+      const hasAujourdhui = /aujourd'hui|aujourd hui|auj|ce jour/i.test(
+        question,
+      );
+      const hasDemain = /demain/i.test(question);
+      const hasHier = /hier/i.test(question);
+
       // Journal de débogage
       this.logger.log(
         `Recherche de variations pour: "${question}" (mots-clés: ${questionWords.join(', ')})
-        Contraintes temporelles détectées: ${hasMoisEnCours ? 'mois en cours, ' : ''}${hasSemaineEnCours ? 'semaine en cours, ' : ''}${hasAnneeEnCours ? 'année en cours, ' : ''}${hasProchain ? 'prochain, ' : ''}${hasDernier ? 'dernier/passé' : ''}`,
+        Contraintes temporelles détectées: ${hasMoisEnCours ? 'mois en cours, ' : ''}${hasSemaineEnCours ? 'semaine en cours, ' : ''}${hasAnneeEnCours ? 'année en cours, ' : ''}${hasProchain ? 'prochain, ' : ''}${hasDernier ? 'dernier/passé, ' : ''}${hasAujourdhui ? "aujourd'hui, " : ''}${hasDemain ? 'demain, ' : ''}${hasHier ? 'hier' : ''}`,
       );
 
       let bestMatch: MatchResult = null;
@@ -212,22 +219,40 @@ export class PredefinedQueriesService {
               variantQuestion,
             );
 
+            // Vérifier la cohérence des contraintes temporelles spécifiques
+            const variantHasAujourdhui =
+              /aujourd'hui|aujourd hui|auj|ce jour/i.test(variantQuestion);
+            const variantHasDemain = /demain/i.test(variantQuestion);
+            const variantHasHier = /hier/i.test(variantQuestion);
+
             // Pénalité pour les incohérences temporelles
             let temporalPenalty = 1.0;
 
-            // Si la question mentionne "mois en cours" mais pas la variante, c'est une grosse incohérence
+            // Pénalités pour les incohérences temporelles classiques
             if (hasMoisEnCours && !variantHasMoisEnCours)
               temporalPenalty *= 0.7;
-            // Si la question mentionne "semaine en cours" mais pas la variante, c'est une grosse incohérence
             if (hasSemaineEnCours && !variantHasSemaineEnCours)
               temporalPenalty *= 0.7;
-            // Si la question mentionne "année en cours" mais pas la variante, c'est une grosse incohérence
             if (hasAnneeEnCours && !variantHasAnneeEnCours)
               temporalPenalty *= 0.7;
-            // Si la question mentionne "prochain" mais pas la variante ou vice versa
             if (hasProchain !== variantHasProchain) temporalPenalty *= 0.8;
-            // Si la question mentionne "dernier" mais pas la variante ou vice versa
             if (hasDernier !== variantHasDernier) temporalPenalty *= 0.8;
+
+            // Pénalités sévères pour les incohérences temporelles très spécifiques
+            // Ces contraintes temporelles précises doivent correspondre exactement
+            if (hasAujourdhui !== variantHasAujourdhui) temporalPenalty *= 0.3;
+            if (hasDemain !== variantHasDemain) temporalPenalty *= 0.3;
+            if (hasHier !== variantHasHier) temporalPenalty *= 0.3;
+
+            // Bonus pour les correspondances temporelles exactes
+            if (
+              (hasDemain && variantHasDemain) ||
+              (hasAujourdhui && variantHasAujourdhui) ||
+              (hasHier && variantHasHier)
+            ) {
+              // Augmenter la similarité pour les correspondances temporelles précises
+              temporalPenalty *= 1.5;
+            }
 
             // Calcul de similarité amélioré
             const wordSimilarity = this.calculateKeywordSimilarity(
@@ -269,8 +294,20 @@ export class PredefinedQueriesService {
           }
         }
 
+        // Si nous avons une correspondance avec "demain" et l'ID contient "tomorrow" ou "staff_schedule_tomorrow"
+        if (
+          hasDemain &&
+          (metadata.id.includes('tomorrow') ||
+            metadata.id.includes('staff_schedule_tomorrow'))
+        ) {
+          // Donner une forte préférence à cette correspondance
+          entrySimilarity = Math.max(entrySimilarity, 0.9);
+          this.logger.log(
+            `Correspondance temporelle exacte trouvée pour "demain": ${metadata.id}`,
+          );
+        }
+
         // Vérifier si cette entrée est meilleure que la précédente
-        // Augmenter le seuil à 0.65 pour être plus strict
         if (entrySimilarity > bestSimilarity && entrySimilarity > 0.65) {
           bestSimilarity = entrySimilarity;
           bestMatch = {

@@ -807,6 +807,23 @@
       ],
       "sql": "SELECT s.firstname, s.lastname, l.leave_type, l.start_date, l.end_date FROM staff s JOIN leaves l ON s.id = l.staff_id WHERE l.start_date >= CURRENT_DATE ORDER BY l.start_date",
       "description": "Liste des employés ayant des absences planifiées dans le futur"
+    },
+    {
+      "id": "staff_schedule_tomorrow",
+      "questions": [
+        "Qui travaille demain ?",
+        "Personnel présent demain",
+        "Équipe de demain",
+        "Employés programmés pour demain",
+        "Qui est prévu demain ?",
+        "Planning pour demain",
+        "Personnel demain",
+        "Qui travaille demain ?",
+        "Équipe présente demain",
+        "Planning de demain"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'hours' AS hours_scheduled, CASE WHEN (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb ? 'project' THEN (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'project' ELSE NULL END AS project_id, p.name AS project_name, (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'role' AS daily_role, (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'notes' AS notes FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id LEFT JOIN projects p ON ((wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'project')::uuid = p.id WHERE wws.week_start_date <= CURRENT_DATE + INTERVAL '1 day' AND wws.week_start_date + INTERVAL '6 days' >= CURRENT_DATE + INTERVAL '1 day' AND (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD'))) IS NOT NULL ORDER BY s.lastname, s.firstname",
+      "description": "Liste des employés programmés pour travailler demain"
     }
   ]
 }
