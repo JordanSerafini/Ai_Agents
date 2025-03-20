@@ -20,12 +20,14 @@ export class EmailSortController {
         `Vérification des factures (max: ${maxMessages} messages)`,
       );
 
-      await this.emailSortService.checkForInvoices(maxMessages);
+      const result = await this.emailSortService.checkForInvoices(maxMessages);
       await this.emailSortService.disconnect();
 
       return {
         success: true,
-        message: 'Vérification des factures terminée avec succès',
+        message: `Vérification terminée. ${result.invoicesFound} factures trouvées sur ${result.total} emails analysés.`,
+        factures: result.invoicesFound,
+        total: result.total,
       };
     } catch (error) {
       this.logger.error(
