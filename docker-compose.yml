@@ -140,6 +140,7 @@ services:
       - ./ChromaDB/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     networks:
       - app-network
+      
   ChromaDB:
     container_name: ChromaDB
     image: ghcr.io/chroma-core/chroma
