@@ -42,7 +42,7 @@
         "Équipe présente le [DATE]",
         "Planning pour le [DATE]"
       ],
-      "sql": "SELECT s.firstname, s.lastname, s.role, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'hours' AS hours_scheduled, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'project' AS project_id, p.name AS project_name, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'role' AS daily_role, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'notes' AS notes FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id LEFT JOIN projects p ON ((wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'project')::uuid = p.id WHERE wws.week_start_date <= '[DATE]'::date AND wws.week_start_date + INTERVAL '6 days' >= '[DATE]'::date AND (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD'))) IS NOT NULL ORDER BY s.lastname, s.firstname",
+      "sql": "SELECT s.firstname, s.lastname, s.role, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'hours' AS hours_scheduled, CASE WHEN (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb ? 'project' THEN (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'project' ELSE NULL END AS project_id, p.name AS project_name, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'role' AS daily_role, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'notes' AS notes FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id LEFT JOIN projects p ON ((wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'project')::uuid = p.id WHERE wws.week_start_date <= '[DATE]'::date AND wws.week_start_date + INTERVAL '6 days' >= '[DATE]'::date AND (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD'))) IS NOT NULL ORDER BY s.lastname, s.firstname",
       "description": "Liste des employés programmés pour travailler à une date spécifique",
       "parameters": [
         {
@@ -66,7 +66,7 @@
         "Staff du projet [PROJECT]",
         "Planning du projet [PROJECT]"
       ],
-      "sql": "SELECT s.firstname, s.lastname, s.role, ps.role AS project_role, ps.start_date, ps.end_date FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id WHERE p.name ILIKE '%[PROJECT]%' OR p.id::text = '[PROJECT]' ORDER BY ps.role, s.lastname, s.firstname",
+      "sql": "SELECT s.firstname, s.lastname, s.role, ps.role AS project_role, ps.start_date, ps.end_date FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id WHERE LOWER(p.name) = LOWER('[PROJECT]') OR p.id::text = '[PROJECT]' ORDER BY ps.role, s.lastname, s.firstname",
       "description": "Liste des employés assignés à un projet spécifique avec leur rôle",
       "parameters": [
         {
@@ -671,6 +671,142 @@
       ],
       "sql": "SELECT s.firstname, s.lastname, s.role, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM project_staff ps JOIN projects p ON ps.project_id = p.id WHERE ps.staff_id = s.id AND (p.start_date <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' + INTERVAL '1 month - 1 day')::date) AND (p.end_date >= date_trunc('month', CURRENT_DATE + INTERVAL '1 month')::date)) ORDER BY s.lastname, s.firstname",
       "description": "Liste du personnel disponible pour le mois prochain (sans affectation à des projets pour cette période)"
+    },
+    {
+      "id": "missing_timesheets",
+      "questions": [
+        "Qui n'a pas pointé aujourd'hui ?",
+        "Employés sans pointage",
+        "Qui est absent aujourd'hui ?",
+        "Personnel sans pointage du jour",
+        "Quels employés n'ont pas de pointage ?",
+        "Qui n'a pas enregistré ses heures aujourd'hui ?",
+        "Liste des employés sans feuille de temps aujourd'hui",
+        "Absences de pointage",
+        "Manque de pointage aujourd'hui",
+        "Membres du personnel sans heures enregistrées"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role FROM staff s WHERE NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND te.date = CURRENT_DATE) ORDER BY s.lastname, s.firstname",
+      "description": "Liste des employés qui n'ont pas de pointage aujourd'hui"
+    },
+    {
+      "id": "daily_workload",
+      "questions": [
+        "Quelle est la charge de travail cette semaine ?",
+        "Quels jours sont les plus chargés ?",
+        "Nombre d'heures travaillées chaque jour",
+        "Répartition des heures par jour cette semaine",
+        "Charge de travail quotidienne",
+        "Heures totales par jour de la semaine",
+        "Volume de travail journalier",
+        "Combien d'heures ont été travaillées chaque jour ?",
+        "Charge de travail journalière cette semaine",
+        "Distribution des heures par jour"
+      ],
+      "sql": "SELECT te.date, SUM(te.hours) AS total_hours FROM timesheet_entries te WHERE te.date BETWEEN date_trunc('week', CURRENT_DATE) AND date_trunc('week', CURRENT_DATE) + INTERVAL '6 days' GROUP BY te.date ORDER BY te.date",
+      "description": "Nombre total d'heures de travail enregistrées pour chaque jour de la semaine en cours"
+    },
+    {
+      "id": "planned_leaves",
+      "questions": [
+        "Qui est en congé aujourd'hui ?",
+        "Quels sont les congés en cours ?",
+        "Planning des absences",
+        "Employés actuellement en congé",
+        "Absences planifiées aujourd'hui",
+        "Personnel en congés",
+        "Qui est absent en ce moment ?",
+        "Congés en cours aujourd'hui",
+        "Liste des personnes en pause",
+        "Absences du jour"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, l.leave_type, l.start_date, l.end_date FROM staff s JOIN leaves l ON s.id = l.staff_id WHERE l.start_date <= CURRENT_DATE AND l.end_date >= CURRENT_DATE ORDER BY l.start_date",
+      "description": "Liste des employés ayant un congé ou une pause planifiée"
+    },
+    {
+      "id": "work_hours_per_project",
+      "questions": [
+        "Combien d'heures ont été travaillées par projet ?",
+        "Répartition des heures de travail par chantier",
+        "Quel projet a nécessité le plus d'heures ?",
+        "Heures travaillées par projet cette semaine",
+        "Ventilation des heures par chantier",
+        "Projets les plus chronophages",
+        "Temps passé sur chaque projet",
+        "Distribution horaire par projet",
+        "Quels projets ont mobilisé le plus de temps ?",
+        "Répartition du temps par chantier"
+      ],
+      "sql": "SELECT p.name AS project_name, SUM(te.hours) AS total_hours FROM timesheet_entries te JOIN projects p ON te.project_id = p.id WHERE te.date BETWEEN date_trunc('week', CURRENT_DATE) AND date_trunc('week', CURRENT_DATE) + INTERVAL '6 days' GROUP BY p.name ORDER BY total_hours DESC",
+      "description": "Nombre d'heures travaillées par projet cette semaine"
+    },
+    {
+      "id": "staff_hours_planned_vs_worked",
+      "questions": [
+        "Les employés respectent-ils leur planning ?",
+        "Heures prévues vs heures travaillées",
+        "Qui a fait plus/moins d'heures que prévu ?",
+        "Comparaison entre planning et réalité",
+        "Écart entre horaires prévus et réalisés",
+        "Respect des plannings par le personnel",
+        "Différence entre heures planifiées et effectuées",
+        "Analyse du respect des plannings",
+        "Conformité au planning de travail",
+        "Suivi des heures prévues vs travaillées"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(SUM(te.hours), 0) AS total_hours_worked, COALESCE(SUM((wws.schedule->>to_char(te.date, 'YYYY-MM-DD'))::jsonb->>'hours')::int, 0) AS total_hours_scheduled, COALESCE(SUM(te.hours), 0) - COALESCE(SUM((wws.schedule->>to_char(te.date, 'YYYY-MM-DD'))::jsonb->>'hours')::int, 0) AS deviation FROM staff s LEFT JOIN worker_weekly_schedule wws ON s.id = wws.staff_id LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND te.date BETWEEN wws.week_start_date AND wws.week_start_date + INTERVAL '6 days' GROUP BY s.firstname, s.lastname, s.role ORDER BY deviation DESC",
+      "description": "Comparaison entre les heures planifiées et les heures réellement travaillées par employé"
+    },
+    {
+      "id": "staff_under_over_loaded",
+      "questions": [
+        "Quels employés travaillent trop ou pas assez ?",
+        "Qui est en sous-charge ?",
+        "Qui est en surcharge ?",
+        "Personnel en surcharge de travail",
+        "Employés sous-chargés",
+        "Charge de travail anormale par employé",
+        "Déséquilibre dans les charges de travail",
+        "Repérer les employés en sous-utilisation", 
+        "Identifier les employés surchargés",
+        "Détecter les problèmes de charge de travail"
+      ],
+      "sql": "WITH staff_hours AS (SELECT s.id, s.firstname, s.lastname, s.role, SUM(te.hours) AS total_hours_worked FROM staff s JOIN timesheet_entries te ON s.id = te.staff_id WHERE te.date BETWEEN CURRENT_DATE - INTERVAL '30 days' AND CURRENT_DATE GROUP BY s.id, s.firstname, s.lastname, s.role) SELECT sh.*, CASE WHEN total_hours_worked > 160 THEN 'Surcharge' WHEN total_hours_worked < 100 THEN 'Sous-charge' ELSE 'Normal' END AS workload_status FROM staff_hours sh ORDER BY total_hours_worked DESC",
+      "description": "Détection des employés travaillant trop (surcharge) ou trop peu (sous-charge) sur les 30 derniers jours"
+    },
+    {
+      "id": "project_roles_distribution",
+      "questions": [
+        "Comment sont répartis les rôles par projet ?",
+        "Quelle est la distribution des métiers par chantier ?",
+        "Quels projets ont besoin de plus de ressources ?",
+        "Répartition des postes par chantier",
+        "Distribution des compétences par projet",
+        "Quels rôles sont assignés à chaque chantier ?",
+        "Analyse des fonctions par projet",
+        "Cartographie des rôles par projet",
+        "Structure des équipes par projet", 
+        "Composition des équipes projets par fonction"
+      ],
+      "sql": "SELECT p.name AS project_name, ps.role, COUNT(ps.staff_id) AS total_assigned FROM projects p JOIN project_staff ps ON p.id = ps.project_id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' GROUP BY p.name, ps.role ORDER BY p.name, total_assigned DESC",
+      "description": "Analyse de la répartition des rôles sur les projets actifs et nombre d'employés par rôle"
+    },
+    {
+      "id": "staff_unavailable_upcoming",
+      "questions": [
+        "Quels employés seront absents prochainement ?",
+        "Qui a des congés planifiés ?",
+        "Quelles indisponibilités sont à prévoir ?",
+        "Prochaines absences du personnel",
+        "Calendrier des congés à venir",
+        "Planning des indisponibilités futures",
+        "Employés bientôt en congé",
+        "Absences programmées à venir",
+        "Qui sera absent dans les semaines à venir ?",
+        "Futures indisponibilités des équipes"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, l.leave_type, l.start_date, l.end_date FROM staff s JOIN leaves l ON s.id = l.staff_id WHERE l.start_date >= CURRENT_DATE ORDER BY l.start_date",
+      "description": "Liste des employés ayant des absences planifiées dans le futur"
     }
   ]
 }

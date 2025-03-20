@@ -101,17 +101,83 @@ export class RagService {
 
       const documentIds = ids || documents.map(() => uuidv4());
 
-      await collection.upsert({
-        documents,
+      // Vérifier si les IDs existent déjà dans la collection
+      const existingIds = new Set<string>();
+      try {
+        const allIds = await collection.get({
+          include: ['metadatas'],
+        });
+        if (allIds && allIds.ids) {
+          allIds.ids.forEach((id) => existingIds.add(id));
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Impossible de récupérer les IDs existants: ${error.message}`,
+        );
+      }
+
+      // Séparer les documents en deux groupes: à ajouter et à mettre à jour
+      const toAdd = {
+        documents: [] as string[],
+        ids: [] as string[],
+        metadatas: [] as Record<string, any>[],
+      };
+
+      const toUpdate = {
+        documents: [] as string[],
+        ids: [] as string[],
+        metadatas: [] as Record<string, any>[],
+      };
+
+      // Classer chaque document
+      for (let i = 0; i < documents.length; i++) {
+        const id = documentIds[i];
+        const metadata = metadatas ? metadatas[i] : undefined;
+
+        if (existingIds.has(id)) {
+          toUpdate.documents.push(documents[i]);
+          toUpdate.ids.push(id);
+          if (metadata) toUpdate.metadatas.push(metadata);
+        } else {
+          toAdd.documents.push(documents[i]);
+          toAdd.ids.push(id);
+          if (metadata) toAdd.metadatas.push(metadata);
+        }
+      }
+
+      // Exécuter les opérations séparément
+      const results = {
+        added: 0,
+        updated: 0,
         ids: documentIds,
         metadatas,
-      });
+      };
 
+      if (toAdd.documents.length > 0) {
+        await collection.add({
+          documents: toAdd.documents,
+          ids: toAdd.ids,
+          metadatas: toAdd.metadatas.length ? toAdd.metadatas : undefined,
+        });
+        results.added = toAdd.documents.length;
+      }
+
+      if (toUpdate.documents.length > 0) {
+        await collection.update({
+          documents: toUpdate.documents,
+          ids: toUpdate.ids,
+          metadatas: toUpdate.metadatas.length ? toUpdate.metadatas : undefined,
+        });
+        results.updated = toUpdate.documents.length;
+      }
+
+      this.logger.log(
+        `Upsert terminé: ${results.added} ajoutés, ${results.updated} mis à jour`,
+      );
       return {
         success: true,
         count: documents.length,
-        ids: documentIds,
-        metadatas,
+        ...results,
       };
     } catch (error) {
       this.logger.error(
@@ -607,5 +673,12 @@ export class RagService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Récupère l'instance du client ChromaDB
+   */
+  getChromaClient(): ChromaClient {
+    return this.client;
   }
 }

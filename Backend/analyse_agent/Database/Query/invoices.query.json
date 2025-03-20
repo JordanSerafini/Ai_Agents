@@ -19,7 +19,7 @@
         "Factures avec le statut [STATUS]",
         "Afficher les factures [STATUS]"
       ],
-      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ht, i.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE (rs.code = '[STATUS]' OR rs.name ILIKE '%[STATUS]%') AND rs.entity_type = 'invoice' ORDER BY i.issue_date DESC",
+      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ht, i.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE (rs.code = '[STATUS]' OR rs.name = '[STATUS]') AND rs.entity_type = 'invoice' ORDER BY i.issue_date DESC",
       "description": "Liste des factures filtrées par statut",
       "parameters": [
         {
@@ -37,7 +37,7 @@
         "Liste des factures associées à [CLIENT]",
         "Afficher toutes les factures de [CLIENT]"
       ],
-      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ht, i.total_ttc, rs.name AS status, p.name AS project_name FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE (c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' AND rs.entity_type = 'invoice' ORDER BY i.issue_date DESC",
+      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ht, i.total_ttc, rs.name AS status, p.name AS project_name FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE ((c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' OR c.id::text = '[CLIENT]') AND rs.entity_type = 'invoice' ORDER BY i.issue_date DESC",
       "description": "Liste des factures associées à un client spécifique",
       "parameters": [
         {
@@ -359,6 +359,57 @@
       ],
       "sql": "SELECT DATE_TRUNC('month', i.due_date) AS month, TO_CHAR(DATE_TRUNC('month', i.due_date), 'Month YYYY') AS month_name, COUNT(*) AS invoice_count, ROUND(SUM(i.total_ttc), 2) AS expected_amount FROM invoices i JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND rs.code NOT IN ('payée', 'annulée') AND i.due_date >= CURRENT_DATE GROUP BY DATE_TRUNC('month', i.due_date), TO_CHAR(DATE_TRUNC('month', i.due_date), 'Month YYYY') ORDER BY DATE_TRUNC('month', i.due_date)",
       "description": "Prévision des encaissements de factures pour les prochains mois basée sur les dates d'échéance"
+    },
+    {
+      "id": "invoice_total_vs_paid",
+      "questions": [
+        "Quel est le solde impayé des clients ?",
+        "Total facturé et payé par client",
+        "Quels clients doivent encore payer des factures ?",
+        "Montant restant à payer par client",
+        "Balance client des factures impayées",
+        "Solde dû par client",
+        "Montant total des impayés par client",
+        "Reste à percevoir par client",
+        "Factures impayées par client avec total",
+        "État des paiements clients"
+      ],
+      "sql": "SELECT c.id AS client_id, c.firstname || ' ' || c.lastname AS client_name, SUM(i.total_ttc) AS total_invoiced, COALESCE(SUM(p.amount), 0) AS total_paid, SUM(i.total_ttc) - COALESCE(SUM(p.amount), 0) AS remaining_balance FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id LEFT JOIN payments p ON i.id = p.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND rs.code NOT IN ('annulée') GROUP BY c.id, c.firstname, c.lastname HAVING SUM(i.total_ttc) - COALESCE(SUM(p.amount), 0) > 0 ORDER BY remaining_balance DESC",
+      "description": "Montant total facturé par client et total déjà payé, avec le solde restant dû"
+    },
+    {
+      "id": "average_payment_delay_per_client",
+      "questions": [
+        "Quels clients prennent le plus de temps pour payer ?",
+        "Temps moyen de règlement des factures par client",
+        "Délai de paiement moyen par client",
+        "Clients avec les délais de paiement les plus longs",
+        "Moyenne des jours pour payer par client",
+        "Classement clients par délai de paiement",
+        "Comportement de paiement par client",
+        "Qui paie le plus tardivement ?",
+        "Délai moyen avant règlement par client",
+        "Performance de paiement par client"
+      ],
+      "sql": "SELECT c.id, c.firstname || ' ' || c.lastname AS client_name, COUNT(i.id) AS total_invoices, ROUND(AVG(pay.payment_date - i.issue_date), 2) AS avg_payment_delay FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN payments pay ON i.id = pay.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE rs.code = 'payée' AND rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname ORDER BY avg_payment_delay DESC",
+      "description": "Calcul du délai moyen de paiement par client, en jours"
+    },
+    {
+      "id": "late_paid_invoices",
+      "questions": [
+        "Quelles factures ont été réglées en retard ?",
+        "Liste des factures payées après échéance",
+        "Combien de jours de retard pour chaque facture ?",
+        "Factures réglées après la date d'échéance",
+        "Paiements effectués en retard",
+        "Délai de dépassement des paiements",
+        "Factures payées tardivement",
+        "Retards de paiement sur factures réglées",
+        "Jours de retard pour les factures payées",
+        "Historique des paiements tardifs"
+      ],
+      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ttc, pay.payment_date, (pay.payment_date - i.due_date) AS days_late, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN payments pay ON i.id = pay.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE pay.payment_date > i.due_date AND rs.code = 'payée' ORDER BY days_late DESC",
+      "description": "Liste des factures qui ont été payées après la date d'échéance, avec le nombre de jours de retard"
     }
   ]
 }

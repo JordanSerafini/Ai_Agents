@@ -142,7 +142,7 @@
         "Clients ajoutés [PERIOD]",
         "Acquisition de clients [PERIOD]"
       ],
-      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, c.created_at FROM clients c WHERE c.created_at >= CURRENT_DATE - INTERVAL '[PERIOD]' ORDER BY c.created_at DESC",
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, c.created_at FROM clients c WHERE c.created_at >= CURRENT_DATE - ('[PERIOD]'::INTERVAL) ORDER BY c.created_at DESC",
       "description": "Liste des clients créés sur une période spécifique",
       "parameters": [
         {
@@ -172,6 +172,63 @@
         "Clients et leurs habitudes de paiement"
       ],
       "sql": "SELECT c.id, c.firstname || ' ' || c.lastname AS client_name, COUNT(i.id) AS total_invoices, COUNT(CASE WHEN rs.code = 'payée' THEN 1 END) AS paid_invoices, ROUND(AVG(CASE WHEN pay.payment_date IS NOT NULL THEN pay.payment_date - i.issue_date END)) AS average_payment_delay_days FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id LEFT JOIN payments pay ON i.id = pay.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND i.issue_date >= CURRENT_DATE - INTERVAL '1 year' GROUP BY c.id, c.firstname, c.lastname ORDER BY c.lastname, c.firstname"
+    },
+    {
+      "id": "top_clients_active_projects",
+      "questions": [
+        "Quels clients ont le plus de projets en cours ?",
+        "Top 10 des clients actifs",
+        "Quels clients ont le plus de chantiers ouverts ?",
+        "Classement des clients par nombre de projets actifs",
+        "Top clients avec projets en cours",
+        "Clients gérant le plus de projets actuellement",
+        "Clients les plus actifs par nombre de chantiers",
+        "Top 10 des clients avec projets en cours",
+        "Classement clients par projets actifs",
+        "Clients multi-projets en cours"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(p.id) AS active_projects FROM clients c JOIN projects p ON c.id = p.client_id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY active_projects DESC LIMIT 10",
+      "description": "Liste des clients ayant le plus de projets en cours"
+    },
+    {
+      "id": "clients_without_paid_invoices",
+      "questions": [
+        "Quels clients n'ont jamais payé une facture ?",
+        "Clients sans paiements enregistrés",
+        "Liste des clients à risque financier",
+        "Clients sans facture payée",
+        "Qui n'a jamais payé de facture ?",
+        "Clients sans historique de paiement",
+        "Clients sans règlement",
+        "Liste des clients n'ayant effectué aucun paiement",
+        "Clients avec factures mais sans paiement",
+        "Clientèle sans historique de règlement"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone FROM clients c WHERE NOT EXISTS (SELECT 1 FROM invoices i JOIN projects p ON i.project_id = p.id JOIN ref_status rs ON i.status = rs.id WHERE p.client_id = c.id AND rs.code = 'payée') ORDER BY c.lastname, c.firstname",
+      "description": "Liste des clients qui n'ont aucune facture payée"
+    },
+    {
+      "id": "clients_payment_history",
+      "questions": [
+        "Historique des paiements du client [CLIENT]",
+        "Quels paiements a effectué [CLIENT] ?",
+        "Liste des règlements de [CLIENT]",
+        "Tous les paiements de [CLIENT]",
+        "Paiements historiques de [CLIENT]",
+        "Quand [CLIENT] a-t-il payé ses factures ?",
+        "Journal des paiements de [CLIENT]",
+        "Détail des règlements effectués par [CLIENT]",
+        "Historique financier du client [CLIENT]",
+        "Transactions de paiement de [CLIENT]"
+      ],
+      "sql": "SELECT p.payment_date, p.amount, i.reference AS invoice_ref, i.total_ttc, rs.name AS invoice_status FROM payments p JOIN invoices i ON p.invoice_id = i.id JOIN projects pr ON i.project_id = pr.id JOIN clients c ON pr.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE (c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' OR c.id::text = '[CLIENT]' ORDER BY p.payment_date DESC",
+      "description": "Liste des paiements effectués par un client spécifique",
+      "parameters": [
+        {
+          "name": "CLIENT",
+          "description": "Nom, email ou ID du client"
+        }
+      ]
     }
   ]
 }

@@ -312,37 +312,177 @@ export class SqlQueriesService implements OnModuleInit {
     return Math.abs(hash).toString(16);
   }
 
-  // Ajouter cette méthode au service ChromaDB ou SQL Queries
-  async getAllQueries(): Promise<any[]> {
+  /**
+   * Réinitialise complètement la collection des requêtes SQL
+   */
+  async resetSqlQueriesCollection(): Promise<any> {
     try {
-      // Récupérer toutes les requêtes de ChromaDB
+      this.logger.log('Réinitialisation des requêtes SQL...');
+
+      // Obtenir le client ChromaDB
+      const client = this.ragService.getChromaClient();
+
+      // Vérifier si la collection existe
+      const collections = await client.listCollections();
+      const collectionExists = collections.some(
+        (collection) => collection === this.sqlQueryCacheName,
+      );
+
+      if (collectionExists) {
+        // Supprimer la collection existante
+        await client.deleteCollection({ name: this.sqlQueryCacheName });
+        this.logger.log(`Collection ${this.sqlQueryCacheName} supprimée`);
+      }
+
+      // Supprimer le fichier de métadonnées pour forcer le rechargement
+      if (fsSync.existsSync(this.loadedQueriesMetaPath)) {
+        try {
+          fsSync.unlinkSync(this.loadedQueriesMetaPath);
+          this.logger.log(
+            `Fichier de métadonnées supprimé pour forcer le rechargement complet`,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Impossible de supprimer le fichier de métadonnées: ${error.message}`,
+          );
+        }
+      }
+
+      // Créer une nouvelle collection
+      await this.ragService.createCollection(this.sqlQueryCacheName);
+      this.logger.log(`Collection ${this.sqlQueryCacheName} recréée`);
+
+      // Recharger les requêtes prédéfinies
+      await this.onModuleInit();
+
+      return {
+        success: true,
+        message:
+          'Collection de requêtes SQL réinitialisée et rechargée avec succès',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la réinitialisation des requêtes SQL: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Récupère toutes les requêtes SQL disponibles
+   */
+  async getAllQueries(): Promise<any> {
+    try {
+      // Obtenir la collection
       const collection = await this.ragService.getOrCreateCollection(
         this.sqlQueryCacheName,
       );
-      const response = await collection.get();
 
-      if (!response || !response.metadatas || response.metadatas.length === 0) {
-        return [];
-      }
-
-      // Formatter les résultats pour qu'ils soient plus faciles à utiliser
-      const queries = response.metadatas.map((metadata, index) => {
-        return {
-          id: response.ids ? response.ids[index] : undefined,
-          metadata: metadata,
-          document: response.documents ? response.documents[index] : undefined,
-          embedding: response.embeddings
-            ? response.embeddings[index]
-            : undefined,
-        };
+      // Récupérer tous les documents
+      const allDocuments = await collection.get({
+        include: ['documents', 'metadatas'],
       });
 
-      return queries;
+      return {
+        success: true,
+        count: allDocuments.ids?.length || 0,
+        queries:
+          allDocuments.metadatas?.map((metadata, index) => ({
+            id: allDocuments.ids?.[index],
+            question: allDocuments.documents?.[index],
+            metadata,
+          })) || [],
+      };
     } catch (error) {
       this.logger.error(
         `Erreur lors de la récupération des requêtes: ${error.message}`,
       );
-      return [];
+      throw error;
     }
+  }
+
+  /**
+   * Nettoie les identifiants d'embeddings inexistants dans ChromaDB
+   */
+  async cleanupNonExistingEmbeddings(): Promise<{ deletedCount: number }> {
+    try {
+      this.logger.log('Début du nettoyage des embeddings inexistants...');
+
+      // Obtenir la collection
+      const collection = await this.ragService.getOrCreateCollection(
+        this.sqlQueryCacheName,
+      );
+
+      // Récupérer tous les documents avec leurs IDs
+      const allDocuments = await collection.get({
+        include: ['embeddings', 'documents', 'metadatas'],
+      });
+
+      // Identifiants à supprimer (ceux qui n'ont pas d'embedding)
+      const idsToDelete: string[] = [];
+
+      if (allDocuments && allDocuments.ids) {
+        for (let i = 0; i < allDocuments.ids.length; i++) {
+          // Si l'embedding est vide ou inexistant pour cet ID
+          if (
+            !allDocuments.embeddings ||
+            !allDocuments.embeddings[i] ||
+            allDocuments.embeddings[i].length === 0
+          ) {
+            idsToDelete.push(allDocuments.ids[i]);
+            this.logger.debug(
+              `ID sans embedding détecté: ${allDocuments.ids[i]}`,
+            );
+          }
+        }
+      }
+
+      // Si nous avons des IDs à supprimer
+      if (idsToDelete.length > 0) {
+        // Supprimer les documents avec ces IDs
+        await collection.delete({
+          ids: idsToDelete,
+        });
+
+        this.logger.log(
+          `${idsToDelete.length} embeddings inexistants ont été supprimés`,
+        );
+      } else {
+        this.logger.log('Aucun embedding inexistant trouvé');
+      }
+
+      return { deletedCount: idsToDelete.length };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors du nettoyage des embeddings: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Corrige la requête SQL générée pour utiliser les bonnes références aux statuts
+   */
+  correctStatusInQuery(query: string): string {
+    // Détection des erreurs courantes liées aux statuts
+    if (
+      query.match(
+        /status\s+IN\s+\(\s*['"]en_attente['"]|['"]accepté['"]|['"]refusé['"]\s*\)/i,
+      )
+    ) {
+      // La requête essaie d'utiliser des chaînes directement pour les statuts,
+      // mais dans la base de données ce sont des UUIDs qui pointent vers une table ref_quotation_status
+      this.logger.log('Correction de la requête SQL avec statuts incorrects');
+
+      return query.replace(
+        /status\s+IN\s+\(\s*(['"].*?['"]\s*(?:,\s*['"].*?['"]\s*)*)\)/i,
+        (match, statusList) => {
+          // Remplacer par une jointure avec la table de référence
+          return `status IN (SELECT id FROM ref_quotation_status WHERE code IN (${statusList}))`;
+        },
+      );
+    }
+
+    return query;
   }
 }

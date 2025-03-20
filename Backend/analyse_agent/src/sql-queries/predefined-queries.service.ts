@@ -24,41 +24,75 @@ export class PredefinedQueriesService {
         this.logger.log(
           `Requête prédéfinie trouvée (exacte): ${exactResult.metadata.id} (similarité: ${exactResult.similarity})`,
         );
+
+        // Vérifier et corriger la requête si nécessaire
+        let finalQuery = exactResult.metadata.finalQuery;
+        finalQuery = this.correctStatusReferencesInQuery(finalQuery);
+
         return {
           found: true,
-          query: exactResult.metadata.finalQuery,
+          query: finalQuery,
           description: exactResult.metadata.questionReformulated,
-          parameters: this.detectRequiredParameters(
-            exactResult.metadata.finalQuery,
-          ),
+          parameters: this.detectRequiredParameters(finalQuery),
           predefinedParameters: exactResult.metadata.parameters || [],
           id: exactResult.metadata.id,
           similarity: exactResult.similarity,
         };
       }
 
-      // Si aucune correspondance exacte n'est trouvée, essayer avec un seuil plus bas
-      const approximateResult = await this.ragService.findSimilarPrompt(
-        this.sqlQueryCacheName,
-        question,
-        0.7,
-      );
+      // Récupérer les 3 correspondances les plus proches pour la désambiguïsation
+      const topResults = await this.findTopSimilarPrompts(question, 3);
 
-      if (approximateResult.found && approximateResult.metadata) {
-        this.logger.log(
-          `Requête prédéfinie trouvée (approximative): ${approximateResult.metadata.id} (similarité: ${approximateResult.similarity})`,
-        );
-        return {
-          found: true,
-          query: approximateResult.metadata.finalQuery,
-          description: approximateResult.metadata.questionReformulated,
-          parameters: this.detectRequiredParameters(
-            approximateResult.metadata.finalQuery,
-          ),
-          predefinedParameters: approximateResult.metadata.parameters || [],
-          id: approximateResult.metadata.id,
-          similarity: approximateResult.similarity,
-        };
+      // Si nous avons des résultats proches, analyser pour désambiguïsation
+      if (topResults.length > 0) {
+        // Si le meilleur résultat a une similarité supérieure à 0.8, l'utiliser
+        if (topResults[0].similarity >= 0.8) {
+          this.logger.log(
+            `Requête prédéfinie trouvée (seuil amélioré): ${topResults[0].metadata.id} (similarité: ${topResults[0].similarity})`,
+          );
+
+          // Vérifier et corriger la requête si nécessaire
+          let finalQuery = topResults[0].metadata.finalQuery;
+          finalQuery = this.correctStatusReferencesInQuery(finalQuery);
+
+          return {
+            found: true,
+            query: finalQuery,
+            description: topResults[0].metadata.questionReformulated,
+            parameters: this.detectRequiredParameters(finalQuery),
+            predefinedParameters: topResults[0].metadata.parameters || [],
+            id: topResults[0].metadata.id,
+            similarity: topResults[0].similarity,
+          };
+        }
+
+        // Si nous avons deux résultats proches (différence < 0.1), désambiguïsation
+        else if (
+          topResults.length >= 2 &&
+          topResults[0].similarity - topResults[1].similarity < 0.1 &&
+          topResults[0].similarity >= 0.75
+        ) {
+          // Analyse avancée pour désambiguïsation
+          const bestMatch = this.disambiguateQueries(question, topResults);
+
+          this.logger.log(
+            `Désambiguïsation effectuée: choix de ${bestMatch.metadata.id} (similarité: ${bestMatch.similarity})`,
+          );
+
+          // Vérifier et corriger la requête si nécessaire
+          let finalQuery = bestMatch.metadata.finalQuery;
+          finalQuery = this.correctStatusReferencesInQuery(finalQuery);
+
+          return {
+            found: true,
+            query: finalQuery,
+            description: bestMatch.metadata.questionReformulated,
+            parameters: this.detectRequiredParameters(finalQuery),
+            predefinedParameters: bestMatch.metadata.parameters || [],
+            id: bestMatch.metadata.id,
+            similarity: bestMatch.similarity,
+          };
+        }
       }
 
       // Si toujours rien, essayer de chercher parmi les variations de questions
@@ -67,6 +101,14 @@ export class PredefinedQueriesService {
         this.logger.log(
           `Requête prédéfinie trouvée via variation de question: ${similarQueriesResult.id} (similarité: ${similarQueriesResult.similarity})`,
         );
+
+        // Vérifier et corriger la requête si nécessaire
+        if (similarQueriesResult.query) {
+          similarQueriesResult.query = this.correctStatusReferencesInQuery(
+            similarQueriesResult.query,
+          );
+        }
+
         return similarQueriesResult;
       }
 
@@ -128,7 +170,7 @@ export class PredefinedQueriesService {
       // Journal de débogage
       this.logger.log(
         `Recherche de variations pour: "${question}" (mots-clés: ${questionWords.join(', ')})
-        Contraintes temporelles détectées: ${hasMoisEnCours ? 'mois en cours, ' : ''}${hasSemaineEnCours ? 'semaine en cours, ' : ''}${hasProchain ? 'prochain, ' : ''}${hasDernier ? 'dernier/passé' : ''}`,
+        Contraintes temporelles détectées: ${hasMoisEnCours ? 'mois en cours, ' : ''}${hasSemaineEnCours ? 'semaine en cours, ' : ''}${hasAnneeEnCours ? 'année en cours, ' : ''}${hasProchain ? 'prochain, ' : ''}${hasDernier ? 'dernier/passé' : ''}`,
       );
 
       let bestMatch: MatchResult = null;
@@ -159,6 +201,10 @@ export class PredefinedQueriesService {
               /semaine.*(en)?.*cours|cette semaine|semaine.*(actuel|courant)/i.test(
                 variantQuestion,
               );
+            const variantHasAnneeEnCours =
+              /annee.*(en)?.*cours|cette annee|annee.*(actuel|courant)/i.test(
+                variantQuestion,
+              );
             const variantHasProchain = /prochain|suivant/i.test(
               variantQuestion,
             );
@@ -174,6 +220,9 @@ export class PredefinedQueriesService {
               temporalPenalty *= 0.7;
             // Si la question mentionne "semaine en cours" mais pas la variante, c'est une grosse incohérence
             if (hasSemaineEnCours && !variantHasSemaineEnCours)
+              temporalPenalty *= 0.7;
+            // Si la question mentionne "année en cours" mais pas la variante, c'est une grosse incohérence
+            if (hasAnneeEnCours && !variantHasAnneeEnCours)
               temporalPenalty *= 0.7;
             // Si la question mentionne "prochain" mais pas la variante ou vice versa
             if (hasProchain !== variantHasProchain) temporalPenalty *= 0.8;
@@ -546,5 +595,341 @@ export class PredefinedQueriesService {
       );
       return { found: false, error: error.message };
     }
+  }
+
+  /**
+   * Corrige les références aux statuts dans une requête SQL
+   */
+  private correctStatusReferencesInQuery(query: string): string {
+    if (!query) return query;
+
+    // Correction pour quotations.status comparé directement à des valeurs de texte
+    if (
+      query.match(
+        /status\s+IN\s*\(\s*(['"]en_attente['"]|['"]accepté['"]|['"]refusé['"])/i,
+      )
+    ) {
+      this.logger.log(
+        'Correction de référence directe aux statuts détectée (IN)',
+      );
+
+      return query.replace(
+        /(\w+\.)?status\s+IN\s*\(\s*((['"][^'"]+['"](\s*,\s*['"][^'"]+['"])*)\s*)\)/gi,
+        (match, table, statusList) => {
+          const tablePrefix = table || '';
+          return `${tablePrefix}status IN (SELECT id FROM ref_quotation_status WHERE code IN (${statusList}))`;
+        },
+      );
+    }
+
+    // Correction pour le cas d'égalité (status = 'en_attente')
+    if (
+      query.match(
+        /status\s*=\s*(['"]en_attente['"]|['"]accepté['"]|['"]refusé['"])/i,
+      )
+    ) {
+      this.logger.log(
+        'Correction de référence directe aux statuts détectée (=)',
+      );
+
+      return query.replace(
+        /(\w+\.)?status\s*=\s*(['"][^'"]+['"])/gi,
+        (match, table, statusValue) => {
+          const tablePrefix = table || '';
+          return `${tablePrefix}status = (SELECT id FROM ref_quotation_status WHERE code = ${statusValue})`;
+        },
+      );
+    }
+
+    // Ajout automatique de la condition sur le statut si la requête contient "accepté"
+    if (
+      query.toLowerCase().includes('accepté') &&
+      !query.toLowerCase().includes('status')
+    ) {
+      this.logger.log(
+        'Ajout automatique de la condition sur le statut accepté',
+      );
+      const whereClause = query.toLowerCase().includes('where')
+        ? 'AND'
+        : 'WHERE';
+      return query.replace(
+        /(SELECT.*?FROM.*?)(WHERE|$)/i,
+        `$1 ${whereClause} status = (SELECT id FROM ref_quotation_status WHERE code = 'accepté') $2`,
+      );
+    }
+
+    return query;
+  }
+
+  /**
+   * Récupère les N requêtes les plus similaires à la question
+   */
+  private async findTopSimilarPrompts(
+    question: string,
+    limit: number = 5,
+  ): Promise<any[]> {
+    try {
+      // Récupérer les résultats similaires
+      const results = await this.ragService.findSimilarDocuments(
+        this.sqlQueryCacheName,
+        question,
+        limit,
+      );
+
+      if (!results.ids || !results.ids[0] || results.ids[0].length === 0) {
+        return [];
+      }
+
+      // Définir un type pour les correspondances
+      interface QueryMatch {
+        id: string;
+        similarity: number;
+        metadata: any;
+        score?: number;
+      }
+
+      // Convertir les résultats en tableau d'objets
+      const topMatches: QueryMatch[] = [];
+      for (let i = 0; i < results.ids[0].length; i++) {
+        const id = results.ids[0][i];
+        const distance = results.distances[0][i];
+        // Convertir la distance en similarité (1 - distance)
+        const similarity = 1 - distance;
+        const metadata = results.metadatas[0][i];
+
+        topMatches.push({
+          id,
+          similarity,
+          metadata,
+        });
+      }
+
+      return topMatches;
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la recherche des top ${limit} requêtes similaires: ${error.message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Désambiguïsation entre plusieurs requêtes similaires
+   * Cette méthode analyse plus en détail la question pour choisir la meilleure correspondance
+   */
+  private disambiguateQueries(question: string, candidates: any[]): any {
+    // Initialiser les compteurs pour désambiguïsation
+    const counts = {
+      total: 0,
+      individual: 0,
+      list: 0,
+      each: 0,
+      sum: 0,
+      all: 0,
+    };
+
+    // Extraire la date éventuelle dans la question
+    const dateInfo = this.extractDateInfo(question);
+
+    // Mots-clés qui indiquent une liste de résultats individuels
+    if (/individuel|chaque|liste|detail|tous les/i.test(question)) {
+      counts.individual += 2;
+      counts.list += 2;
+      counts.each += 2;
+    }
+
+    // Mots-clés qui indiquent un total ou une somme
+    if (/total|somme|cumul|montant global|tout/i.test(question)) {
+      counts.total += 2;
+      counts.sum += 2;
+      counts.all += 2;
+    }
+
+    // Mot "cumulé" a un poids TRÈS important
+    if (/cumulé|cumulés|cumul/i.test(question)) {
+      counts.total += 5; // Augmentation significative
+      counts.sum += 5;
+      this.logger.log(
+        `Mot "cumulé" détecté dans la question, forte priorité pour requêtes de somme`,
+      );
+    }
+
+    // Analyser plus précisément le type de requête pour chaque candidat
+    for (const candidate of candidates) {
+      // La requête contient SUM et la question parle de cumul => forte priorité
+      if (
+        /SUM\(/i.test(candidate.metadata.finalQuery) &&
+        /cumulé|cumul/i.test(question)
+      ) {
+        candidate.score = candidate.similarity * 0.5 + 0.5; // Bonus très important
+        this.logger.log(
+          `Candidate ${candidate.metadata.id} fortement bonifié pour SUM avec cumul: ${candidate.score}`,
+        );
+      }
+      // La requête contient GROUP BY => probablement une liste
+      else if (/GROUP BY/i.test(candidate.metadata.finalQuery)) {
+        candidate.score = candidate.similarity * 0.7 + 0.3;
+        this.logger.log(
+          `Candidate ${candidate.metadata.id} bonifié pour GROUP BY: ${candidate.score}`,
+        );
+      }
+      // La requête contient SUM => probablement un total
+      else if (/SUM\(/i.test(candidate.metadata.finalQuery)) {
+        // Donner plus de priorité aux requêtes SUM
+        candidate.score = candidate.similarity * 0.6 + 0.4;
+        this.logger.log(
+          `Candidate ${candidate.metadata.id} bonifié pour SUM: ${candidate.score}`,
+        );
+      }
+      // La requête ne contient pas de GROUP BY => probablement une liste
+      else if (
+        !/GROUP BY/i.test(candidate.metadata.finalQuery) &&
+        !/SUM\(/i.test(candidate.metadata.finalQuery) &&
+        counts.individual > counts.total
+      ) {
+        candidate.score = candidate.similarity * 0.8 + 0.2;
+        this.logger.log(
+          `Candidate ${candidate.metadata.id} légèrement bonifié pour liste: ${candidate.score}`,
+        );
+      } else {
+        candidate.score = candidate.similarity;
+      }
+
+      // Score supplémentaire basé sur la description
+      if (candidate.metadata.description) {
+        const desc = candidate.metadata.description.toLowerCase();
+        if (
+          (counts.individual > counts.total &&
+            /individuel|chaque|liste|detail/i.test(desc)) ||
+          (counts.total > counts.individual && /total|somme|cumul/i.test(desc))
+        ) {
+          candidate.score += 0.05;
+          this.logger.log(
+            `Candidate ${candidate.metadata.id} bonifié pour description: ${candidate.score}`,
+          );
+        }
+
+        // Bonus spécial pour les descriptions contenant "cumulé" si la question le contient aussi
+        if (
+          /cumulé|cumul/i.test(question) &&
+          /cumulé|cumul|total/i.test(desc)
+        ) {
+          candidate.score += 0.1;
+          this.logger.log(
+            `Candidate ${candidate.metadata.id} bonus spécial pour description avec cumul: ${candidate.score}`,
+          );
+        }
+      }
+
+      // Vérifier l'ID de la requête - si elle contient "total", c'est probablement une requête de total
+      if (
+        candidate.metadata.id &&
+        /total/i.test(candidate.metadata.id) &&
+        counts.total > 0
+      ) {
+        candidate.score += 0.1;
+        this.logger.log(
+          `Candidate ${candidate.metadata.id} bonifié pour ID contenant "total": ${candidate.score}`,
+        );
+      }
+    }
+
+    // Trier par score et retourner le meilleur
+    candidates.sort((a, b) => b.score - a.score);
+    const bestMatch = candidates[0];
+
+    // Appliquer les modifications de date si nécessaire
+    if (dateInfo && bestMatch) {
+      bestMatch.metadata.finalQuery = this.applyDateFilters(
+        bestMatch.metadata.finalQuery,
+        dateInfo,
+      );
+    }
+
+    return bestMatch;
+  }
+
+  /**
+   * Extrait les informations de date à partir de la question
+   */
+  private extractDateInfo(question: string): any {
+    const result = {
+      hasSpecificMonth: false,
+      month: null as number | null,
+      year: null as number | null,
+    };
+
+    // Détecter les mois
+    const monthsMap: Record<string, number> = {
+      janvier: 1,
+      février: 2,
+      mars: 3,
+      avril: 4,
+      mai: 5,
+      juin: 6,
+      juillet: 7,
+      août: 8,
+      septembre: 9,
+      octobre: 10,
+      novembre: 11,
+      décembre: 12,
+    };
+
+    // Rechercher le mois dans la question
+    for (const [monthName, monthNum] of Object.entries(monthsMap)) {
+      if (question.toLowerCase().includes(monthName)) {
+        result.hasSpecificMonth = true;
+        result.month = monthNum;
+        break;
+      }
+    }
+
+    // Rechercher l'année dans la question (4 chiffres)
+    const yearMatch = question.match(/\b(20\d{2})\b/);
+    if (yearMatch) {
+      result.year = parseInt(yearMatch[1]);
+    }
+
+    // Si nous avons trouvé des informations de date
+    if (result.hasSpecificMonth || result.year) {
+      this.logger.log(
+        `Informations de date extraites: mois=${result.month}, année=${result.year}`,
+      );
+    }
+
+    return result;
+  }
+
+  /**
+   * Applique les filtres de date à la requête
+   */
+  private applyDateFilters(query: string, dateInfo: any): string {
+    // Si la requête ne contient pas déjà des conditions de date spécifiques
+    if (!/EXTRACT\(MONTH FROM.*?\)\s*=\s*\d+/i.test(query)) {
+      let modifiedQuery = query;
+
+      // Remplacer les conditions de date liées au mois courant
+      if (dateInfo.month) {
+        modifiedQuery = modifiedQuery.replace(
+          /EXTRACT\(MONTH FROM\s+(\w+\.\w+|\w+)\)\s*=\s*EXTRACT\(MONTH FROM CURRENT_DATE\)/gi,
+          `EXTRACT(MONTH FROM $1) = ${dateInfo.month}`,
+        );
+      }
+
+      // Remplacer les conditions de date liées à l'année courante
+      if (dateInfo.year) {
+        modifiedQuery = modifiedQuery.replace(
+          /EXTRACT\(YEAR FROM\s+(\w+\.\w+|\w+)\)\s*=\s*EXTRACT\(YEAR FROM CURRENT_DATE\)/gi,
+          `EXTRACT(YEAR FROM $1) = ${dateInfo.year}`,
+        );
+      }
+
+      this.logger.log(
+        `Requête modifiée avec filtres de date: ${modifiedQuery}`,
+      );
+      return modifiedQuery;
+    }
+
+    return query;
   }
 }

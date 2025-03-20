@@ -315,178 +315,38 @@ export class HuggingFaceService {
   }
 
   /**
-   * Génère une requête SQL complète à partir des éléments d'analyse
-   * @param tables Les tables concernées par la requête
-   * @param fields Les champs à afficher
-   * @param conditions Les conditions et filtres
-   * @returns Une requête SQL complète
+   * Génère la requête SQL à partir des paramètres extraits
    */
   private generateSqlQuery(
     tables: string[],
     fields: string[] = [],
     conditions: string = '',
   ): string {
-    // Utiliser un champ par défaut si aucun champ n'est spécifié
-    const selectFields = fields.length > 0 ? fields.join(', ') : '*';
-
-    // Extraire les différentes parties des conditions
-    const joinConditions: string[] = [];
-    let whereConditions = '';
-    let groupByClause = '';
-    let orderByClause = '';
-    let limitClause = '';
-
-    // Traiter les conditions pour extraire les différentes clauses
-    if (conditions && conditions.trim() !== '') {
-      const conditionsUpper = conditions.toUpperCase();
-
-      // Extraire les jointures des conditions (si présentes)
-      const joinMatches = conditions.match(/JOIN\s+\w+\s+ON\s+[^,;]+/gi) || [];
-      joinMatches.forEach((joinClause) => {
-        joinConditions.push(joinClause);
-      });
-
-      // Extraire la clause WHERE
-      const whereStart = conditionsUpper.indexOf('WHERE');
-      if (whereStart !== -1) {
-        let whereEnd = conditions.length;
-
-        // Chercher les autres clauses après WHERE
-        const groupByStart = conditionsUpper.indexOf('GROUP BY');
-        const orderByStart = conditionsUpper.indexOf('ORDER BY');
-        const limitStart = conditionsUpper.indexOf('LIMIT');
-
-        // Déterminer où se termine la clause WHERE
-        if (
-          groupByStart !== -1 &&
-          (whereEnd > groupByStart || whereEnd === conditions.length)
-        )
-          whereEnd = groupByStart;
-        if (
-          orderByStart !== -1 &&
-          (whereEnd > orderByStart || whereEnd === conditions.length)
-        )
-          whereEnd = orderByStart;
-        if (
-          limitStart !== -1 &&
-          (whereEnd > limitStart || whereEnd === conditions.length)
-        )
-          whereEnd = limitStart;
-
-        whereConditions = conditions.substring(whereStart + 5, whereEnd).trim();
-      } else {
-        // Si pas de WHERE explicite, prendre tout ce qui n'est pas un JOIN comme condition WHERE
-        let nonJoinCondition = conditions;
-        joinMatches.forEach((joinClause) => {
-          nonJoinCondition = nonJoinCondition.replace(joinClause, '');
-        });
-        nonJoinCondition = nonJoinCondition.trim();
-
-        // Si après avoir retiré les JOINs il reste quelque chose, c'est une condition WHERE
-        if (
-          nonJoinCondition &&
-          !nonJoinCondition.toUpperCase().startsWith('GROUP BY') &&
-          !nonJoinCondition.toUpperCase().startsWith('ORDER BY') &&
-          !nonJoinCondition.toUpperCase().startsWith('LIMIT')
-        ) {
-          whereConditions = nonJoinCondition;
-        }
+    try {
+      if (!tables || tables.length === 0) {
+        return '';
       }
 
-      // Extraire GROUP BY
-      const groupByStart = conditionsUpper.indexOf('GROUP BY');
-      if (groupByStart !== -1) {
-        let groupByEnd = conditions.length;
+      // Normalisation des tables
+      const normalizedTables = tables.map((t) => this.normalizeTableName(t));
+      const primaryTable = normalizedTables[0];
 
-        const orderByStart = conditionsUpper.indexOf('ORDER BY');
-        const limitStart = conditionsUpper.indexOf('LIMIT');
-
-        if (
-          orderByStart !== -1 &&
-          (groupByEnd > orderByStart || groupByEnd === conditions.length)
-        )
-          groupByEnd = orderByStart;
-        if (
-          limitStart !== -1 &&
-          (groupByEnd > limitStart || groupByEnd === conditions.length)
-        )
-          groupByEnd = limitStart;
-
-        groupByClause = conditions.substring(groupByStart, groupByEnd).trim();
-      }
-
-      // Extraire ORDER BY
-      const orderByStart = conditionsUpper.indexOf('ORDER BY');
-      if (orderByStart !== -1) {
-        let orderByEnd = conditions.length;
-
-        const limitStart = conditionsUpper.indexOf('LIMIT');
-        if (
-          limitStart !== -1 &&
-          (orderByEnd > limitStart || orderByEnd === conditions.length)
-        )
-          orderByEnd = limitStart;
-
-        orderByClause = conditions.substring(orderByStart, orderByEnd).trim();
-      }
-
-      // Extraire LIMIT
-      const limitStart = conditionsUpper.indexOf('LIMIT');
-      if (limitStart !== -1) {
-        limitClause = conditions.substring(limitStart).trim();
-      }
-    }
-
-    // Si nous avons des agrégations dans les champs (SUM, AVG, etc) mais pas de GROUP BY,
-    // essayer d'ajouter un GROUP BY automatique avec les champs non agrégés
-    if (
-      groupByClause === '' &&
-      fields.some((field) => /SUM\(|AVG\(|COUNT\(|MIN\(|MAX\(/i.test(field))
-    ) {
-      const nonAggregatedFields = fields.filter(
-        (field) => !/SUM\(|AVG\(|COUNT\(|MIN\(|MAX\(/i.test(field),
+      // Nettoyage des champs s'ils sont vides
+      let normalizedFields = fields && fields.length > 0 ? [...fields] : ['*'];
+      normalizedFields = normalizedFields.map((f) =>
+        f.trim().replace(/['"]/g, ''),
       );
 
-      if (nonAggregatedFields.length > 0) {
-        groupByClause = `GROUP BY ${nonAggregatedFields.join(', ')}`;
-      }
-    }
+      // Construction de la clause SELECT
+      let query = `SELECT ${normalizedFields.join(', ')}`;
 
-    // Créer un ensemble des tables déjà jointes pour éviter les doublons
-    const joinedTables = new Set<string>();
-    tables.forEach((table) => joinedTables.add(table));
+      // Construction de la clause FROM avec jointures si nécessaire
+      query += ` FROM ${primaryTable}`;
 
-    // Ajouter les tables des conditions JOIN
-    joinConditions.forEach((joinClause) => {
-      const tableMatch = joinClause.match(/JOIN\s+(\w+)/i);
-      if (tableMatch && tableMatch[1]) {
-        joinedTables.add(tableMatch[1]);
-      }
-    });
-
-    // Si nous avons plus d'une table, nous devons ajouter des relations de jointure
-    if (tables.length > 1 || joinConditions.length > 0) {
-      // Construire la requête avec des JOINs appropriés
-      const primaryTable = tables[0]; // La première table est considérée comme principale
-
-      // Commencer la requête avec la table principale
-      let query = `SELECT ${selectFields} FROM ${primaryTable}`;
-
-      // Ajouter d'abord les jointures explicites des conditions
-      joinConditions.forEach((joinClause) => {
-        query += ` ${joinClause}`;
-      });
-
-      // Puis ajouter les jointures pour les tables restantes si elles ne sont pas déjà jointes
-      for (let i = 1; i < tables.length; i++) {
-        const secondaryTable = tables[i];
-
-        // Vérifier si cette table est déjà jointe
-        if (
-          !this.isTableAlreadyJoined(query, secondaryTable) &&
-          !joinConditions.some((jc) => jc.includes(` ${secondaryTable} `))
-        ) {
-          // Déterminer la relation appropriée entre les tables
+      // Jointures pour tables supplémentaires
+      if (normalizedTables.length > 1) {
+        for (let i = 1; i < normalizedTables.length; i++) {
+          const secondaryTable = normalizedTables[i];
           const joinClause = this.determineJoinClause(
             primaryTable,
             secondaryTable,
@@ -495,55 +355,78 @@ export class HuggingFaceService {
           if (joinClause) {
             query += ` ${joinClause}`;
           } else {
-            // Si aucune relation directe n'est trouvée, utiliser CROSS JOIN avec avertissement
-            this.logger.warn(
-              `Aucune relation connue entre ${primaryTable} et ${secondaryTable}, utilisation de CROSS JOIN`,
-            );
+            // Fallback: jointure croisée si pas de relation connue
             query += ` CROSS JOIN ${secondaryTable}`;
           }
         }
       }
 
-      // Ajouter les conditions si elles existent
-      if (whereConditions && whereConditions.trim() !== '') {
-        // Si la condition ne commence pas par WHERE, l'ajouter
-        if (!whereConditions.trim().toUpperCase().startsWith('WHERE')) {
-          query += ' WHERE ';
-        } else {
-          query += ' ';
+      // Traiter les conditions
+      let whereClause = this.normalizeConditions(conditions);
+
+      // Ajout de la clause WHERE si nécessaire
+      if (whereClause && whereClause.trim() !== '') {
+        if (!whereClause.trim().toUpperCase().startsWith('WHERE')) {
+          whereClause = `WHERE ${whereClause}`;
         }
-        query += whereConditions;
+        query += ` ${whereClause}`;
       }
 
-      // Ajouter GROUP BY, ORDER BY et LIMIT si nécessaires
-      if (groupByClause) {
-        query += ` ${groupByClause}`;
-      }
-      if (orderByClause) {
-        query += ` ${orderByClause}`;
-      }
-      if (limitClause) {
-        query += ` ${limitClause}`;
-      }
+      // Correction des cas particuliers
+      query = this.correctStatusReferences(query);
 
       return query;
-    } else {
-      // Traitement simple pour une seule table
-      let query = `SELECT ${selectFields} FROM ${tables.join(', ')}`;
-
-      // Ajouter les conditions si elles existent
-      if (whereConditions && whereConditions.trim() !== '') {
-        // Si la condition ne commence pas par WHERE, l'ajouter
-        if (!whereConditions.trim().toUpperCase().startsWith('WHERE')) {
-          query += ' WHERE ';
-        } else {
-          query += ' ';
-        }
-        query += whereConditions;
-      }
-
-      return query;
+    } catch (error) {
+      this.logger.error(`Erreur lors de la génération SQL: ${error.message}`);
+      return '';
     }
+  }
+
+  /**
+   * Corrige les références aux statuts dans une requête SQL
+   */
+  private correctStatusReferences(query: string): string {
+    if (!query) return query;
+
+    // Correction pour quotations.status comparé directement à des valeurs de texte
+    if (
+      query.match(
+        /status\s+IN\s*\(\s*(['"]en_attente['"]|['"]accepté['"]|['"]refusé['"])/i,
+      )
+    ) {
+      this.logger.log(
+        'Correction de référence directe aux statuts détectée (IN)',
+      );
+
+      return query.replace(
+        /(\w+\.)?status\s+IN\s*\(\s*((['"][^'"]+['"](\s*,\s*['"][^'"]+['"])*)\s*)\)/gi,
+        (match, table, statusList) => {
+          const tablePrefix = table || '';
+          return `${tablePrefix}status IN (SELECT id FROM ref_quotation_status WHERE code IN (${statusList}))`;
+        },
+      );
+    }
+
+    // Correction pour le cas d'égalité (status = 'en_attente')
+    if (
+      query.match(
+        /status\s*=\s*(['"]en_attente['"]|['"]accepté['"]|['"]refusé['"])/i,
+      )
+    ) {
+      this.logger.log(
+        'Correction de référence directe aux statuts détectée (=)',
+      );
+
+      return query.replace(
+        /(\w+\.)?status\s*=\s*(['"][^'"]+['"])/gi,
+        (match, table, statusValue) => {
+          const tablePrefix = table || '';
+          return `${tablePrefix}status = (SELECT id FROM ref_quotation_status WHERE code = ${statusValue})`;
+        },
+      );
+    }
+
+    return query;
   }
 
   /**
@@ -884,5 +767,58 @@ export class HuggingFaceService {
     const lowerQuery = query.toLowerCase();
     const lowerTableName = tableName.toLowerCase();
     return lowerQuery.includes(` ${lowerTableName} `);
+  }
+
+  /**
+   * Normalise le nom d'une table
+   */
+  private normalizeTableName(tableName: string): string {
+    if (!tableName) return '';
+
+    // Normaliser les noms de tables courants
+    const normalizedNames: Record<string, string> = {
+      projet: 'projects',
+      projets: 'projects',
+      client: 'clients',
+      devis: 'quotations',
+      facture: 'invoices',
+      factures: 'invoices',
+      employé: 'staff',
+      employés: 'staff',
+      personnel: 'staff',
+      adresse: 'addresses',
+      adresses: 'addresses',
+      étape: 'stages',
+      étapes: 'stages',
+      paiement: 'payments',
+      paiements: 'payments',
+      statut: 'ref_status',
+      produit: 'quotation_products',
+      produits: 'quotation_products',
+    };
+
+    const normalizedName = normalizedNames[tableName.toLowerCase()];
+    return normalizedName || tableName.toLowerCase();
+  }
+
+  /**
+   * Normalise les conditions d'une requête
+   */
+  private normalizeConditions(conditions: string): string {
+    if (!conditions) return '';
+
+    // Supprimer les guillemets inutiles
+    const normalizedConditions = conditions.replace(
+      /(['"])([^'"]*)\1/g,
+      (match, quote, content) => {
+        // Si le contenu contient des espaces ou caractères spéciaux, garder les guillemets
+        if (/\s|[(),=<>]/.test(content)) {
+          return match;
+        }
+        return content;
+      },
+    );
+
+    return normalizedConditions.trim();
   }
 }
