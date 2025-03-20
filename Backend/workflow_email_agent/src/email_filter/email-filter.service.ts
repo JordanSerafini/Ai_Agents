@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import * as Imap from 'imap';
-import { simpleParser, ParsedMail } from 'mailparser';
+import { simpleParser } from 'mailparser';
 import { ConfigService } from '@nestjs/config';
 import { promisify } from 'util';
 import { Stream } from 'stream';
@@ -37,96 +37,39 @@ export class EmailFilterService implements OnModuleInit {
   private async deleteEmailBatch(uids: number[]): Promise<number> {
     if (uids.length === 0) return 0;
 
-    // Limite le nombre d'emails traités en une fois pour éviter de surcharger le serveur
-    const maxEmailsPerBatch = 10;
-    const currentBatch = uids.slice(0, maxEmailsPerBatch);
-    const remainingUids = uids.slice(maxEmailsPerBatch);
-
-    this.logger.log(
-      `📦 Traitement d'un lot de ${currentBatch.length} emails sur ${uids.length} au total`,
-    );
-
-    // Assurons-nous d'être connectés avant de commencer le traitement du lot
     try {
       await this.ensureConnection();
-
-      // Ouvrir la boîte de réception une seule fois pour le lot
       await promisify<string, Imap.Box>(this.imap.openBox.bind(this.imap))(
         'INBOX',
       );
 
-      const count = await this.processEmailsSequentially(currentBatch, 0);
+      this.logger.log(`Suppression d'un lot de ${uids.length} emails`);
 
-      // S'il reste des emails à traiter, appeler récursivement avec pause
-      if (remainingUids.length > 0) {
-        this.logger.log(`⏱️ Pause de 1 seconde avant le prochain lot...`);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const remainingCount = await this.deleteEmailBatch(remainingUids);
-        return count + remainingCount;
-      }
+      // Marquer tous les emails comme supprimés en une seule fois
+      await new Promise<void>((resolve, reject) => {
+        this.imap.addFlags(uids, '\\Deleted', (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
-      return count;
+      // Supprimer tous les emails marqués en une seule fois
+      await new Promise<void>((resolve, reject) => {
+        this.imap.expunge((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      this.logger.log(`${uids.length} emails supprimés avec succès`);
+
+      return uids.length;
     } catch (err) {
-      this.logger.error(
-        'Erreur lors de la préparation du traitement par lot:',
-        err,
-      );
-
-      // En cas d'erreur, attendre 10 secondes avant de tenter le lot restant
-      if (remainingUids.length > 0) {
-        this.logger.log(
-          '⚠️ Attente de 10 secondes avant de tenter le prochain lot...',
-        );
-        await new Promise((resolve) => setTimeout(resolve, 10000));
-        return await this.deleteEmailBatch(remainingUids);
-      }
-
+      this.logger.error('Erreur lors de la suppression du lot:', err);
       return 0;
     }
   }
 
-  // Nouvelle méthode pour traiter les emails de manière séquentielle
-  private async processEmailsSequentially(
-    uids: number[],
-    count: number,
-  ): Promise<number> {
-    if (uids.length === 0) return count;
-
-    const currentEmail = uids[0];
-    const remaining = uids.slice(1);
-
-    this.logger.log(`🔄 Traitement de l'email ${currentEmail}...`);
-
-    try {
-      // Traiter un seul email
-      const success =
-        await this.deleteSingleEmailWithoutReconnection(currentEmail);
-
-      if (success) {
-        this.logger.log(`✅ Email ${currentEmail} supprimé avec succès`);
-        count++;
-      } else {
-        this.logger.error(
-          `❌ Échec de la suppression de l'email ${currentEmail}`,
-        );
-      }
-
-      // Attendre 2 secondes avant de passer à l'email suivant
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Traiter les emails restants
-      return this.processEmailsSequentially(remaining, count);
-    } catch (err) {
-      this.logger.error(
-        `❌ Erreur lors de la suppression de l'email ${currentEmail}:`,
-        err,
-      );
-      // En cas d'erreur, on continue avec les emails restants
-      return this.processEmailsSequentially(remaining, count);
-    }
-  }
-
-  // Version simplifiée de testDeleteSingleEmail qui ne tente pas de se reconnecter
   private async deleteSingleEmailWithoutReconnection(
     uid: number,
   ): Promise<boolean> {
@@ -135,55 +78,34 @@ export class EmailFilterService implements OnModuleInit {
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          this.logger.error(
-            `⏰ Timeout : la suppression a pris trop de temps pour l'email ${uid}`,
-          );
           resolve(false);
         }
-      }, 30000);
+      }, 5000);
 
-      this.logger.log(`🔄 Marquage de l'email ${uid} comme supprimé...`);
-
-      // Marquer l'email comme supprimé
+      // Marquer comme supprimé
       this.imap.addFlags([uid], '\\Deleted', (err) => {
         if (!resolved) {
           if (err) {
-            this.logger.error(
-              `❌ Erreur lors du marquage de l'email ${uid}:`,
-              err,
-            );
             clearTimeout(timeoutId);
             resolved = true;
             resolve(false);
             return;
           }
 
-          this.logger.log(
-            `✅ Email ${uid} marqué comme supprimé, attente avant expunge...`,
-          );
+          // Supprimer immédiatement
+          this.imap.expunge((expungeErr) => {
+            if (!resolved) {
+              clearTimeout(timeoutId);
+              resolved = true;
 
-          // Attendre 3 secondes avant d'expunger
-          setTimeout(() => {
-            // Forcer la suppression
-            this.imap.expunge((expungeErr) => {
-              if (!resolved) {
-                clearTimeout(timeoutId);
-                resolved = true;
-
-                if (expungeErr) {
-                  this.logger.error(
-                    `❌ Erreur lors de l'expunge de l'email ${uid}:`,
-                    expungeErr,
-                  );
-                  resolve(false);
-                  return;
-                }
-
-                this.logger.log(`✅ Email ${uid} supprimé avec succès`);
-                resolve(true);
+              if (expungeErr) {
+                resolve(false);
+                return;
               }
-            });
-          }, 1000);
+
+              resolve(true);
+            }
+          });
         }
       });
     });
@@ -192,11 +114,7 @@ export class EmailFilterService implements OnModuleInit {
   async processEmails(): Promise<{ deleted: number }> {
     try {
       this.logger.log('Démarrage du traitement des emails...');
-      await new Promise<void>((resolve, reject) => {
-        this.imap.once('ready', () => resolve());
-        this.imap.once('error', reject);
-        this.imap.connect();
-      });
+      await this.ensureConnection();
 
       const openInbox = promisify<string, Imap.Box>(
         this.imap.openBox.bind(this.imap),
@@ -214,133 +132,33 @@ export class EmailFilterService implements OnModuleInit {
         return { deleted: 0 };
       }
 
-      this.logger.log(`Emails trouvés : ${results.length}`);
-      const fetch = this.imap.fetch(results, { bodies: '' });
+      this.logger.log(`Nombre total d'emails trouvés : ${results.length}`);
 
-      let analyzedCount = 0;
+      // Traiter par lots de 100 emails maximum
+      const batchSize = 100;
+      let totalAnalyzed = 0;
       let totalDeleted = 0;
-      let shouldStop = false;
 
-      await new Promise<void>((resolve) => {
-        fetch.on('message', (msg: Imap.ImapMessage) => {
-          let uid: number | null = null;
-          let buffer = '';
+      for (let i = 0; i < results.length; i += batchSize) {
+        const currentBatch = results.slice(i, i + batchSize);
+        this.logger.log(
+          `Traitement du lot ${Math.floor(i / batchSize) + 1}/${Math.ceil(results.length / batchSize)} (${currentBatch.length} emails)`,
+        );
 
-          msg.on('attributes', (attrs) => {
-            uid = attrs.uid;
-          });
+        const { analyzed, deleted } = await this.processBatch(currentBatch);
 
-          msg.on('body', (stream: Stream) => {
-            stream.on('data', (chunk) => {
-              buffer += chunk.toString('utf8');
-            });
-          });
+        totalAnalyzed += analyzed;
+        totalDeleted += deleted;
 
-          msg.once('end', async () => {
-            if (!uid) {
-              this.logger.warn(`❌ UID manquant pour un email`);
-              return;
-            }
+        this.logger.log(
+          `Lot traité: ${analyzed} analysés, ${deleted} supprimés. Total: ${totalAnalyzed}/${results.length} analysés, ${totalDeleted} supprimés.`,
+        );
+      }
 
-            if (shouldStop) {
-              return;
-            }
-
-            // Attendre que l'analyse et le traitement de cet email soit terminé avant de passer au suivant
-            try {
-              const parsed = await simpleParser(buffer);
-              analyzedCount++;
-
-              if (analyzedCount % 100 === 0) {
-                this.logger.log(`Emails analysés: ${analyzedCount}`);
-              }
-
-              if (analyzedCount <= 10) {
-                this.logger.log("=== Détails de l'email ===");
-                this.logger.log(`Sujet: ${parsed.subject}`);
-                this.logger.log(`De: ${parsed.from?.text}`);
-                this.logger.log(
-                  `Texte brut: ${parsed.text ? parsed.text.substring(0, 200) : 'Non disponible'}`,
-                );
-                this.logger.log(
-                  `HTML: ${parsed.html ? parsed.html.substring(0, 200) : 'Non disponible'}`,
-                );
-                this.logger.log('=======================');
-              }
-
-              const subject = parsed.subject || '';
-              const textContent = (parsed.text || '').toLowerCase();
-              const htmlContent = (parsed.html || '').toLowerCase();
-              const subjectContent = subject.toLowerCase();
-
-              const keywords = [
-                'unsubscribe',
-                'désabonnement',
-                'desabonnement',
-                'no-reply',
-                'noreply',
-              ];
-
-              const hasUnsubscribe = keywords.some(
-                (keyword) =>
-                  textContent.includes(keyword) ||
-                  htmlContent.includes(keyword) ||
-                  subjectContent.includes(keyword),
-              );
-
-              if (hasUnsubscribe) {
-                this.logger.log(
-                  `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
-                );
-
-                // Supprimer l'email immédiatement et ATTENDRE la fin de la suppression
-                this.logger.log(
-                  `⏱️ Début de la suppression de l'email ${uid}...`,
-                );
-                const success = await this.testDeleteSingleEmail(uid);
-
-                if (success) {
-                  this.logger.log(
-                    `✅ Email [UID: ${uid}] supprimé avec succès - continuation du traitement`,
-                  );
-                  totalDeleted++;
-                } else {
-                  this.logger.error(
-                    `❌ Échec de la suppression de l'email [UID: ${uid}] - continuation du traitement`,
-                  );
-                }
-
-                // Pause de 2 secondes après chaque suppression pour éviter de surcharger le serveur
-                this.logger.log(
-                  `⏱️ Pause de 1 seconde après la suppression de l'email ${uid}...`,
-                );
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                this.logger.log(
-                  `✅ Fin de la pause, passage à l'email suivant`,
-                );
-              }
-
-              // Limiter le nombre d'emails analysés
-              if (analyzedCount >= 100) {
-                this.logger.log(
-                  '🔸 Arrêt du traitement après 100 emails analysés',
-                );
-                shouldStop = true;
-              }
-            } catch (err) {
-              this.logger.error('Erreur lors du parsing:', err);
-            }
-          });
-        });
-
-        fetch.once('end', () => {
-          this.logger.log(
-            `🎉 Traitement terminé - Total d'emails analysés: ${analyzedCount}, supprimés: ${totalDeleted}`,
-          );
-          this.imap.end();
-          resolve();
-        });
-      });
+      this.logger.log(
+        `🎉 Traitement terminé - Total d'emails analysés: ${totalAnalyzed}, supprimés: ${totalDeleted}`,
+      );
+      this.imap.end();
 
       return { deleted: totalDeleted };
     } catch (err) {
@@ -352,6 +170,86 @@ export class EmailFilterService implements OnModuleInit {
     }
   }
 
+  private async processBatch(
+    uids: number[],
+  ): Promise<{ analyzed: number; deleted: number }> {
+    return new Promise((resolve) => {
+      const fetch = this.imap.fetch(uids, { bodies: '' });
+      let analyzed = 0;
+      const toDelete: number[] = [];
+
+      fetch.on('message', (msg: Imap.ImapMessage) => {
+        let uid: number | null = null;
+        let buffer = '';
+
+        msg.on('attributes', (attrs) => {
+          uid = attrs.uid;
+        });
+
+        msg.on('body', (stream: Stream) => {
+          stream.on('data', (chunk) => {
+            buffer += chunk.toString('utf8');
+          });
+        });
+
+        msg.once('end', () => {
+          if (!uid) return;
+
+          void (async () => {
+            try {
+              const parsed = await simpleParser(buffer);
+              analyzed++;
+
+              // Vérifier si c'est un email à supprimer
+              const subject = parsed.subject || '';
+              const text = (parsed.text || '').toLowerCase();
+              const html = (parsed.html || '').toLowerCase();
+
+              const keywords = [
+                'unsubscribe',
+                'désabonnement',
+                'desabonnement',
+                'no-reply',
+                'noreply',
+              ];
+              if (
+                keywords.some(
+                  (kw) =>
+                    text.includes(kw) ||
+                    html.includes(kw) ||
+                    subject.toLowerCase().includes(kw),
+                )
+              ) {
+                toDelete.push(uid);
+              }
+
+              // Libérer la mémoire immédiatement
+              buffer = '';
+            } catch (err) {
+              console.log(err);
+            }
+          })();
+        });
+      });
+
+      fetch.once('end', () => {
+        void (async () => {
+          let deleted = 0;
+          if (toDelete.length > 0) {
+            this.logger.log(
+              `${toDelete.length}/${analyzed} emails à supprimer identifiés`,
+            );
+            deleted = await this.deleteEmailBatch(toDelete);
+            this.logger.log(
+              `${deleted}/${toDelete.length} emails effectivement supprimés`,
+            );
+          }
+          resolve({ analyzed, deleted });
+        })();
+      });
+    });
+  }
+
   async startProcessing(): Promise<{ deleted: number }> {
     return this.processEmails();
   }
@@ -359,71 +257,45 @@ export class EmailFilterService implements OnModuleInit {
   async loadEmails(): Promise<{ total: number; emails: any[] }> {
     try {
       this.logger.log('Chargement des emails...');
-
-      await new Promise<void>((resolve, reject) => {
-        this.imap.once('ready', () => resolve());
-        this.imap.once('error', (err) => reject(new Error(String(err))));
-        this.imap.connect();
-      });
+      await this.ensureConnection();
 
       const openInbox = promisify<string, Imap.Box>(
         this.imap.openBox.bind(this.imap),
       );
       await openInbox('INBOX');
 
-      this.logger.log('Connexion établie à la boîte mail...');
-
       const searchCriteria = ['ALL'];
-      const fetch = await new Promise<any>((resolve, reject) => {
-        this.imap.search(searchCriteria, (err, results) => {
-          if (err) reject(new Error(String(err)));
+      const results = await promisify(this.imap.search.bind(this.imap))(
+        searchCriteria,
+      );
 
-          if (!results || results.length === 0) {
-            this.logger.log('Aucun email trouvé');
-            return resolve(null);
-          }
-
-          this.logger.log(`Nombre total d'emails trouvés : ${results.length}`);
-          const fetch = this.imap.fetch(results, { bodies: '' });
-          resolve(fetch);
-        });
-      });
-
-      if (!fetch) {
+      if (!results || results.length === 0) {
+        this.logger.log('Aucun email trouvé');
         this.imap.end();
         return { total: 0, emails: [] };
       }
 
+      this.logger.log(
+        `${results.length} emails trouvés, chargement en cours...`,
+      );
+
+      const batchSize = 100;
+      let processedEmails = 0;
       const emails: any[] = [];
 
-      await new Promise<void>((resolve) => {
-        fetch.on('message', (msg: any) => {
-          msg.on('body', async (stream: any) => {
-            try {
-              const parsed = (await simpleParser(stream)) as ParsedMail;
-              emails.push({
-                subject: parsed.subject,
-                from: parsed.from?.text,
-                date: parsed.date,
-                hasUnsubscribe:
-                  parsed.text?.toLowerCase().includes('unsubscribe') || false,
-              });
-            } catch (err) {
-              this.logger.error("Erreur lors du traitement de l'email:", err);
-            }
-          });
-        });
+      for (let i = 0; i < Math.min(results.length, 500); i += batchSize) {
+        const batch = results.slice(i, i + batchSize);
+        const batchEmails = await this.fetchEmailBatch(batch);
+        emails.push(...batchEmails);
+        processedEmails += batch.length;
+        this.logger.log(
+          `Chargé ${processedEmails}/${Math.min(results.length, 500)} emails`,
+        );
+      }
 
-        fetch.once('end', () => {
-          this.logger.log(
-            `Chargement terminé : ${emails.length} emails analysés`,
-          );
-          this.imap.end();
-          resolve();
-        });
-      });
-
-      return { total: emails.length, emails };
+      this.logger.log(`Chargement terminé: ${emails.length} emails`);
+      this.imap.end();
+      return { total: results.length, emails };
     } catch (err) {
       this.logger.error('Erreur:', err);
       if (this.imap && this.imap.state !== 'disconnected') {
@@ -433,13 +305,46 @@ export class EmailFilterService implements OnModuleInit {
     }
   }
 
+  private async fetchEmailBatch(uids: number[]): Promise<any[]> {
+    return new Promise((resolve) => {
+      const emails: any[] = [];
+      const fetch = this.imap.fetch(uids, { bodies: '' });
+
+      fetch.on('message', (msg: Imap.ImapMessage) => {
+        let buffer = '';
+
+        msg.on('body', (stream: Stream) => {
+          stream.on('data', (chunk) => {
+            buffer += chunk.toString('utf8');
+          });
+        });
+
+        msg.once('end', () => {
+          void (async () => {
+            try {
+              const parsed = await simpleParser(buffer);
+              emails.push({
+                subject: parsed.subject,
+                from: parsed.from?.text,
+                date: parsed.date,
+              });
+              buffer = '';
+            } catch (err) {
+              console.log(err);
+            }
+          })();
+        });
+      });
+
+      fetch.once('end', () => {
+        resolve(emails);
+      });
+    });
+  }
+
   async filterAndDeleteEmails(): Promise<{ deleted: number }> {
     try {
-      await new Promise<void>((resolve, reject) => {
-        this.imap.once('ready', () => resolve());
-        this.imap.once('error', (err) => reject(new Error(String(err))));
-        this.imap.connect();
-      });
+      await this.ensureConnection();
 
       const openInbox = promisify<string, Imap.Box>(
         this.imap.openBox.bind(this.imap),
@@ -466,94 +371,29 @@ export class EmailFilterService implements OnModuleInit {
         return { deleted: 0 };
       }
 
-      // Limiter le nombre d'emails à traiter
-      const maxEmails = 100;
-      const emailsToProcess = results.slice(0, maxEmails);
-
-      this.logger.log(
-        `Traitement de ${emailsToProcess.length} emails sur ${results.length}...`,
-      );
-
-      let analyzedCount = 0;
+      // Traiter par lots de 100 emails maximum
+      const batchSize = 100;
+      let totalAnalyzed = 0;
       let totalDeleted = 0;
 
-      // Traitement séquentiel
-      for (const uid of emailsToProcess) {
-        try {
-          // Récupérer les données de l'email
-          const emailData = await this.fetchEmailData(uid);
-          analyzedCount++;
+      for (let i = 0; i < results.length; i += batchSize) {
+        const currentBatch = results.slice(i, i + batchSize);
+        this.logger.log(
+          `Traitement du lot ${Math.floor(i / batchSize) + 1}/${Math.ceil(results.length / batchSize)} (${currentBatch.length} emails)`,
+        );
 
-          if (analyzedCount <= 10) {
-            this.logger.log("=== Détails de l'email ===");
-            this.logger.log(`Sujet: ${emailData.subject}`);
-            this.logger.log(`De: ${emailData.from}`);
-            this.logger.log(
-              `Texte brut: ${emailData.textContent ? emailData.textContent.substring(0, 200) : 'Non disponible'}`,
-            );
-            this.logger.log(
-              `HTML: ${emailData.htmlContent ? emailData.htmlContent.substring(0, 200) : 'Non disponible'}`,
-            );
-            this.logger.log('=======================');
-          }
+        const { analyzed, deleted } = await this.processBatch(currentBatch);
 
-          const subject = emailData.subject || '';
-          const textContent = (emailData.textContent || '').toLowerCase();
-          const htmlContent = (emailData.htmlContent || '').toLowerCase();
-          const subjectContent = subject.toLowerCase();
+        totalAnalyzed += analyzed;
+        totalDeleted += deleted;
 
-          const keywords = [
-            'unsubscribe',
-            'désabonnement',
-            'desabonnement',
-            'no-reply',
-            'noreply',
-          ];
-
-          const hasUnsubscribe = keywords.some(
-            (keyword) =>
-              textContent.includes(keyword) ||
-              htmlContent.includes(keyword) ||
-              subjectContent.includes(keyword),
-          );
-
-          if (hasUnsubscribe) {
-            this.logger.log(
-              `✅ Email à supprimer trouvé [UID: ${uid}] Sujet: "${subject}"`,
-            );
-
-            // Supprimer l'email immédiatement et ATTENDRE la fin de la suppression
-            this.logger.log(`⏱️ Début de la suppression de l'email ${uid}...`);
-            const success = await this.testDeleteSingleEmail(uid);
-
-            if (success) {
-              this.logger.log(
-                `✅ Email [UID: ${uid}] supprimé avec succès - continuation du traitement`,
-              );
-              totalDeleted++;
-            } else {
-              this.logger.error(
-                `❌ Échec de la suppression de l'email [UID: ${uid}] - continuation du traitement`,
-              );
-            }
-
-            // Pause de 2 secondes après chaque suppression pour éviter de surcharger le serveur
-            this.logger.log(
-              `⏱️ Pause de 1 seconde après la suppression de l'email ${uid}...`,
-            );
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            this.logger.log(`✅ Fin de la pause, passage à l'email suivant`);
-          }
-        } catch (err) {
-          this.logger.error(
-            `Erreur lors du traitement de l'email ${uid}:`,
-            err,
-          );
-        }
+        this.logger.log(
+          `Lot traité: ${analyzed} analysés, ${deleted} supprimés. Total: ${totalAnalyzed}/${results.length}`,
+        );
       }
 
       this.logger.log(
-        `🎉 Traitement terminé - Total d'emails analysés: ${analyzedCount}, supprimés: ${totalDeleted}`,
+        `Traitement terminé - Emails analysés: ${totalAnalyzed}, supprimés: ${totalDeleted}`,
       );
       this.imap.end();
       return { deleted: totalDeleted };
@@ -564,54 +404,6 @@ export class EmailFilterService implements OnModuleInit {
       }
       throw err;
     }
-  }
-
-  // Nouvelle méthode pour récupérer les données d'un email
-  private async fetchEmailData(uid: number): Promise<{
-    subject: string;
-    from: string;
-    textContent: string;
-    htmlContent: string;
-  }> {
-    return new Promise((resolve, reject) => {
-      const fetch = this.imap.fetch([uid], { bodies: '' });
-      let buffer = '';
-      let subject = '';
-      let from = '';
-      let textContent = '';
-      let htmlContent = '';
-
-      fetch.on('message', (msg: Imap.ImapMessage) => {
-        msg.on('body', (stream: Stream) => {
-          stream.on('data', (chunk) => {
-            buffer += chunk.toString('utf8');
-          });
-        });
-
-        msg.once('end', async () => {
-          try {
-            const parsed = await simpleParser(buffer);
-            subject = parsed.subject || '';
-            from = parsed.from?.text || '';
-            textContent = parsed.text || '';
-            htmlContent = parsed.html || '';
-            resolve({ subject, from, textContent, htmlContent });
-          } catch (err) {
-            reject(err instanceof Error ? err : new Error(String(err)));
-          }
-        });
-      });
-
-      fetch.once('error', (err) => {
-        reject(err instanceof Error ? err : new Error(String(err)));
-      });
-
-      fetch.once('end', () => {
-        if (!buffer) {
-          reject(new Error(`Impossible de récupérer l'email ${uid}`));
-        }
-      });
-    });
   }
 
   private async ensureConnection(): Promise<void> {

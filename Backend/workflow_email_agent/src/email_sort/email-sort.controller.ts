@@ -13,21 +13,27 @@ export class EmailSortController {
     this.logger.log('Démarrage de la vérification des factures');
 
     try {
-      // Utiliser la valeur du paramètre maxMessages ou 50 par défaut
+      // Paramètres pour une exécution par lots
       const maxMessages = params?.maxMessages || 50;
+      const startIndex = params?.startIndex || 0;
 
       this.logger.log(
-        `Vérification des factures (max: ${maxMessages} messages)`,
+        `Vérification des factures (index: ${startIndex}, max: ${maxMessages} messages)`,
       );
 
-      const result = await this.emailSortService.checkForInvoices(maxMessages);
+      const result = await this.emailSortService.checkForInvoices(
+        maxMessages,
+        startIndex,
+      );
       await this.emailSortService.disconnect();
 
       return {
         success: true,
-        message: `Vérification terminée. ${result.invoicesFound} factures trouvées sur ${result.total} emails analysés.`,
+        message: `Vérification terminée. ${result.invoicesFound} factures trouvées et déplacées sur ${result.total} emails analysés.`,
         factures: result.invoicesFound,
         total: result.total,
+        nextIndex: startIndex + result.total,
+        remaining: result.remaining,
       };
     } catch (error) {
       this.logger.error(

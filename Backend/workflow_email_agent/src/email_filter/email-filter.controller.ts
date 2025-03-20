@@ -10,4 +10,4 @@ export class EmailFilterController {
     const success = await this.emailFilterService.testDeleteSingleEmail(uid);
     return { success, uid };
   }
-} 
+}
