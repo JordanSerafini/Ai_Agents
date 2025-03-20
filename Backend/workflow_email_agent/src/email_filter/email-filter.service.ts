@@ -121,67 +121,119 @@ export class EmailFilterService implements OnModuleInit {
     });
   }
 
+  private async getAllMailboxes(): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+      this.imap.getBoxes((err, boxes) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        // Extraire tous les noms de dossiers (y compris les sous-dossiers)
+        const mailboxes: string[] = ['INBOX'];
+
+        const extractFolders = (boxes: Imap.MailBoxes, prefix: string = '') => {
+          Object.keys(boxes).forEach((key) => {
+            const fullPath = prefix + key;
+            mailboxes.push(fullPath);
+
+            if (boxes[key].children) {
+              extractFolders(
+                boxes[key].children,
+                fullPath + boxes[key].delimiter,
+              );
+            }
+          });
+        };
+
+        extractFolders(boxes);
+        resolve(mailboxes);
+      });
+    });
+  }
+
   async processEmails(): Promise<{ deleted: number }> {
     try {
       this.logger.log('Démarrage du traitement des emails...');
       await this.ensureConnection();
 
-      const openInbox = promisify<string, Imap.Box>(
-        this.imap.openBox.bind(this.imap),
-      );
-      await openInbox('INBOX');
+      // Récupérer tous les dossiers
+      const mailboxes = await this.getAllMailboxes();
+      this.logger.log(`Dossiers trouvés: ${mailboxes.join(', ')}`);
 
-      this.logger.log('Connexion établie à la boîte mail...');
-      const results = await promisify(this.imap.search.bind(this.imap))([
-        'ALL',
-      ]);
-
-      if (!results || results.length === 0) {
-        this.logger.log('Aucun email trouvé');
-        this.imap.end();
-        return { deleted: 0 };
-      }
-
-      this.logger.log(`Nombre total d'emails trouvés : ${results.length}`);
-
-      // Augmenter drastiquement la taille des lots pour accélérer le traitement
-      const batchSize = 500; // 5x plus qu'avant
-      let totalAnalyzed = 0;
       let totalDeleted = 0;
 
-      // Traiter plusieurs lots en parallèle pour encore plus de vitesse
-      const batches: number[][] = [];
-      for (let i = 0; i < results.length; i += batchSize) {
-        batches.push(results.slice(i, i + batchSize));
-      }
+      // Traiter chaque dossier
+      for (const mailbox of mailboxes) {
+        try {
+          this.logger.log(`Traitement du dossier: ${mailbox}`);
+          const openBox = promisify<string, boolean, Imap.Box>(
+            this.imap.openBox.bind(this.imap),
+          );
+          await openBox(mailbox, false); // false = ouverture en mode lecture/écriture
 
-      // Traiter jusqu'à 3 lots en parallèle
-      const concurrentBatches = 3;
-      for (let i = 0; i < batches.length; i += concurrentBatches) {
-        const currentBatches = batches.slice(i, i + concurrentBatches);
-        this.logger.log(
-          `Traitement des lots ${i + 1} à ${Math.min(i + concurrentBatches, batches.length)}/${batches.length} en parallèle...`,
-        );
+          const results = await promisify(this.imap.search.bind(this.imap))([
+            'ALL',
+          ]);
 
-        const batchResults = await Promise.all(
-          currentBatches.map((batch) => this.processBatch(batch)),
-        );
+          if (!results || results.length === 0) {
+            this.logger.log('Aucun email trouvé');
+            this.imap.end();
+            continue;
+          }
 
-        for (const { analyzed, deleted } of batchResults) {
-          totalAnalyzed += analyzed;
-          totalDeleted += deleted;
+          this.logger.log(`Nombre total d'emails trouvés : ${results.length}`);
+
+          // Augmenter drastiquement la taille des lots pour accélérer le traitement
+          const batchSize = 500; // 5x plus qu'avant
+          let totalAnalyzed = 0;
+          let batchDeleted = 0;
+
+          // Traiter plusieurs lots en parallèle pour encore plus de vitesse
+          const batches: number[][] = [];
+          for (let i = 0; i < results.length; i += batchSize) {
+            batches.push(results.slice(i, i + batchSize));
+          }
+
+          // Traiter jusqu'à 3 lots en parallèle
+          const concurrentBatches = 3;
+          for (let i = 0; i < batches.length; i += concurrentBatches) {
+            const currentBatches = batches.slice(i, i + concurrentBatches);
+            this.logger.log(
+              `Traitement des lots ${i + 1} à ${Math.min(i + concurrentBatches, batches.length)}/${batches.length} en parallèle...`,
+            );
+
+            const batchResults = await Promise.all(
+              currentBatches.map((batch) => this.processBatch(batch)),
+            );
+
+            for (const { analyzed, deleted } of batchResults) {
+              totalAnalyzed += analyzed;
+              batchDeleted += deleted;
+            }
+
+            this.logger.log(
+              `Lots traités - Total: ${totalAnalyzed}/${results.length} analysés, ${batchDeleted} supprimés.`,
+            );
+          }
+
+          totalDeleted += batchDeleted;
+          this.logger.log(
+            `Traitement terminé - Total d'emails analysés: ${totalAnalyzed}, supprimés: ${batchDeleted}`,
+          );
+        } catch (folderErr) {
+          this.logger.error(
+            `Erreur lors du traitement du dossier ${mailbox}:`,
+            folderErr,
+          );
+          // Continuer avec le dossier suivant même en cas d'erreur
         }
-
-        this.logger.log(
-          `Lots traités - Total: ${totalAnalyzed}/${results.length} analysés, ${totalDeleted} supprimés.`,
-        );
       }
 
       this.logger.log(
-        `🎉 Traitement terminé - Total d'emails analysés: ${totalAnalyzed}, supprimés: ${totalDeleted}`,
+        `🎉 Traitement de tous les dossiers terminé - Total supprimé: ${totalDeleted}`,
       );
       this.imap.end();
-
       return { deleted: totalDeleted };
     } catch (err) {
       this.logger.error('Erreur globale:', err);
