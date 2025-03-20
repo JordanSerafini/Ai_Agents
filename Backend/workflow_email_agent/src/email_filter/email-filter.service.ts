@@ -229,6 +229,7 @@ export class EmailFilterService implements OnModuleInit {
                 buffer.toLowerCase().includes('unsubscribe') ||
                 buffer.toLowerCase().includes('désabonnement') ||
                 buffer.toLowerCase().includes('desabonnement') ||
+                buffer.toLowerCase().includes('winamax') ||
                 buffer.toLowerCase().includes('no-reply') ||
                 buffer.toLowerCase().includes('noreply');
 

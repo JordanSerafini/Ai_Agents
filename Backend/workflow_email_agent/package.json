@@ -25,10 +25,12 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "dotenv": "^16.4.7",
-    "imap": "^0.8.19",
+    "imap": "^0.8.17",
     "imapflow": "^1.0.184",
     "mailparser": "^3.7.2",
+    "node-tesseract-ocr": "^2.2.1",
     "pdf-parse": "^1.1.1",
+    "pdf2image": "^1.2.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

@@ -1,207 +1,112 @@
-# Service Workflow Email Agent
+# Workflow Email Agent - Traitement et Analyse de Factures
 
-Ce service gère le traitement automatique des emails, avec un focus particulier sur la détection et le tri des factures.
-
-## Structure du Projet
-
-```
-workflow_email_agent/
-├── src/                    # Code source
-├── persistence/           # Données persistantes
-├── test/                  # Tests unitaires et d'intégration
-├── node_modules/         # Dépendances
-└── Dockerfile           # Configuration Docker
-```
-
-## Configuration
-
-### Variables d'Environnement
-```env
-# Configuration IMAP
-IMAP_HOST=imap.example.com
-IMAP_PORT=993
-IMAP_USER=user@example.com
-IMAP_PASSWORD=your_password
-
-# Configuration de l'Agent
-AGENT_NAME=workflow_email_agent
-AGENT_TYPE=email_workflow
-AGENT_DESCRIPTION="Agent de traitement des emails"
-
-# Configuration de l'API
-API_PORT=3000
-API_PREFIX=/email-workflow
-```
+Ce service permet de récupérer automatiquement les factures depuis une boîte mail, d'extraire leur contenu et de les organiser intelligemment par fournisseur.
 
 ## Fonctionnalités
 
-### Traitement des Emails
-- Connexion IMAP sécurisée
-- Lecture des emails non lus
-- Traitement par lots
-- Gestion de la mémoire optimisée
+- Récupération automatique des factures depuis un dossier IMAP
+- Extraction du texte des PDF via deux méthodes complémentaires :
+  - Extraction directe avec pdf-parse
+  - Reconnaissance optique de caractères (OCR) avec Tesseract
+- Extraction intelligente des informations clés :
+  - Numéro de facture
+  - Montant
+  - Date
+  - Fournisseur
+- Organisation automatique des factures par fournisseur
+- API REST pour accéder aux factures traitées
 
-### Détection des Factures
-- Analyse du contenu des emails
-- Détection des pièces jointes
-- Identification des factures
-- Classification des documents
+## Installation
 
-### Gestion des Dossiers
-- Création automatique des dossiers
-- Déplacement des emails
-- Organisation par type
-- Marquage des emails traités
+1. Installez les dépendances :
 
-## API Routes
-
-### 1. Vérification des Factures
-```http
-POST /email-workflow/check-invoices
-```
-
-Démarre le processus de vérification des factures.
-
-#### Corps de la requête
-```json
-{
-  "maxMessages": 500,
-  "startIndex": 0
-}
-```
-
-#### Réponse
-```json
-{
-  "message": "Vérification des factures terminée",
-  "invoicesFound": 6,
-  "totalProcessed": 500,
-  "nextIndex": 500,
-  "remaining": 69500
-}
-```
-
-### 2. Chargement des Emails
-```http
-GET /email-workflow/load
-```
-
-Charge la liste des emails pour prévisualisation.
-
-#### Réponse
-```json
-{
-  "message": "Emails chargés avec succès",
-  "totalEmails": 100,
-  "emails": [
-    {
-      "uid": 123,
-      "subject": "Facture #123",
-      "from": "fournisseur@example.com",
-      "date": "2024-03-20T10:00:00Z"
-    }
-  ]
-}
-```
-
-### 3. Test de Déplacement
-```http
-POST /email-workflow/test-move/:uid
-```
-
-Teste le déplacement d'un email spécifique.
-
-#### Paramètres
-- `uid`: Identifiant de l'email
-
-#### Réponse
-```json
-{
-  "success": true,
-  "message": "Email déplacé avec succès"
-}
-```
-
-## Gestion des Données
-
-### Persistance
-- Suivi des emails traités
-- Historique des opérations
-- Métriques de performance
-- Configuration des règles
-
-### Validation
-- Vérification des emails
-- Validation des pièces jointes
-- Contrôle des formats
-- Nettoyage des données
-
-## Performance
-
-### Optimisations
-- Traitement par lots
-- Gestion de la mémoire
-- Pauses entre les lots
-- Limitation des emails traités
-
-### Monitoring
-- Suivi des performances
-- Métriques de traitement
-- Détection des anomalies
-- Alertes de dégradation
-
-## Sécurité
-
-- Connexion IMAP sécurisée
-- Protection des identifiants
-- Validation des entrées
-- Journalisation des actions
-
-## Logs
-
-Le service génère des logs détaillés pour :
-- Les opérations de traitement
-- Les factures identifiées
-- Les déplacements d'emails
-- Les erreurs rencontrées
-
-## Tests
-
-### Tests Unitaires
-- Validation des fonctions
-- Tests des règles de tri
-- Vérification des formats
-- Tests de performance
-
-### Tests d'Intégration
-- Tests end-to-end
-- Validation des API
-- Tests de charge
-- Tests de régression
-
-## Docker
-
-### Construction
 ```bash
-docker build -t workflow_email_agent .
+cd Backend/workflow_email_agent
+npm install
 ```
 
-### Exécution
+2. Configuration IMAP - modifiez le fichier `.env` :
+
+```
+EMAIL_USER=votre.email@domaine.com
+EMAIL_PASSWORD=motdepasse
+IMAP_HOST=imap.domaine.com
+IMAP_PORT=993
+```
+
+3. Installez Tesseract OCR pour l'extraction de texte des PDF :
+   - Windows : [Télécharger Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
+   - MacOS : `brew install tesseract`
+   - Linux : `apt-get install tesseract-ocr`
+
+## Utilisation
+
+### Démarrer le service
+
 ```bash
-docker run -d \
-  --name workflow_email_agent \
-  -p 3000:3000 \
-  --env-file .env \
-  workflow_email_agent
+npm run start:dev
 ```
 
-### Configuration Docker
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-CMD ["npm", "run", "start:prod"]
+### Endpoints API
+
+#### Traitement des factures
+
+- **POST** `/invoice-parser/process`
+  - Déclenche le processus de traitement des factures depuis la boîte mail
+  - Retourne le nombre de factures traitées
+
+#### Liste des factures
+
+- **GET** `/invoice-parser/invoices`
+  - Récupère la liste de toutes les factures traitées
+  - Classées par fournisseur
+  - Inclut un échantillon du texte extrait et les métadonnées
+
+#### Détails d'une facture
+
+- **GET** `/invoice-parser/invoice/:invoiceNumber`
+  - Récupère les détails d'une facture en recherchant dans tous les dossiers fournisseurs
+  - Paramètres :
+    - `invoiceNumber` : Numéro de la facture à consulter
+
+- **GET** `/invoice-parser/invoice/:invoiceNumber/:supplier`
+  - Récupère les détails d'une facture d'un fournisseur spécifique
+  - Paramètres :
+    - `invoiceNumber` : Numéro de la facture à consulter
+    - `supplier` : Nom du fournisseur
+
+## Structure des données
+
+Les factures sont organisées sur le disque selon cette structure :
 ```
+extractPdf/
+  ├── NOM_FOURNISSEUR/
+  │   └── FACTURE-123/
+  │       ├── FACTURE-123.pdf
+  │       ├── FACTURE-123.txt
+  │       └── FACTURE-123_metadata.json
+  ├── AUTRE_FOURNISSEUR/
+  │   └── ...
+  └── non-classifie/
+      └── ...
+```
+
+## Exemple d'utilisation avec cURL
+
+```bash
+# Lancer le traitement des factures
+curl -X POST http://localhost:3000/invoice-parser/process
+
+# Récupérer la liste des factures
+curl -X GET http://localhost:3000/invoice-parser/invoices
+
+# Récupérer les détails d'une facture (recherche dans tous les fournisseurs)
+curl -X GET http://localhost:3000/invoice-parser/invoice/FACTURE-123
+
+# Récupérer les détails d'une facture d'un fournisseur spécifique
+curl -X GET http://localhost:3000/invoice-parser/invoice/FACTURE-123/NOM_FOURNISSEUR
+```
+
+## Notes techniques
+
+Le service utilise à la fois l'extraction directe de texte et l'OCR pour maximiser les chances d'extraire correctement les informations des factures. Cette approche hybride est particulièrement utile pour les factures contenant à la fois du texte et des éléments graphiques.
