@@ -197,7 +197,7 @@ export class EmailFilterService implements OnModuleInit {
   ): Promise<{ analyzed: number; deleted: number }> {
     return new Promise((resolve) => {
       const fetch = this.imap.fetch(uids, {
-        bodies: ['HEADER.FIELDS (SUBJECT FROM)'],
+        bodies: [''],
       });
       let analyzed = 0;
       const toDelete: number[] = [];
@@ -224,12 +224,13 @@ export class EmailFilterService implements OnModuleInit {
               // Réduire la charge en ne récupérant que les données nécessaires
               analyzed++;
 
-              // Analyse rapide pour déterminer si c'est un email à supprimer
+              // Analyse plus complète incluant le corps du message
               const hasKeyword =
                 buffer.toLowerCase().includes('unsubscribe') ||
                 buffer.toLowerCase().includes('désabonnement') ||
                 buffer.toLowerCase().includes('desabonnement') ||
-                buffer.toLowerCase().includes('winamax') ||
+                buffer.toLowerCase().includes('se désabonner') ||
+                buffer.toLowerCase().includes('se desabonner') ||
                 buffer.toLowerCase().includes('no-reply') ||
                 buffer.toLowerCase().includes('noreply');
 

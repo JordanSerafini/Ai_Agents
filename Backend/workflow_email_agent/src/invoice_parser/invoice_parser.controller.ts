@@ -174,7 +174,7 @@ export class InvoiceParserController {
   ) {
     try {
       // Si un fournisseur est spécifié, chercher dans ce dossier spécifique
-      let invoicePath: string = ''; // Initialiser avec une valeur par défaut
+      let invoicePath: string = '';
 
       if (supplier) {
         invoicePath = path.join(this.extractPdfPath, supplier, invoiceNumber);
