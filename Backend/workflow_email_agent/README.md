@@ -1,99 +1,207 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Service Workflow Email Agent
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Ce service gère le traitement automatique des emails, avec un focus particulier sur la détection et le tri des factures.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Structure du Projet
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ npm install
+```
+workflow_email_agent/
+├── src/                    # Code source
+├── persistence/           # Données persistantes
+├── test/                  # Tests unitaires et d'intégration
+├── node_modules/         # Dépendances
+└── Dockerfile           # Configuration Docker
 ```
 
-## Compile and run the project
+## Configuration
 
-```bash
-# development
-$ npm run start
+### Variables d'Environnement
+```env
+# Configuration IMAP
+IMAP_HOST=imap.example.com
+IMAP_PORT=993
+IMAP_USER=user@example.com
+IMAP_PASSWORD=your_password
 
-# watch mode
-$ npm run start:dev
+# Configuration de l'Agent
+AGENT_NAME=workflow_email_agent
+AGENT_TYPE=email_workflow
+AGENT_DESCRIPTION="Agent de traitement des emails"
 
-# production mode
-$ npm run start:prod
+# Configuration de l'API
+API_PORT=3000
+API_PREFIX=/email-workflow
 ```
 
-## Run tests
+## Fonctionnalités
 
-```bash
-# unit tests
-$ npm run test
+### Traitement des Emails
+- Connexion IMAP sécurisée
+- Lecture des emails non lus
+- Traitement par lots
+- Gestion de la mémoire optimisée
 
-# e2e tests
-$ npm run test:e2e
+### Détection des Factures
+- Analyse du contenu des emails
+- Détection des pièces jointes
+- Identification des factures
+- Classification des documents
 
-# test coverage
-$ npm run test:cov
+### Gestion des Dossiers
+- Création automatique des dossiers
+- Déplacement des emails
+- Organisation par type
+- Marquage des emails traités
+
+## API Routes
+
+### 1. Vérification des Factures
+```http
+POST /email-workflow/check-invoices
 ```
 
-## Deployment
+Démarre le processus de vérification des factures.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g mau
-$ mau deploy
+#### Corps de la requête
+```json
+{
+  "maxMessages": 500,
+  "startIndex": 0
+}
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+#### Réponse
+```json
+{
+  "message": "Vérification des factures terminée",
+  "invoicesFound": 6,
+  "totalProcessed": 500,
+  "nextIndex": 500,
+  "remaining": 69500
+}
+```
 
-## Resources
+### 2. Chargement des Emails
+```http
+GET /email-workflow/load
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+Charge la liste des emails pour prévisualisation.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+#### Réponse
+```json
+{
+  "message": "Emails chargés avec succès",
+  "totalEmails": 100,
+  "emails": [
+    {
+      "uid": 123,
+      "subject": "Facture #123",
+      "from": "fournisseur@example.com",
+      "date": "2024-03-20T10:00:00Z"
+    }
+  ]
+}
+```
 
-## Support
+### 3. Test de Déplacement
+```http
+POST /email-workflow/test-move/:uid
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Teste le déplacement d'un email spécifique.
 
-## Stay in touch
+#### Paramètres
+- `uid`: Identifiant de l'email
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+#### Réponse
+```json
+{
+  "success": true,
+  "message": "Email déplacé avec succès"
+}
+```
 
-## License
+## Gestion des Données
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### Persistance
+- Suivi des emails traités
+- Historique des opérations
+- Métriques de performance
+- Configuration des règles
+
+### Validation
+- Vérification des emails
+- Validation des pièces jointes
+- Contrôle des formats
+- Nettoyage des données
+
+## Performance
+
+### Optimisations
+- Traitement par lots
+- Gestion de la mémoire
+- Pauses entre les lots
+- Limitation des emails traités
+
+### Monitoring
+- Suivi des performances
+- Métriques de traitement
+- Détection des anomalies
+- Alertes de dégradation
+
+## Sécurité
+
+- Connexion IMAP sécurisée
+- Protection des identifiants
+- Validation des entrées
+- Journalisation des actions
+
+## Logs
+
+Le service génère des logs détaillés pour :
+- Les opérations de traitement
+- Les factures identifiées
+- Les déplacements d'emails
+- Les erreurs rencontrées
+
+## Tests
+
+### Tests Unitaires
+- Validation des fonctions
+- Tests des règles de tri
+- Vérification des formats
+- Tests de performance
+
+### Tests d'Intégration
+- Tests end-to-end
+- Validation des API
+- Tests de charge
+- Tests de régression
+
+## Docker
+
+### Construction
+```bash
+docker build -t workflow_email_agent .
+```
+
+### Exécution
+```bash
+docker run -d \
+  --name workflow_email_agent \
+  -p 3000:3000 \
+  --env-file .env \
+  workflow_email_agent
+```
+
+### Configuration Docker
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+CMD ["npm", "run", "start:prod"]
+```

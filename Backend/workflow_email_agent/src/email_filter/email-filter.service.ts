@@ -61,9 +61,19 @@ export class EmailFilterService implements OnModuleInit {
         });
       });
 
-      this.logger.log(`${uids.length} emails supprimés avec succès`);
+      // Vérifier si les emails ont été supprimés
+      const remainingEmails = await promisify(this.imap.search.bind(this.imap))(
+        ['ALL'],
+      );
+      const deletedCount =
+        uids.length -
+        uids.filter((uid) => remainingEmails.includes(uid)).length;
 
-      return uids.length;
+      this.logger.log(
+        `${deletedCount}/${uids.length} emails effectivement supprimés (vérifié)`,
+      );
+
+      return deletedCount;
     } catch (err) {
       this.logger.error('Erreur lors de la suppression du lot:', err);
       return 0;

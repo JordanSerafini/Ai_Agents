@@ -98,17 +98,10 @@ export class EmailSortService implements OnModuleInit {
           `Traitement du lot ${batchIndex + 1}/${batches.length} (${batch.length} messages)`,
         );
 
-        const invoiceUids = await this.processBatch(batch);
-
-        // Déplacer les factures identifiées vers le dossier "Factures"
-        if (invoiceUids.length > 0) {
-          this.logger.log(
-            `Déplacement de ${invoiceUids.length} factures vers le dossier "Factures"...`,
-          );
-          await this.moveToInvoiceFolder(invoiceUids);
-          invoicesFound += invoiceUids.length;
-          this.logger.log(`Total des factures déplacées: ${invoicesFound}`);
-        }
+        const { analyzed, moved } = await this.processBatch(batch);
+        this.logger.log(`Lot ${batchIndex + 1}: ${analyzed} emails analysés`);
+        invoicesFound += moved;
+        this.logger.log(`Total des factures déplacées: ${invoicesFound}`);
       }
 
       this.logger.log(
@@ -121,15 +114,16 @@ export class EmailSortService implements OnModuleInit {
     }
   }
 
-  private async processBatch(uids: number[]): Promise<number[]> {
-    const invoiceUids: number[] = [];
-
-    const fetch = this.imap.fetch(uids, { bodies: '' });
-
-    return new Promise<number[]>((resolve) => {
-      let processedCount = 0;
-      const totalMessages = uids.length;
-      const processingPromises: Promise<void>[] = [];
+  private async processBatch(
+    uids: number[],
+  ): Promise<{ analyzed: number; moved: number }> {
+    return new Promise((resolve) => {
+      const fetch = this.imap.fetch(uids, {
+        bodies: [''],
+        struct: true,
+      });
+      let analyzed = 0;
+      const toMove: number[] = [];
 
       fetch.on('message', (msg: Imap.ImapMessage) => {
         let uid: number | null = null;
@@ -146,59 +140,43 @@ export class EmailSortService implements OnModuleInit {
         });
 
         msg.once('end', () => {
-          if (!uid) {
-            this.logger.warn(`❌ UID manquant pour un email`);
-            processedCount++;
-            if (processedCount === totalMessages) {
-              void Promise.all(processingPromises).then(() =>
-                resolve(invoiceUids),
-              );
-            }
-            return;
-          }
+          if (!uid) return;
 
-          // Créer une promesse pour le traitement de cet email et l'ajouter à notre tableau
-          const emailProcessingPromise = this.processEmail(buffer, uid)
-            .then((isInvoice) => {
+          try {
+            analyzed++;
+            // Analyse complète de l'email via processEmail (c'est une promesse mais nous ne l'attendons pas ici)
+            const uidValue = uid;
+            void this.processEmail(buffer, uidValue).then((isInvoice) => {
               if (isInvoice) {
-                invoiceUids.push(uid as number);
-                this.logger.log(`Email ${uid} identifié comme facture`);
+                this.logger.log(`Email ${uidValue} identifié comme facture`);
+                toMove.push(uidValue);
               }
-
-              // Libérer la mémoire
               buffer = '';
-
-              processedCount++;
-              // Résoudre la promesse principale uniquement quand tous les emails ont été traités
-              if (processedCount === totalMessages) {
-                resolve(invoiceUids);
-              }
-            })
-            .catch((error) => {
-              this.logger.error(
-                `Erreur lors du traitement de l'email ${uid}:`,
-                error,
-              );
-
-              processedCount++;
-              if (processedCount === totalMessages) {
-                resolve(invoiceUids);
-              }
             });
-
-          processingPromises.push(emailProcessingPromise);
+          } catch (err) {
+            this.logger.error(
+              `Erreur lors de l'analyse de l'email ${uid}:`,
+              err,
+            );
+          }
         });
       });
 
-      fetch.once('error', (err) => {
-        this.logger.error('Erreur lors de la récupération des emails:', err);
-        // En cas d'erreur, résoudre avec les factures trouvées jusqu'à présent
-        resolve(invoiceUids);
-      });
-
       fetch.once('end', () => {
-        this.logger.log(`Récupération du lot terminée, traitement en cours...`);
-        // Ne pas résoudre ici, attendre que tous les traitements soient terminés
+        void (async () => {
+          let moved = 0;
+          if (toMove.length > 0) {
+            const emailsToMove = [...toMove];
+            this.logger.log(
+              `${emailsToMove.length}/${analyzed} factures identifiées`,
+            );
+            moved = await this.moveEmailsToFolder(emailsToMove, 'Factures');
+            this.logger.log(
+              `${moved}/${emailsToMove.length} factures déplacées`,
+            );
+          }
+          resolve({ analyzed, moved });
+        })();
       });
     });
   }
@@ -227,20 +205,37 @@ export class EmailSortService implements OnModuleInit {
     }
   }
 
-  private async moveToInvoiceFolder(uids: number[]): Promise<void> {
-    try {
-      if (uids.length === 0) return;
+  private async moveEmailsToFolder(
+    uids: number[],
+    folder: string,
+  ): Promise<number> {
+    if (uids.length === 0) return 0;
 
-      await promisify(this.imap.move.bind(this.imap))(uids, 'Factures');
+    try {
+      await this.ensureConnection();
+      await promisify<string, Imap.Box>(this.imap.openBox.bind(this.imap))(
+        'INBOX',
+      );
+
       this.logger.log(
-        `${uids.length} emails déplacés vers le dossier "Factures"`,
+        `Déplacement d'un lot de ${uids.length} emails vers ${folder}`,
       );
-    } catch (error) {
-      this.logger.error(
-        'Erreur lors du déplacement des emails vers le dossier "Factures":',
-        error,
-      );
-      throw error;
+
+      // Créer le dossier si nécessaire
+      await this.ensureInvoiceFolder();
+
+      // Déplacer les emails en une seule fois
+      await new Promise<void>((resolve, reject) => {
+        this.imap.move(uids, folder, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      return uids.length;
+    } catch (err) {
+      this.logger.error('Erreur lors du déplacement du lot:', err);
+      return 0;
     }
   }
 
@@ -319,6 +314,13 @@ export class EmailSortService implements OnModuleInit {
       'bon de commande',
       'reçu',
       'receipt',
+      'paiement',
+      'payment',
+      'commande',
+      'order',
+      'purchase',
+      'achat',
+      'confirmation',
     ];
 
     // Vérifier si au moins un mot-clé principal est présent
@@ -329,47 +331,45 @@ export class EmailSortService implements OnModuleInit {
       return false;
     }
 
-    // Vérifier la présence d'un montant avec devise (format: 123,45€ ou 123.45 EUR)
-    const hasAmount = /\d+[.,]\d+\s*(?:€|eur|euro|euros|\$|usd)/i.test(
+    // Vérifier la présence d'un montant avec devise (format: 123,45€ ou 123.45 EUR ou 123€)
+    const hasAmount = /\d+(?:[.,]\d+)?\s*(?:€|eur|euro|euros|\$|usd)/i.test(
       textLower,
     );
-    if (!hasAmount) {
-      return false;
-    }
 
     // Vérifier la présence d'un numéro de facture
     const hasInvoiceNumber =
-      /(?:numéro|n°|no|number)\s*(?:facture|invoice)?\s*[:.]?\s*[A-Z0-9-]+/i.test(
+      /(?:numéro|n°|no|number|ref|référence|reference)\s*(?:facture|invoice|commande|order)?\s*[:.]?\s*[A-Z0-9-]+/i.test(
         textLower,
       );
 
     // Vérifier la présence d'une date
-    const hasDate = /\d{1,2}[-/]\d{1,2}[-/]\d{2,4}/.test(textLower);
+    const hasDate = /\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}/.test(textLower);
 
     // Vérifier la présence d'une TVA
-    const hasVAT = /(?:tva|vat)\s*[:.]?\s*[A-Z0-9]+/i.test(textLower);
+    const hasVAT = /(?:tva|vat|taxe|tax|t\.v\.a)/i.test(textLower);
 
-    // Vérifier la présence d'un montant HT et TTC
-    const hasHTandTTC =
-      /(?:ht|h\.t\.|h\.t)\s*[:.]?\s*\d+[.,]\d+\s*(?:€|eur|euro|euros|\$|usd).*?(?:ttc|t\.t\.c\.|t\.t\.c)\s*[:.]?\s*\d+[.,]\d+\s*(?:€|eur|euro|euros|\$|usd)/i.test(
-        textLower,
-      );
+    // Vérifier la présence d'un montant HT ou TTC
+    const hasHTorTTC = /(?:ht|h\.t\.|h\.t|ttc|t\.t\.c\.|t\.t\.c)/i.test(
+      textLower,
+    );
 
     // Pour qu'un texte soit considéré comme une facture, il doit contenir:
     // - Un mot-clé principal ET
-    // - Un montant avec devise ET
     // - Au moins 2 des éléments suivants:
+    //   - Un montant avec devise
     //   - Numéro de facture
     //   - Date
     //   - TVA
-    //   - Montants HT et TTC
+    //   - Montants HT ou TTC
     const secondaryCriteriaCount = [
+      hasAmount,
       hasInvoiceNumber,
       hasDate,
       hasVAT,
-      hasHTandTTC,
+      hasHTorTTC,
     ].filter(Boolean).length;
 
+    // Assouplissement des critères: au moins 2 critères secondaires
     return secondaryCriteriaCount >= 2;
   }
 

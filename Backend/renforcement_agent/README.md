@@ -22,6 +22,187 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
+# Service de Renforcement
+
+Ce service implémente un système d'apprentissage par renforcement pour optimiser les décisions et les actions des agents.
+
+## Structure du Projet
+
+```
+renforcement_agent/
+├── src/                    # Code source
+├── persistence/           # Données persistantes
+├── test/                  # Tests unitaires et d'intégration
+├── Backend/              # Configuration backend
+└── node_modules/         # Dépendances
+```
+
+## Configuration
+
+### Variables d'Environnement
+```env
+# Configuration de l'Agent
+AGENT_NAME=renforcement_agent
+AGENT_TYPE=reinforcement
+AGENT_DESCRIPTION="Agent d'apprentissage par renforcement"
+
+# Configuration de la Base de Données
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=reinforcement_db
+DB_USER=your_user
+DB_PASSWORD=your_password
+
+# Configuration de l'API
+API_PORT=3000
+API_PREFIX=/reinforcement
+
+# Configuration de l'Apprentissage
+LEARNING_RATE=0.01
+DISCOUNT_FACTOR=0.95
+EXPLORATION_RATE=0.1
+```
+
+## Fonctionnalités
+
+### Apprentissage par Renforcement
+- Algorithmes Q-Learning et Deep Q-Learning
+- Gestion des états et des actions
+- Calcul des récompenses
+- Exploration vs exploitation
+
+### Gestion des Modèles
+- Sauvegarde des modèles entraînés
+- Chargement des modèles existants
+- Évaluation des performances
+- Mise à jour incrémentale
+
+### Optimisation
+- Ajustement automatique des hyperparamètres
+- Validation croisée
+- Métriques de performance
+- Gestion de la mémoire
+
+## API Routes
+
+### 1. Entraînement du Modèle
+```http
+POST /reinforcement/train
+```
+
+Démarre ou continue l'entraînement du modèle.
+
+#### Corps de la requête
+```json
+{
+  "episodes": 1000,
+  "batchSize": 32,
+  "learningRate": 0.01
+}
+```
+
+### 2. Évaluation du Modèle
+```http
+POST /reinforcement/evaluate
+```
+
+Évalue les performances du modèle actuel.
+
+#### Réponse
+```json
+{
+  "averageReward": 85.5,
+  "totalEpisodes": 100,
+  "successRate": 0.92,
+  "metrics": {
+    "loss": 0.15,
+    "accuracy": 0.88
+  }
+}
+```
+
+### 3. Prédiction d'Action
+```http
+POST /reinforcement/predict
+```
+
+Prédit la meilleure action pour un état donné.
+
+#### Corps de la requête
+```json
+{
+  "state": {
+    "features": [0.1, 0.2, 0.3]
+  }
+}
+```
+
+#### Réponse
+```json
+{
+  "action": "action_id",
+  "confidence": 0.95,
+  "exploration": false
+}
+```
+
+## Gestion des Données
+
+### Persistance
+- Sauvegarde des modèles
+- Historique des entraînements
+- Métriques de performance
+- Configuration des agents
+
+### Validation
+- Vérification des données d'entrée
+- Validation des états
+- Contrôle des actions
+- Normalisation des récompenses
+
+## Performance
+
+### Optimisations
+- Traitement par lots
+- Parallélisation des calculs
+- Gestion efficace de la mémoire
+- Cache des prédictions fréquentes
+
+### Monitoring
+- Métriques en temps réel
+- Suivi des performances
+- Détection des anomalies
+- Alertes de dégradation
+
+## Sécurité
+
+- Validation des entrées
+- Protection des modèles
+- Gestion des accès
+- Journalisation des actions
+
+## Logs
+
+Le service génère des logs détaillés pour :
+- Les sessions d'entraînement
+- Les évaluations
+- Les prédictions
+- Les erreurs et anomalies
+
+## Tests
+
+### Tests Unitaires
+- Validation des algorithmes
+- Tests des fonctions utilitaires
+- Vérification des calculs
+- Tests de performance
+
+### Tests d'Intégration
+- Tests end-to-end
+- Validation des API
+- Tests de charge
+- Tests de régression
+
 ## Description
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
