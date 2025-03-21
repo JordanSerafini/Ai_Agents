@@ -1677,31 +1677,100 @@ ${pdfBase64.substring(0, 1000)}...
    */
   async parseInvoiceWithDonut(invoiceBuffer: Buffer): Promise<any> {
     try {
-      // Convertir le buffer en base64
-      const base64Image = invoiceBuffer.toString('base64');
+      this.logger.log("Démarrage de l'analyse de facture avec Donut");
 
-      // Vérifier si le buffer contient un PDF
-      const isPdf = base64Image.substring(0, 20).includes('PDF');
-
-      let imageBuffer: Buffer;
-
-      // Si c'est un PDF, le convertir en image
-      if (isPdf) {
-        this.logger.log('Conversion du PDF en image pour le modèle Donut');
-        const convertedImage = await this.convertPdfToImage(invoiceBuffer, 1);
-
-        if (!convertedImage) {
-          throw new Error('Échec de la conversion du PDF en image');
-        }
-
-        imageBuffer = convertedImage;
-      } else {
-        // Si c'est déjà une image, utiliser le buffer tel quel
-        imageBuffer = invoiceBuffer;
+      // Vérification initiale du buffer
+      if (!invoiceBuffer || invoiceBuffer.length === 0) {
+        throw new Error("Buffer d'image invalide ou vide");
       }
 
-      // Encoder l'image en base64
+      // Convertir le buffer en base64 pour inspection
+      const base64Sample = invoiceBuffer.slice(0, 100).toString('base64');
+
+      // Vérifier le type de fichier (PDF ou image)
+      const isPdf =
+        base64Sample.includes('PDF') || base64Sample.includes('JVBERi0'); // Signature PDF en base64
+
+      let imageBuffer: Buffer;
+      let conversionSuccess = false;
+
+      if (isPdf) {
+        this.logger.log(
+          'Fichier détecté comme PDF, conversion en image pour le modèle Donut',
+        );
+        try {
+          // Conversion du PDF en image
+          const convertedImage = await this.convertPdfToImage(invoiceBuffer, 1);
+
+          if (convertedImage && convertedImage.length > 0) {
+            this.logger.log(
+              `PDF converti en image avec succès (${convertedImage.length} octets)`,
+            );
+            imageBuffer = convertedImage;
+            conversionSuccess = true;
+          } else {
+            throw new Error('La conversion PDF vers image a échoué');
+          }
+        } catch (convErr) {
+          this.logger.error(
+            'Erreur lors de la conversion PDF vers image:',
+            convErr,
+          );
+
+          // En cas d'échec de la conversion, essayer d'extraire le texte du PDF
+          try {
+            const pdfText = await pdfParse(invoiceBuffer);
+            if (pdfText && pdfText.text) {
+              this.logger.log(
+                'Extraction du texte du PDF réussie, analyse par regex',
+              );
+
+              // Analyser le texte extrait avec des expressions régulières
+              const textAnalysis = this.analyzeWithRegex(pdfText.text);
+
+              return {
+                success: true,
+                message: 'Analyse de facture basée sur le texte extrait du PDF',
+                data: textAnalysis,
+                method: 'text_extraction',
+              };
+            } else {
+              throw new Error("Impossible d'extraire du texte du PDF");
+            }
+          } catch (textExtractionErr) {
+            this.logger.error(
+              "Échec de l'extraction de texte du PDF:",
+              textExtractionErr,
+            );
+            throw new Error(
+              'Échec du traitement du PDF (conversion et extraction de texte)',
+            );
+          }
+        }
+      } else {
+        // C'est probablement déjà une image, utiliser directement
+        this.logger.log('Fichier détecté comme image, utilisation directe');
+        imageBuffer = invoiceBuffer;
+        conversionSuccess = true;
+      }
+
+      // Vérifier que nous avons bien un buffer d'image valide à ce stade
+      if (!conversionSuccess || !imageBuffer || imageBuffer.length === 0) {
+        throw new Error("Échec de la préparation de l'image pour l'analyse");
+      }
+
+      // Log de débogage sur la taille de l'image
+      this.logger.log(`Analyse d'une image de ${imageBuffer.length} octets`);
+
+      // Encoder l'image en base64 pour l'API Hugging Face
       const base64ForInference = imageBuffer.toString('base64');
+
+      // Vérifier que le base64 ressemble bien à une image
+      if (base64ForInference.length < 1000) {
+        this.logger.warn(
+          `Base64 trop court (${base64ForInference.length} caractères), possibilité d'image corrompue`,
+        );
+      }
 
       // Utiliser le service Hugging Face pour extraire les données
       const extractionResult =
@@ -1715,6 +1784,7 @@ ${pdfBase64.substring(0, 1000)}...
         success: true,
         message: 'Analyse de facture réussie avec le modèle Katana ML Donut',
         data: formattedResult,
+        method: 'donut_model',
       };
     } catch (error) {
       this.logger.error(
@@ -1724,6 +1794,7 @@ ${pdfBase64.substring(0, 1000)}...
         success: false,
         message: `Échec de l'analyse de la facture: ${error.message}`,
         data: null,
+        method: 'failed',
       };
     }
   }
@@ -1749,20 +1820,31 @@ ${pdfBase64.substring(0, 1000)}...
 
       // Si c'est déjà un objet, vérifier sa structure
       if (rawResult && typeof rawResult === 'object') {
-        // Adapter le format si nécessaire
-        // Si le modèle Katana ML retourne une structure différente du modèle actuel
-        // nous pouvons la normaliser ici
+        // Récupérer le texte généré pour analyse supplémentaire si nécessaire
+        const generatedText = rawResult.generated_text || '';
 
+        // Tenter d'extraire des données du texte généré si disponible
+        const extractedFromText =
+          this.extractDataFromGeneratedText(generatedText);
+
+        // Structure normalisée avec priorité aux données structurées, puis aux données extraites du texte
         return {
-          // Structure normalisée
           header: {
             invoice_no:
-              rawResult.invoice_number || rawResult.invoiceNumber || null,
-            invoice_date: rawResult.date || rawResult.invoiceDate || null,
+              rawResult.invoice_number ||
+              rawResult.invoiceNumber ||
+              extractedFromText.invoiceNumber ||
+              null,
+            invoice_date:
+              rawResult.date ||
+              rawResult.invoiceDate ||
+              extractedFromText.date ||
+              null,
             seller:
               rawResult.supplier ||
               rawResult.vendor ||
               rawResult.seller ||
+              extractedFromText.supplier ||
               null,
           },
           summary: {
@@ -1770,16 +1852,26 @@ ${pdfBase64.substring(0, 1000)}...
               rawResult.total ||
               rawResult.totalAmount ||
               rawResult.amount ||
+              extractedFromText.amount ||
               null,
-            vat: rawResult.vat || rawResult.tax || null,
-            net: rawResult.net || rawResult.netAmount || null,
+            vat:
+              rawResult.vat || rawResult.tax || extractedFromText.vat || null,
+            net:
+              rawResult.net ||
+              rawResult.netAmount ||
+              extractedFromText.totalHT ||
+              null,
           },
           payment: {
-            iban: rawResult.iban || null,
-            bic: rawResult.bic || null,
-            due_date: rawResult.dueDate || null,
+            iban: rawResult.iban || extractedFromText.iban || null,
+            bic: rawResult.bic || extractedFromText.bic || null,
+            due_date: rawResult.dueDate || extractedFromText.dueDate || null,
           },
-          items: rawResult.items || rawResult.lineItems || [],
+          items:
+            rawResult.items ||
+            rawResult.lineItems ||
+            extractedFromText.lineItems ||
+            [],
           raw: rawResult, // Garder la réponse brute pour référence
         };
       }
@@ -1790,6 +1882,169 @@ ${pdfBase64.substring(0, 1000)}...
         `Erreur lors du formatage du résultat Donut: ${error.message}`,
       );
       return { raw: rawResult }; // Retourner le résultat brut en cas d'erreur
+    }
+  }
+
+  /**
+   * Extrait des données structurées à partir du texte généré par le modèle Donut
+   * Cette méthode est utilisée quand les données structurées ne sont pas disponibles
+   */
+  private extractDataFromGeneratedText(generatedText: string): any {
+    this.logger.log(
+      "Tentative d'extraction de données à partir du texte généré",
+    );
+
+    const result = {
+      invoiceNumber: null as string | null,
+      date: null as string | null,
+      supplier: null as string | null,
+      amount: null as string | null,
+      vat: null as string | null,
+      totalHT: null as string | null,
+      iban: null as string | null,
+      bic: null as string | null,
+      dueDate: null as string | null,
+      lineItems: [] as Array<{
+        name: string;
+        quantity: string;
+        unit_price: string;
+        total: string;
+      }>,
+    };
+
+    try {
+      if (!generatedText || generatedText.length < 10) {
+        return result;
+      }
+
+      // Extraction du numéro de facture
+      const invoiceNoMatch = generatedText.match(
+        /<s_invoice_no>(.*?)<\/s_invoice_no>/,
+      );
+      if (invoiceNoMatch && invoiceNoMatch[1]) {
+        result.invoiceNumber = invoiceNoMatch[1].trim();
+      } else {
+        // Essayer d'autres patterns
+        const fcMatch = generatedText.match(/FC(\d+)/);
+        if (fcMatch) {
+          result.invoiceNumber = `FC${fcMatch[1]}`;
+        }
+      }
+
+      // Extraction de la date
+      const dateMatch = generatedText.match(
+        /<s_invoice_date>(.*?)<\/s_invoice_date>/,
+      );
+      if (dateMatch && dateMatch[1]) {
+        result.date = dateMatch[1].trim();
+      } else {
+        // Chercher des dates au format XX/XX/XXXX
+        const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
+        const altDateMatch = generatedText.match(datePattern);
+        if (altDateMatch) {
+          result.date = altDateMatch[1];
+        }
+      }
+
+      // Extraction du vendeur
+      const sellerMatch = generatedText.match(/<s_seller>(.*?)<\/s_seller>/);
+      if (sellerMatch && sellerMatch[1]) {
+        result.supplier = sellerMatch[1].trim();
+      } else {
+        // Chercher une ligne qui ressemble à un nom d'entreprise
+        const lines = generatedText.split('\n');
+        for (const line of lines) {
+          if (line.includes('Electricite') || line.includes('BAUD')) {
+            result.supplier = line.trim();
+            break;
+          }
+        }
+      }
+
+      // Extraction du montant total
+      const totalMatch = generatedText.match(
+        /<s_total_gross_worth>(.*?)<\/s_total_gross_worth>/,
+      );
+      if (totalMatch && totalMatch[1]) {
+        const cleanTotal = totalMatch[1]
+          .replace(/[^\d,.]/g, '')
+          .replace(',', '.');
+        result.amount = cleanTotal;
+      } else {
+        // Chercher des patterns de totaux
+        const totalPattern = /Total Net HT\s*(\d+[,.]\d+)/i;
+        const altTotalMatch = generatedText.match(totalPattern);
+        if (altTotalMatch) {
+          result.totalHT = altTotalMatch[1].replace(',', '.');
+          // Approximation du montant TTC (ajout de 20% de TVA)
+          const ht = parseFloat(result.totalHT);
+          if (!isNaN(ht)) {
+            result.amount = (ht * 1.2).toFixed(2);
+            result.vat = (ht * 0.2).toFixed(2);
+          }
+        }
+      }
+
+      // Extraction des articles
+      const itemDescPatterns = /<s_item_desc>(.*?)<\/s_item_desc>/g;
+      const itemQtyPatterns = /<s_item_qty>(.*?)<\/s_item_qty>/g;
+      const itemDescMatches = [...generatedText.matchAll(itemDescPatterns)];
+      const itemQtyMatches = [...generatedText.matchAll(itemQtyPatterns)];
+
+      // Associer les descriptions et quantités
+      for (
+        let i = 0;
+        i < Math.min(itemDescMatches.length, itemQtyMatches.length);
+        i++
+      ) {
+        const desc = itemDescMatches[i][1].trim();
+        const qty = itemQtyMatches[i][1].trim();
+
+        if (desc && qty) {
+          // Convertir la quantité en nombre si possible
+          let quantity = qty;
+          if (/^\d+[,.]\d+$/.test(qty)) {
+            quantity = qty.replace(',', '.');
+          }
+
+          // Essayer d'estimer un prix unitaire
+          let unitPrice = '0';
+          let total = '0';
+
+          // Si nous avons un total HT et un seul article, utiliser comme total
+          if (result.totalHT && itemDescMatches.length === 1) {
+            total = result.totalHT;
+            if (quantity && parseFloat(quantity) > 0) {
+              unitPrice = (parseFloat(total) / parseFloat(quantity)).toFixed(2);
+            }
+          }
+
+          result.lineItems.push({
+            name: desc,
+            quantity: quantity,
+            unit_price: unitPrice,
+            total: total,
+          });
+        }
+      }
+
+      // Si nous n'avons pas trouvé d'articles mais avons un montant, créer un article générique
+      if (result.lineItems.length === 0 && result.totalHT) {
+        result.lineItems.push({
+          name: 'Services ou produits',
+          quantity: '1',
+          unit_price: result.totalHT,
+          total: result.totalHT,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        "Erreur lors de l'extraction des données du texte généré:",
+        error,
+      );
+      return result;
     }
   }
 

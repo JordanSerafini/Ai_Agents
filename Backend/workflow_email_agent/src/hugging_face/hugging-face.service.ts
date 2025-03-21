@@ -560,7 +560,7 @@ export class HuggingFaceService {
             imageBuffer = Buffer.from(imageData, 'base64');
           }
         } else {
-          throw new Error('Format de données d\'image non pris en charge');
+          throw new Error("Format de données d'image non pris en charge");
         }
 
         // Utiliser le client HfInference pour appeler le modèle
@@ -574,9 +574,9 @@ export class HuggingFaceService {
       } catch (error) {
         // Vérifier si l'erreur est un 503 (Service Unavailable) ou 429 (Too Many Requests)
         if (
-          error.response?.status === 503 || 
+          error.response?.status === 503 ||
           error.response?.status === 429 ||
-          error.message?.includes('503') || 
+          error.message?.includes('503') ||
           error.message?.includes('429')
         ) {
           if (attempt < maxRetries) {
