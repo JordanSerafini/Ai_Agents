@@ -205,10 +205,19 @@ export class HuggingFaceService {
           result.date = dateMatch[1].trim();
         } else {
           // Chercher des dates au format XX/XX/XXXX
-          const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
+          const datePattern =
+            /(\d{1,2}\/\d{1,2}\/\d{2,4})|(\d{2,4}\/\d{1,2}\/\d{1,2})/;
           const altDateMatch = generatedText.match(datePattern);
           if (altDateMatch) {
-            result.date = altDateMatch[1];
+            result.date = altDateMatch[0];
+          } else {
+            // Recherche spécifique dans le texte de cette facture
+            const specificDateMatch = generatedText.match(
+              /FC\d+\s+(\d+\/\d+\/\d+)/,
+            );
+            if (specificDateMatch) {
+              result.date = specificDateMatch[1];
+            }
           }
         }
 
@@ -343,6 +352,25 @@ export class HuggingFaceService {
                 }
               }
 
+              // Si pas de total mais un prix unitaire, calculer le total
+              if (unitPrice !== '0' && total === '0' && quantity) {
+                const qtyNum = parseFloat(quantity.replace(',', '.'));
+                const priceNum = parseFloat(unitPrice);
+                if (!isNaN(qtyNum) && !isNaN(priceNum)) {
+                  total = (qtyNum * priceNum).toFixed(2);
+                }
+              }
+
+              // Si total est toujours 0, chercher un montant numérique après la quantité
+              if (total === '0') {
+                const numericValueMatch = match[0].match(
+                  /(\d+[,.]\d+)(?!\s*<\/s_item_qty>)/,
+                );
+                if (numericValueMatch) {
+                  total = numericValueMatch[1].replace(',', '.');
+                }
+              }
+
               result.lineItems.push({
                 name,
                 quantity,
@@ -352,45 +380,74 @@ export class HuggingFaceService {
             }
           });
         } else {
-          // Si pas de structure claire, essayer d'extraire des lignes de texte qui ressemblent à des articles
+          // Approche alternative: chercher des patterns spécifiques pour cette facture
           // Chercher des patterns comme "X Inlay Irones"
-          const genericItemPattern =
-            /(\d+)\s+([A-Za-z][\w\s]+)(?:\s+(\d+[,.]\d+))?/g;
-          const genericMatches = [
-            ...generatedText.matchAll(genericItemPattern),
+          const specificItemMatches = [
+            ...generatedText.matchAll(
+              /<s_item_desc>(.*?)<\/s_item_desc>.*?<s_item_qty>(.*?)<\/s_item_qty>.*?<s_item_gross_worth>(.*?)<\/s_item_gross_worth>/gs,
+            ),
           ];
 
-          genericMatches.forEach((match) => {
-            if (match[1] && match[2]) {
-              const quantity = match[1];
-              const name = match[2].trim();
-              let total = match[3] ? match[3].replace(',', '.') : '0';
+          if (specificItemMatches && specificItemMatches.length > 0) {
+            specificItemMatches.forEach((match) => {
+              if (match[1] && match[2] && match[3]) {
+                const name = match[1].trim();
+                const quantity = match[2].trim().replace(/[^\d,.]/g, '');
+                const total = match[3]
+                  .trim()
+                  .replace(/[^\d,.]/g, '')
+                  .replace(',', '.');
 
-              if (
-                total === '0' &&
-                result.totalHT &&
-                genericMatches.length === 1
-              ) {
-                total = result.totalHT;
-              }
-
-              let unitPrice = '0';
-              if (total !== '0') {
-                const qtyNum = parseFloat(quantity);
-                const totalNum = parseFloat(total);
-                if (!isNaN(qtyNum) && !isNaN(totalNum) && qtyNum > 0) {
-                  unitPrice = (totalNum / qtyNum).toFixed(2);
+                // Calculer le prix unitaire
+                let unitPrice = '0';
+                if (quantity && quantity !== '0') {
+                  const qtyNum = parseFloat(quantity.replace(',', '.'));
+                  const totalNum = parseFloat(total);
+                  if (!isNaN(qtyNum) && !isNaN(totalNum) && qtyNum > 0) {
+                    unitPrice = (totalNum / qtyNum).toFixed(2);
+                  }
                 }
-              }
 
-              result.lineItems.push({
-                name,
-                quantity,
-                unit_price: unitPrice,
-                total,
-              });
-            }
-          });
+                result.lineItems.push({
+                  name,
+                  quantity,
+                  unit_price: unitPrice,
+                  total,
+                });
+              }
+            });
+          } else {
+            // Dernière tentative: extraction simple basée sur des patterns numériques
+            const genericItemPattern =
+              /(\d+)\s+([A-Za-z][\w\s]+)(?:.*?)(\d+[,.]\d+)/g;
+            const genericMatches = [
+              ...generatedText.matchAll(genericItemPattern),
+            ];
+
+            genericMatches.forEach((match) => {
+              if (match[1] && match[2] && match[3]) {
+                const quantity = match[1];
+                const name = match[2].trim();
+                const total = match[3].replace(',', '.');
+
+                let unitPrice = '0';
+                if (quantity && total) {
+                  const qtyNum = parseFloat(quantity);
+                  const totalNum = parseFloat(total);
+                  if (!isNaN(qtyNum) && !isNaN(totalNum) && qtyNum > 0) {
+                    unitPrice = (totalNum / qtyNum).toFixed(2);
+                  }
+                }
+
+                result.lineItems.push({
+                  name,
+                  quantity,
+                  unit_price: unitPrice,
+                  total,
+                });
+              }
+            });
+          }
         }
 
         // Si tous les champs importants sont encore vides, essayer une dernière approche simplifiée
