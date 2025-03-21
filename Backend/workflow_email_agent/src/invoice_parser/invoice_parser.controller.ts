@@ -40,15 +40,42 @@ interface ProcessedInvoice {
   date: string | null;
 }
 
+// Interface pour l'analyse détaillée des factures
+interface DetailedInvoiceAnalysis {
+  supplier: string;
+  supplierAddress: string;
+  supplierZipCode: string;
+  supplierCity: string;
+  lineItems: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    total?: number;
+    description?: string;
+  }>;
+  totalHT: number;
+  totalTVA?: number;
+  totalTTC: number;
+  paymentInfo: {
+    iban?: string;
+    bic?: string;
+    paymentMethod?: string;
+    dueDate?: string;
+  };
+  confidence: number;
+}
+
 @Controller('invoice-parser')
 export class InvoiceParserController {
   private readonly logger = new Logger(InvoiceParserController.name);
   private readonly extractPdfPath: string;
   private readonly persistencePath: string;
+  private readonly toAnalysePath: string;
 
   constructor(private readonly invoiceParserService: InvoiceParserService) {
     this.extractPdfPath = path.join('/app', 'extractPdf');
     this.persistencePath = path.join('/app', 'persistence', 'Factures');
+    this.toAnalysePath = path.join('/app', 'persistence', 'toAnalyse');
   }
 
   @Post('process')
@@ -373,6 +400,11 @@ export class InvoiceParserController {
         };
       }
 
+      // Créer le dossier toAnalyse s'il n'existe pas
+      if (!fs.existsSync(this.toAnalysePath)) {
+        await fs.promises.mkdir(this.toAnalysePath, { recursive: true });
+      }
+
       // Lire tous les fichiers PDF du dossier
       const files = await fs.promises.readdir(this.persistencePath);
       const pdfFiles = files.filter((file) =>
@@ -460,6 +492,12 @@ export class InvoiceParserController {
             combinedText,
           );
 
+          // Sauvegarder aussi le texte combiné dans toAnalyse
+          await fs.promises.writeFile(
+            path.join(this.toAnalysePath, `${invoiceNumber}_combined.txt`),
+            combinedText,
+          );
+
           // Sauvegarder les métadonnées
           await fs.promises.writeFile(
             path.join(invoiceFolderPath, `${invoiceNumber}_metadata.json`),
@@ -496,6 +534,108 @@ export class InvoiceParserController {
         message: `Erreur: ${error.message}`,
         processed: 0,
         failed: 0,
+      };
+    }
+  }
+
+  @Post('analyze-with-ai')
+  async analyzeWithMistralAI() {
+    this.logger.log('Analyse des factures avec Mistral AI');
+
+    try {
+      // Vérifier si le dossier toAnalyse existe
+      if (!fs.existsSync(this.toAnalysePath)) {
+        return {
+          success: false,
+          message: "Le dossier persistence/toAnalyse n'existe pas",
+          processed: 0,
+          failed: 0,
+          details: [],
+        };
+      }
+
+      // Lire tous les fichiers texte du dossier
+      const files = await fs.promises.readdir(this.toAnalysePath);
+      const textFiles = files.filter((file) => file.endsWith('_combined.txt'));
+
+      if (textFiles.length === 0) {
+        return {
+          success: false,
+          message: 'Aucun fichier texte trouvé dans le dossier',
+          processed: 0,
+          failed: 0,
+          details: [],
+        };
+      }
+
+      this.logger.log(`${textFiles.length} fichiers texte trouvés à analyser`);
+
+      let processed = 0;
+      let failed = 0;
+      const detailedAnalysis: DetailedInvoiceAnalysis[] = [];
+
+      // Traiter chaque fichier texte
+      for (const textFile of textFiles) {
+        try {
+          const filePath = path.join(this.toAnalysePath, textFile);
+          const combinedText = await fs.promises.readFile(filePath, 'utf8');
+
+          // Extraction des données par Hugging Face (80% de pertinence)
+          const huggingFaceData =
+            await this.invoiceParserService.extractHuggingFaceData(
+              combinedText,
+            );
+
+          // Extraction des données par OCR (20% de pertinence)
+          const ocrData =
+            await this.invoiceParserService.extractTesseractData(combinedText);
+
+          // Analyse détaillée avec Mistral AI
+          const aiAnalysis =
+            await this.invoiceParserService.analyzeCombinedDataWithMistral(
+              huggingFaceData,
+              ocrData,
+              combinedText,
+            );
+
+          // Nom du fichier sans le suffixe _combined.txt
+          const invoiceNumber = textFile.replace('_combined.txt', '');
+
+          // Ajout de l'analyse détaillée
+          detailedAnalysis.push(aiAnalysis);
+
+          // Sauvegarder les résultats d'analyse dans un fichier JSON
+          await fs.promises.writeFile(
+            path.join(
+              this.toAnalysePath,
+              `${invoiceNumber}_detailed_analysis.json`,
+            ),
+            JSON.stringify(aiAnalysis, null, 2),
+          );
+
+          processed++;
+          this.logger.log(`Analyse détaillée réussie pour ${textFile}`);
+        } catch (error) {
+          this.logger.error(`Erreur lors de l'analyse de ${textFile}:`, error);
+          failed++;
+        }
+      }
+
+      return {
+        success: true,
+        message: `Analyse terminée: ${processed} factures analysées, ${failed} échecs`,
+        processed,
+        failed,
+        details: detailedAnalysis,
+      };
+    } catch (error) {
+      this.logger.error("Erreur lors de l'analyse des factures:", error);
+      return {
+        success: false,
+        message: `Erreur: ${error.message}`,
+        processed: 0,
+        failed: 0,
+        details: [],
       };
     }
   }

@@ -10,17 +10,45 @@ import * as Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { Stream } from 'stream';
 import * as crypto from 'crypto';
+import axios from 'axios';
+
+// Interface pour l'analyse détaillée des factures
+interface DetailedInvoiceAnalysis {
+  supplier: string;
+  supplierAddress: string;
+  supplierZipCode: string;
+  supplierCity: string;
+  lineItems: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    total: number;
+    description?: string;
+  }>;
+  totalHT: number;
+  totalTVA?: number;
+  totalTTC: number;
+  paymentInfo: {
+    iban?: string;
+    bic?: string;
+    paymentMethod?: string;
+    dueDate?: string;
+  };
+  confidence: number;
+}
 
 @Injectable()
 export class InvoiceParserService {
   private readonly logger = new Logger(InvoiceParserService.name);
   private readonly extractPdfPath: string;
+  private readonly toAnalysePath: string;
   private imap: Imap;
   private tesseractConfig = {
     lang: 'fra+eng',
     oem: 1,
     psm: 3,
   };
+  private readonly mistralApiKey: string;
 
   // Informations à extraire des factures
   private readonly extractionPatterns = {
@@ -36,9 +64,14 @@ export class InvoiceParserService {
     private readonly emailSortService: EmailSortService,
     private readonly huggingFaceService: HuggingFaceService,
   ) {
-    // Chemin où seront extraits les PDF (adapté pour Docker)
+    // Chemins des dossiers de traitement (adaptés pour Docker)
     this.extractPdfPath = path.join('/app', 'extractPdf');
-    void this.ensureExtractDirectory();
+    this.toAnalysePath = path.join('/app', 'persistence', 'toAnalyse');
+    void this.ensureDirectories();
+
+    // Clé API pour Mistral AI
+    this.mistralApiKey =
+      this.configService.get<string>('MISTRAL_API_KEY') || '';
 
     // Configuration IMAP
     const user = this.configService.get<string>('EMAIL_USER');
@@ -60,17 +93,19 @@ export class InvoiceParserService {
     });
   }
 
-  private async ensureExtractDirectory(): Promise<void> {
+  private async ensureDirectories(): Promise<void> {
     try {
       if (!fs.existsSync(this.extractPdfPath)) {
         await fs.promises.mkdir(this.extractPdfPath, { recursive: true });
         this.logger.log(`Dossier d'extraction créé: ${this.extractPdfPath}`);
       }
+
+      if (!fs.existsSync(this.toAnalysePath)) {
+        await fs.promises.mkdir(this.toAnalysePath, { recursive: true });
+        this.logger.log(`Dossier d'analyse créé: ${this.toAnalysePath}`);
+      }
     } catch (error) {
-      this.logger.error(
-        `Erreur lors de la création du dossier d'extraction:`,
-        error,
-      );
+      this.logger.error(`Erreur lors de la création des dossiers:`, error);
     }
   }
 
@@ -804,5 +839,193 @@ export class InvoiceParserService {
       return `FACTURE-${shortHash}`;
     }
     return filename;
+  }
+
+  /**
+   * Extrait les données de Hugging Face à partir du texte combiné
+   * Cette méthode extrait les parties provenant de Hugging Face
+   */
+  public extractHuggingFaceData(combinedText: string): any {
+    try {
+      // Le texte combiné contient d'abord le texte OCR puis le texte Hugging Face
+      // séparés par une double ligne vide
+      const parts = combinedText.split('\n\n');
+      if (parts.length < 2) {
+        return this.extractInvoiceData(combinedText);
+      }
+
+      // La partie Hugging Face est après la première double ligne vide
+      const huggingFaceText = parts.slice(1).join('\n\n');
+      return this.extractInvoiceData(huggingFaceText);
+    } catch (error) {
+      this.logger.error(
+        "Erreur lors de l'extraction des données Hugging Face:",
+        error,
+      );
+      return {};
+    }
+  }
+
+  /**
+   * Extrait les données OCR à partir du texte combiné
+   * Cette méthode extrait les parties provenant de l'OCR
+   */
+  public extractTesseractData(combinedText: string): any {
+    try {
+      // Le texte OCR est dans la première partie avant la double ligne vide
+      const parts = combinedText.split('\n\n');
+      if (parts.length === 0) {
+        return {};
+      }
+
+      const tesseractText = parts[0];
+      return this.extractInvoiceData(tesseractText);
+    } catch (error) {
+      this.logger.error("Erreur lors de l'extraction des données OCR:", error);
+      return {};
+    }
+  }
+
+  /**
+   * Analyse les données combinées avec Mistral AI
+   * Cette fonction combine les données de Hugging Face (80%) et OCR (20%),
+   * puis les envoie à Mistral AI pour une analyse détaillée
+   */
+  public async analyzeCombinedDataWithMistral(
+    huggingFaceData: any,
+    ocrData: any,
+    fullText: string,
+  ): Promise<DetailedInvoiceAnalysis> {
+    try {
+      this.logger.log('Analyse des données avec Mistral AI');
+
+      // Préparer les données combinées avec pondération 80% HF / 20% OCR
+      const combinedData = {
+        invoiceNumber:
+          huggingFaceData.invoiceNumber ||
+          ocrData.invoiceNumber ||
+          'Non trouvé',
+        supplier: huggingFaceData.supplier || ocrData.supplier || 'Non trouvé',
+        amount: huggingFaceData.amount || ocrData.amount || 'Non trouvé',
+        date: huggingFaceData.date || ocrData.date || 'Non trouvé',
+        fullText: fullText,
+      };
+
+      // Préparer la requête pour Mistral AI
+      const prompt = `
+      Voici le contenu d'une facture. Analyse cette facture et extrais les informations suivantes au format JSON :
+      
+      1. Fournisseur (nom de l'entreprise)
+      2. Adresse complète du fournisseur (avec code postal et ville séparés)
+      3. Toutes les lignes de facture/devis avec détails (quantité, prix unitaire, nom de l'article, description si disponible)
+      4. Total HT, TVA (si disponible), et total TTC
+      5. Informations de paiement (IBAN, BIC, méthode de paiement, date d'échéance)
+      
+      Voici les informations déjà extraites et leur texte complet:
+      
+      Numéro de facture: ${combinedData.invoiceNumber}
+      Fournisseur: ${combinedData.supplier}
+      Montant: ${combinedData.amount}
+      Date: ${combinedData.date}
+      
+      Texte complet:
+      ${combinedData.fullText.substring(0, 5000)}
+      
+      Réponds uniquement avec le JSON structuré, sans texte additionnel.
+      `;
+
+      // Si pas de clé API, utiliser une analyse basique
+      if (!this.mistralApiKey) {
+        this.logger.warn(
+          "Clé API Mistral non configurée, utilisation de l'analyse basique",
+        );
+        return this.fallbackAnalysis(combinedData);
+      }
+
+      // Appel à l'API Mistral
+      const response = await axios.post(
+        'https://api.mistral.ai/v1/chat/completions',
+        {
+          model: 'mistral-large-latest',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.2,
+          max_tokens: 1500,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.mistralApiKey}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      // Extraire la réponse
+      let result: DetailedInvoiceAnalysis;
+
+      try {
+        const content = response.data.choices[0].message.content;
+        // Tenter de parser le JSON de la réponse
+        result = JSON.parse(content);
+      } catch (parseError) {
+        this.logger.error(
+          'Erreur de parsing de la réponse Mistral:',
+          parseError,
+        );
+        // En cas d'échec, utiliser l'analyse basique
+        result = this.fallbackAnalysis(combinedData);
+      }
+
+      // Ajouter le niveau de confiance
+      result.confidence = 0.85; // Valeur arbitraire
+
+      return result;
+    } catch (error) {
+      this.logger.error("Erreur lors de l'analyse avec Mistral AI:", error);
+      return this.fallbackAnalysis({
+        invoiceNumber: 'Non trouvé',
+        supplier: 'Non trouvé',
+        amount: 'Non trouvé',
+        date: 'Non trouvé',
+        fullText: fullText,
+      });
+    }
+  }
+
+  /**
+   * Méthode de secours pour l'analyse en cas d'échec de Mistral AI
+   */
+  private fallbackAnalysis(data: any): DetailedInvoiceAnalysis {
+    return {
+      supplier: data.supplier || 'Non trouvé',
+      supplierAddress: 'Non trouvé',
+      supplierZipCode: 'Non trouvé',
+      supplierCity: 'Non trouvé',
+      lineItems: [
+        {
+          name: 'Article non identifié',
+          quantity: 1,
+          price:
+            parseFloat(
+              data.amount?.replace(/[^\d,.]/g, '').replace(',', '.'),
+            ) || 0,
+          total:
+            parseFloat(
+              data.amount?.replace(/[^\d,.]/g, '').replace(',', '.'),
+            ) || 0,
+        },
+      ],
+      totalHT:
+        parseFloat(data.amount?.replace(/[^\d,.]/g, '').replace(',', '.')) *
+          0.8 || 0,
+      totalTVA:
+        parseFloat(data.amount?.replace(/[^\d,.]/g, '').replace(',', '.')) *
+          0.2 || 0,
+      totalTTC:
+        parseFloat(data.amount?.replace(/[^\d,.]/g, '').replace(',', '.')) || 0,
+      paymentInfo: {
+        dueDate: data.date || 'Non trouvé',
+      },
+      confidence: 0.3, // Basse confiance pour l'analyse de secours
+    };
   }
 }
