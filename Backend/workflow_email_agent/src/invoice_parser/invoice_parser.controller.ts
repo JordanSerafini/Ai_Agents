@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as tesseract from 'node-tesseract-ocr';
 import * as pdfParse from 'pdf-parse';
+import { exec } from 'child_process';
 
 // Interfaces pour les types de retour
 interface InvoiceInfo {
@@ -508,41 +509,111 @@ export class InvoiceParserController {
       }
 
       const tempPdfPath = path.join(tempDir, `temp_${Date.now()}.pdf`);
+      const tempImagePath = path.join(tempDir, `temp_${Date.now()}.png`);
+
       await fs.promises.writeFile(tempPdfPath, pdfBuffer);
 
-      this.logger.log('Analyse OCR avec Tesseract');
+      this.logger.log('Conversion du PDF en image avant OCR');
 
       try {
-        // Exécuter Tesseract OCR directement sur le PDF
-        const tesseractConfig = {
-          lang: 'fra+eng', // Français et anglais
-          oem: 1, // Mode OCR Engine - utilise LSTM uniquement
-          psm: 3, // Page Segmentation Mode - segmentation automatique de page
-        };
+        // Utiliser pdftoppm (de poppler-utils) pour convertir la première page du PDF en image
+        return new Promise<string>((resolve) => {
+          // Convertir la première page du PDF en image PNG
+          const convertCmd = `pdftoppm -f 1 -l 1 -png -singlefile -r 300 ${tempPdfPath} ${tempImagePath.replace('.png', '')}`;
 
-        const text = await tesseract.recognize(tempPdfPath, tesseractConfig);
+          exec(convertCmd, (error) => {
+            if (error) {
+              this.logger.error(
+                'Erreur lors de la conversion PDF en image:',
+                error,
+              );
+              // En cas d'échec, passer à la méthode de repli
+              pdfParse(pdfBuffer)
+                .then((pdfData) => {
+                  // Nettoyer les fichiers temporaires
+                  void fs.promises.unlink(tempPdfPath).finally(() => {
+                    resolve(pdfData.text || "Échec de l'extraction de texte");
+                  });
+                })
+                .catch((fallbackError) => {
+                  this.logger.error(
+                    "Erreur lors de l'extraction de texte de secours:",
+                    fallbackError,
+                  );
+                  resolve("Échec de l'extraction de texte");
+                });
+              return;
+            }
 
-        // Nettoyer les fichiers temporaires
-        await fs.promises.unlink(tempPdfPath);
+            // Le chemin de l'image générée
+            const generatedImagePath = `${tempImagePath.replace('.png', '')}.png`;
 
-        return text;
-      } catch (tesseractError) {
+            // Exécuter Tesseract OCR sur l'image
+            const tesseractConfig = {
+              lang: 'fra+eng', // Français et anglais
+              oem: 1, // Mode OCR Engine - utilise LSTM uniquement
+              psm: 3, // Page Segmentation Mode - segmentation automatique de page
+            };
+
+            this.logger.log("Analyse OCR de l'image avec Tesseract");
+            tesseract
+              .recognize(generatedImagePath, tesseractConfig)
+              .then((text) => {
+                // Nettoyer les fichiers temporaires
+                void Promise.all([
+                  fs.promises.unlink(tempPdfPath),
+                  fs.promises.unlink(generatedImagePath),
+                ]).finally(() => {
+                  resolve(text);
+                });
+              })
+              .catch((tesseractError) => {
+                this.logger.error(
+                  'Erreur avec Tesseract, tentative avec extraction de texte basique:',
+                  tesseractError,
+                );
+
+                // En cas d'échec, utiliser pdf-parse comme solution de repli
+                pdfParse(pdfBuffer)
+                  .then((pdfData) => {
+                    // Nettoyer les fichiers temporaires
+                    void Promise.all([
+                      fs.promises.unlink(tempPdfPath),
+                      fs.existsSync(generatedImagePath)
+                        ? fs.promises.unlink(generatedImagePath)
+                        : Promise.resolve(),
+                    ]).finally(() => {
+                      resolve(pdfData.text || "Échec de l'extraction de texte");
+                    });
+                  })
+                  .catch((fallbackError) => {
+                    this.logger.error(
+                      "Erreur lors de l'extraction de texte de secours:",
+                      fallbackError,
+                    );
+                    resolve("Échec de l'extraction de texte");
+                  });
+              });
+          });
+        });
+      } catch (conversionError) {
         this.logger.error(
-          'Erreur avec Tesseract, tentative avec extraction de texte basique:',
-          tesseractError,
+          "Erreur lors de la conversion ou de l'OCR:",
+          conversionError,
         );
 
         // En cas d'échec, utiliser pdf-parse comme solution de repli
-        const dataBuffer = fs.readFileSync(tempPdfPath);
-        const pdfData = await pdfParse(dataBuffer);
+        const pdfData = await pdfParse(pdfBuffer);
 
-        // Nettoyer les fichiers temporaires
-        await fs.promises.unlink(tempPdfPath);
+        // Nettoyer les fichiers temporaires si possible
+        if (fs.existsSync(tempPdfPath)) {
+          await fs.promises.unlink(tempPdfPath);
+        }
 
         return pdfData.text || "Échec de l'extraction de texte";
       }
     } catch (error) {
-      this.logger.error('Erreur lors du traitement OCR:', error);
+      this.logger.error('Erreur générale lors du traitement OCR:', error);
       return "Erreur lors de l'extraction du texte via OCR";
     }
   }
