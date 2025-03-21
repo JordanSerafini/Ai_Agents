@@ -149,125 +149,302 @@ export class HuggingFaceService {
       bic: null,
     };
 
-    // Analyser les prédictions du modèle LayoutLM et extraire les informations pertinentes
     try {
-      this.logger.log(
-        'Extraction des données structurées à partir des prédictions',
-      );
-      this.logger.debug(
-        'Données brutes:',
-        JSON.stringify(predictions).substring(0, 200) + '...',
-      );
-
-      // Vérifier si le résultat est une chaîne JSON
-      if (predictions && typeof predictions === 'string') {
+      // Si c'est une chaîne JSON, la parser
+      if (typeof predictions === 'string') {
         try {
-          // Essayer de trouver un JSON dans la chaîne (parfois il y a du texte avant/après)
-          const jsonMatch = predictions.match(/{[\s\S]*}/);
-          if (jsonMatch) {
-            const parsedJson = JSON.parse(jsonMatch[0]);
-            return this.extractFromParsedJson(parsedJson);
-          }
-
-          // Si pas de JSON, essayer de parser la chaîne entière
-          const parsed = JSON.parse(predictions);
-          return this.extractFromParsedJson(parsed);
-        } catch (jsonError) {
-          this.logger.warn('Erreur lors du parsing JSON:', jsonError.message);
-          // Continuer avec l'extraction par regex
+          predictions = JSON.parse(predictions);
+        } catch (e) {
+          console.log(e);
+          this.logger.warn('Format de prédiction non-JSON');
         }
-      } else if (predictions && typeof predictions === 'object') {
-        // Si c'est déjà un objet structuré
-        return this.extractFromParsedJson(predictions);
       }
 
-      // Extraction par regex si les méthodes précédentes ont échoué
-      this.logger.debug('Extraction par regex');
+      // Gestion des différents formats possibles de réponse
+      let generatedText = '';
 
-      // Extraction du numéro de facture
-      const invoiceMatch = String(predictions).match(
-        /(?:facture|invoice|n°|no)[:\s]*([A-Za-z0-9-_]{3,})/i,
+      if (predictions && typeof predictions === 'object') {
+        if (predictions.generated_text) {
+          generatedText = predictions.generated_text;
+        } else if (predictions.answer) {
+          generatedText = predictions.answer;
+        } else if (Array.isArray(predictions) && predictions.length > 0) {
+          generatedText =
+            predictions[0].generated_text || predictions[0].answer || '';
+        }
+      } else if (typeof predictions === 'string') {
+        generatedText = predictions;
+      }
+
+      this.logger.debug(
+        'Texte généré pour extraction:',
+        generatedText.substring(0, 200) + '...',
       );
-      if (invoiceMatch && invoiceMatch[1]) {
-        result.invoiceNumber = invoiceMatch[1];
+
+      // Extraction directe à partir du XML généré par Donut
+      if (generatedText) {
+        // Numéro de facture
+        const invoiceNoMatch = generatedText.match(
+          /<s_invoice_no>(.*?)<\/s_invoice_no>/,
+        );
+        if (invoiceNoMatch && invoiceNoMatch[1]) {
+          result.invoiceNumber = invoiceNoMatch[1].trim();
+        } else {
+          // Essayer d'autres patterns
+          const fcMatch = generatedText.match(/FC(\d+)/);
+          if (fcMatch) {
+            result.invoiceNumber = `FC${fcMatch[1]}`;
+          }
+        }
+
+        // Date de facture
+        const dateMatch = generatedText.match(
+          /<s_invoice_date>(.*?)<\/s_invoice_date>/,
+        );
+        if (dateMatch && dateMatch[1]) {
+          result.date = dateMatch[1].trim();
+        } else {
+          // Chercher des dates au format XX/XX/XXXX
+          const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
+          const altDateMatch = generatedText.match(datePattern);
+          if (altDateMatch) {
+            result.date = altDateMatch[1];
+          }
+        }
+
+        // Vendeur/fournisseur
+        const sellerMatch = generatedText.match(/<s_seller>(.*?)<\/s_seller>/);
+        if (sellerMatch && sellerMatch[1]) {
+          result.supplier = sellerMatch[1].trim();
+        } else {
+          // Chercher une ligne qui ressemble à un nom d'entreprise dans le texte
+          const lines = generatedText.split(/\s+/);
+          for (let i = 0; i < lines.length; i++) {
+            if (
+              lines[i].includes('Electricite') ||
+              lines[i].includes('BAUD') ||
+              lines[i].includes('SARL') ||
+              lines[i].includes('SAS')
+            ) {
+              const potentialSupplier = lines.slice(i, i + 4).join(' ');
+              result.supplier = potentialSupplier.trim();
+              break;
+            }
+          }
+        }
+
+        // Montant total
+        const totalGrossMatch = generatedText.match(
+          /<s_total_gross_worth>(.*?)<\/s_total_gross_worth>/,
+        );
+        if (totalGrossMatch && totalGrossMatch[1]) {
+          const cleanTotal = totalGrossMatch[1]
+            .replace(/[^\d,.]/g, '')
+            .replace(',', '.');
+          result.amount = cleanTotal;
+          result.totalTTC = cleanTotal;
+        }
+
+        // Total HT
+        const totalNetMatch = generatedText.match(
+          /<s_total_net_worth>(.*?)<\/s_total_net_worth>/,
+        );
+        if (totalNetMatch && totalNetMatch[1]) {
+          const cleanNetTotal = totalNetMatch[1]
+            .replace(/[^\d,.]/g, '')
+            .replace(',', '.');
+          result.totalHT = cleanNetTotal;
+        } else {
+          // Chercher des patterns comme "Total Net HT"
+          const totalPattern = /Total Net HT\s*(\d+[,.]\d+)/i;
+          const altTotalMatch = generatedText.match(totalPattern);
+          if (altTotalMatch) {
+            result.totalHT = altTotalMatch[1].replace(',', '.');
+          }
+        }
+
+        // TVA
+        const vatMatch = generatedText.match(
+          /<s_total_vat>(.*?)<\/s_total_vat>/,
+        );
+        if (vatMatch && vatMatch[1]) {
+          const cleanVat = vatMatch[1]
+            .replace(/[^\d,.]/g, '')
+            .replace(',', '.');
+          result.totalTVA = cleanVat;
+        }
+
+        // Si nous avons le total HT mais pas le total TTC, estimer le TTC (20% TVA par défaut)
+        if (result.totalHT && !result.totalTTC) {
+          const ht = parseFloat(result.totalHT);
+          if (!isNaN(ht)) {
+            result.totalTTC = (ht * 1.2).toFixed(2);
+            // Si pas de TVA explicite, l'estimer
+            if (!result.totalTVA) {
+              result.totalTVA = (ht * 0.2).toFixed(2);
+            }
+          }
+        }
+
+        // IBAN et BIC
+        const ibanMatch = generatedText.match(/<s_iban>(.*?)<\/s_iban>/);
+        if (ibanMatch && ibanMatch[1]) {
+          result.iban = ibanMatch[1].trim();
+        }
+
+        const bicMatch = generatedText.match(/<s_bic>(.*?)<\/s_bic>/);
+        if (bicMatch && bicMatch[1]) {
+          result.bic = bicMatch[1].trim();
+        }
+
+        // Extraction des lignes d'articles
+        const itemMatches = [
+          ...generatedText.matchAll(
+            /<s_item_desc>(.*?)<\/s_item_desc>.*?<s_item_qty>(.*?)<\/s_item_qty>/gs,
+          ),
+        ];
+        if (itemMatches && itemMatches.length > 0) {
+          itemMatches.forEach((match) => {
+            if (match[1] && match[2]) {
+              const name = match[1].trim();
+              const quantity = match[2].trim();
+
+              // Essayer de trouver le prix unitaire et total dans les balises suivantes
+              const unitPricePattern = new RegExp(
+                `<s_item_desc>${name}.*?<s_item_net_price>(.*?)</s_item_net_price>`,
+                's',
+              );
+              const totalPattern = new RegExp(
+                `<s_item_desc>${name}.*?<s_item_net_worth>(.*?)</s_item_net_worth>`,
+                's',
+              );
+
+              let unitPrice = '0';
+              let total = '0';
+
+              const unitPriceMatch = generatedText.match(unitPricePattern);
+              if (unitPriceMatch && unitPriceMatch[1]) {
+                unitPrice = unitPriceMatch[1]
+                  .replace(/[^\d,.]/g, '')
+                  .replace(',', '.');
+              }
+
+              const totalMatch = generatedText.match(totalPattern);
+              if (totalMatch && totalMatch[1]) {
+                total = totalMatch[1].replace(/[^\d,.]/g, '').replace(',', '.');
+              }
+
+              // Si nous avons une quantité et un total mais pas de prix unitaire, le calculer
+              if (quantity && total && total !== '0' && unitPrice === '0') {
+                const qtyNum = parseFloat(quantity.replace(',', '.'));
+                const totalNum = parseFloat(total);
+                if (!isNaN(qtyNum) && !isNaN(totalNum) && qtyNum > 0) {
+                  unitPrice = (totalNum / qtyNum).toFixed(2);
+                }
+              }
+
+              result.lineItems.push({
+                name,
+                quantity,
+                unit_price: unitPrice,
+                total: total,
+              });
+            }
+          });
+        } else {
+          // Si pas de structure claire, essayer d'extraire des lignes de texte qui ressemblent à des articles
+          // Chercher des patterns comme "X Inlay Irones"
+          const genericItemPattern =
+            /(\d+)\s+([A-Za-z][\w\s]+)(?:\s+(\d+[,.]\d+))?/g;
+          const genericMatches = [
+            ...generatedText.matchAll(genericItemPattern),
+          ];
+
+          genericMatches.forEach((match) => {
+            if (match[1] && match[2]) {
+              const quantity = match[1];
+              const name = match[2].trim();
+              let total = match[3] ? match[3].replace(',', '.') : '0';
+
+              if (
+                total === '0' &&
+                result.totalHT &&
+                genericMatches.length === 1
+              ) {
+                total = result.totalHT;
+              }
+
+              let unitPrice = '0';
+              if (total !== '0') {
+                const qtyNum = parseFloat(quantity);
+                const totalNum = parseFloat(total);
+                if (!isNaN(qtyNum) && !isNaN(totalNum) && qtyNum > 0) {
+                  unitPrice = (totalNum / qtyNum).toFixed(2);
+                }
+              }
+
+              result.lineItems.push({
+                name,
+                quantity,
+                unit_price: unitPrice,
+                total,
+              });
+            }
+          });
+        }
+
+        // Si tous les champs importants sont encore vides, essayer une dernière approche simplifiée
+        if (
+          !result.invoiceNumber &&
+          !result.supplier &&
+          !result.amount &&
+          result.lineItems.length === 0
+        ) {
+          // Chercher des valeurs numériques qui pourraient être des totaux
+          const numberPattern = /(\d+[,.]\d+)/g;
+          const numberMatches = [...generatedText.matchAll(numberPattern)];
+
+          if (numberMatches.length > 0) {
+            // Prendre la plus grande valeur comme montant total
+            let maxValue = 0;
+            let maxValueStr = '';
+
+            numberMatches.forEach((match) => {
+              const value = parseFloat(match[1].replace(',', '.'));
+              if (!isNaN(value) && value > maxValue) {
+                maxValue = value;
+                maxValueStr = match[1].replace(',', '.');
+              }
+            });
+
+            if (maxValue > 0) {
+              result.amount = maxValueStr;
+              result.totalTTC = maxValueStr;
+              result.totalHT = (maxValue / 1.2).toFixed(2);
+              result.totalTVA = (maxValue - parseFloat(result.totalHT)).toFixed(
+                2,
+              );
+
+              // Créer un article générique
+              result.lineItems.push({
+                name: 'Article non identifié',
+                quantity: '1',
+                unit_price: result.totalHT,
+                total: result.totalHT,
+              });
+            }
+          }
+        }
       }
 
-      // Extraction du montant total
-      const amountMatch = String(predictions).match(
-        /(?:NET A PAYER|TOTAL TTC|montant|amount|total)[:\s]*(?:EUR|€|USD|\$)?\s*([0-9\s,.]+)/i,
-      );
-      if (amountMatch && amountMatch[1]) {
-        result.amount = amountMatch[1].replace(/\s+/g, '');
-        result.totalTTC = result.amount;
-      }
-
-      // Extraction de la date
-      const dateMatch = String(predictions).match(
-        /(?:date)[:\s]*([0-9]{1,2}[/.\\-][0-9]{1,2}[/.\\-][0-9]{2,4})/i,
-      );
-      if (dateMatch && dateMatch[1]) {
-        result.date = dateMatch[1];
-      }
-
-      // Extraction du fournisseur
-      const supplierMatch = String(predictions).match(
-        /(?:fournisseur|émetteur|émis par|supplier|SOLUTION LOGIQUE)[:\s]*([A-Za-z0-9\s,.&]+)(?:$|\n)/i,
-      );
-      if (supplierMatch && supplierMatch[1]) {
-        result.supplier = supplierMatch[1].trim();
-      } else if (String(predictions).includes('SOLUTION LOGIQUE')) {
-        result.supplier = 'SOLUTION LOGIQUE';
-      }
-
-      // Extraction du total HT
-      const htMatch = String(predictions).match(
-        /(?:Total Net HT|Total HT)[:\s]*([0-9\s,.]+)/i,
-      );
-      if (htMatch && htMatch[1]) {
-        result.totalHT = htMatch[1].replace(/\s+/g, '');
-      }
-
-      // Extraction du total TVA
-      const tvaMatch = String(predictions).match(
-        /(?:Total TVA)[:\s]*([0-9\s,.]+)/i,
-      );
-      if (tvaMatch && tvaMatch[1]) {
-        result.totalTVA = tvaMatch[1].replace(/\s+/g, '');
-      }
-
-      // Extraction de l'IBAN
-      const ibanMatch = String(predictions).match(/IBAN[:\s]*([A-Z0-9\s]+)/i);
-      if (ibanMatch && ibanMatch[1]) {
-        result.iban = ibanMatch[1].replace(/\s+/g, '');
-      }
-
-      // Extraction du BIC
-      const bicMatch = String(predictions).match(/BIC[:\s]*([A-Z]+)/i);
-      if (bicMatch && bicMatch[1]) {
-        result.bic = bicMatch[1];
-      }
-
-      // Extraction des lignes d'articles (regex complexe pour capturer les lignes)
-      const lineItemRegex =
-        /(\d+(?:[,.]\d+)?)\s+(.*?)\s+(\d+(?:[,.]\d+)?)\s*\|\s*(\d+(?:[,.]\d+)?)\s+(\d+(?:[,.]\d+)?)/g;
-      let match;
-      while ((match = lineItemRegex.exec(String(predictions))) !== null) {
-        result.lineItems.push({
-          quantity: match[1].replace(',', '.'),
-          name: match[2].trim(),
-          unit_price: match[3].replace(',', '.'),
-          vat_rate: match[4].replace(',', '.'),
-          total: match[5].replace(',', '.'),
-        });
-      }
+      return result;
     } catch (error) {
       this.logger.error(
         "Erreur lors de l'extraction des données structurées:",
         error,
       );
+      return result;
     }
-
-    return result;
   }
 
   /**
@@ -468,23 +645,22 @@ export class HuggingFaceService {
 
     try {
       // Avec le modèle Donut, la réponse est généralement une chaîne structurée
-      let responseText = '';
+      let generatedText = '';
 
-      // Gestion des différents formats possibles de réponse
       if (typeof data === 'string') {
-        responseText = data;
+        generatedText = data;
       } else if (data && data.answer) {
-        responseText = data.answer;
+        generatedText = data.answer;
       } else if (data && data.generated_text) {
-        responseText = data.generated_text;
+        generatedText = data.generated_text;
       } else {
-        responseText = JSON.stringify(data);
+        generatedText = JSON.stringify(data);
       }
 
-      this.logger.debug('Réponse brute du modèle Donut:', responseText);
+      this.logger.debug('Réponse brute du modèle Donut:', generatedText);
 
       // Extraction des informations structurées depuis la réponse textuelle
-      const extractedData = this.extractStructuredData(responseText);
+      const extractedData = this.extractStructuredData(generatedText);
 
       // Adapter au format attendu par le reste de l'application
       return {
