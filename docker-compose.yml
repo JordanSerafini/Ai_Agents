@@ -35,6 +35,30 @@ services:
     networks:
       - app-network
 
+  # huggingface_inference:
+  #   image: ghcr.io/huggingface/text-generation-inference:latest
+  #   container_name: huggingface_inference
+  #   ports:
+  #     - "8080:80"
+  #   volumes:
+  #     - huggingface_cache:/data
+  #   environment:
+  #     - MODEL_ID=mychen76/invoice-and-receipts_donut_v1
+  #     - USE_FLASH_ATTENTION=true
+  #     - MAX_BATCH_SIZE=32
+  #     - MAX_INPUT_LENGTH=4096
+  #     - MAX_TOTAL_TOKENS=8192
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+
   renforcement_agent:
     build:
       context: ./Backend/renforcement_agent
@@ -47,7 +71,7 @@ services:
     env_file:
       - .env
     environment:
-      - HUGGIN_FACE_TOKEN=${HUGGING_FACE_TOKEN}
+      - HUGGING_FACE_TOKEN=${HUGGING_FACE_TOKEN}
       - CHROMA_URL=http://ChromaDB:8000
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -167,5 +191,6 @@ networks:
 volumes:
   chroma_data:
   postgres_data:
+  huggingface_cache:
 
       

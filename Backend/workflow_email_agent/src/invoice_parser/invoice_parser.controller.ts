@@ -6,6 +6,7 @@ import {
   Logger,
   UploadedFile,
   UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InvoiceParserService } from './invoice_parser.service';
@@ -38,31 +39,6 @@ interface ProcessedInvoice {
   supplier: string | null;
   amount: string | null;
   date: string | null;
-}
-
-// Interface pour l'analyse détaillée des factures
-interface DetailedInvoiceAnalysis {
-  supplier: string;
-  supplierAddress: string;
-  supplierZipCode: string;
-  supplierCity: string;
-  lineItems: Array<{
-    name: string;
-    quantity: number;
-    price: number;
-    total?: number;
-    description?: string;
-  }>;
-  totalHT: number;
-  totalTVA?: number;
-  totalTTC: number;
-  paymentInfo: {
-    iban?: string;
-    bic?: string;
-    paymentMethod?: string;
-    dueDate?: string;
-  };
-  confidence: number;
 }
 
 @Controller('invoice-parser')
@@ -539,105 +515,136 @@ export class InvoiceParserController {
   }
 
   @Post('analyze-with-ai')
-  async analyzeWithMistralAI() {
-    this.logger.log('Analyse des factures avec Mistral AI');
+  @UseInterceptors(FileInterceptor('file'))
+  async analyzeWithCombinedApproach(
+    @UploadedFile() file,
+    @Param('includePdf') includePdf: boolean = false,
+  ) {
+    this.logger.log(
+      'Analyse de facture avec approche combinée (OCR + Donut + Mistral)',
+    );
+
+    if (!file) {
+      return {
+        success: false,
+        message: 'Aucun fichier fourni',
+        data: null,
+      };
+    }
 
     try {
-      // Vérifier si le dossier toAnalyse existe
-      if (!fs.existsSync(this.toAnalysePath)) {
-        return {
-          success: false,
-          message: "Le dossier persistence/toAnalyse n'existe pas",
-          processed: 0,
-          failed: 0,
-          details: [],
-        };
-      }
+      // Récupérer le buffer du fichier
+      const pdfBuffer = file.buffer;
 
-      // Lire tous les fichiers texte du dossier
-      const files = await fs.promises.readdir(this.toAnalysePath);
-      const textFiles = files.filter((file) => file.endsWith('_combined.txt'));
-
-      if (textFiles.length === 0) {
-        return {
-          success: false,
-          message: 'Aucun fichier texte trouvé dans le dossier',
-          processed: 0,
-          failed: 0,
-          details: [],
-        };
-      }
-
-      this.logger.log(`${textFiles.length} fichiers texte trouvés à analyser`);
-
-      let processed = 0;
-      let failed = 0;
-      const detailedAnalysis: DetailedInvoiceAnalysis[] = [];
-
-      // Traiter chaque fichier texte
-      for (const textFile of textFiles) {
-        try {
-          const filePath = path.join(this.toAnalysePath, textFile);
-          const combinedText = await fs.promises.readFile(filePath, 'utf8');
-
-          // Extraction des données par Hugging Face (80% de pertinence)
-          const huggingFaceData =
-            await this.invoiceParserService.extractHuggingFaceData(
-              combinedText,
-            );
-
-          // Extraction des données par OCR (20% de pertinence)
-          const ocrData =
-            await this.invoiceParserService.extractTesseractData(combinedText);
-
-          // Analyse détaillée avec Mistral AI
-          const aiAnalysis =
-            await this.invoiceParserService.analyzeCombinedDataWithMistral(
-              huggingFaceData,
-              ocrData,
-              combinedText,
-            );
-
-          // Nom du fichier sans le suffixe _combined.txt
-          const invoiceNumber = textFile.replace('_combined.txt', '');
-
-          // Ajout de l'analyse détaillée
-          detailedAnalysis.push(aiAnalysis);
-
-          // Sauvegarder les résultats d'analyse dans un fichier JSON
-          await fs.promises.writeFile(
-            path.join(
-              this.toAnalysePath,
-              `${invoiceNumber}_detailed_analysis.json`,
-            ),
-            JSON.stringify(aiAnalysis, null, 2),
-          );
-
-          processed++;
-          this.logger.log(`Analyse détaillée réussie pour ${textFile}`);
-        } catch (error) {
-          this.logger.error(`Erreur lors de l'analyse de ${textFile}:`, error);
-          failed++;
-        }
-      }
+      // Utiliser la nouvelle méthode d'analyse combinée
+      const result = await this.invoiceParserService.analyzeInvoiceFile(
+        pdfBuffer,
+        includePdf,
+      );
 
       return {
-        success: true,
-        message: `Analyse terminée: ${processed} factures analysées, ${failed} échecs`,
-        processed,
-        failed,
-        details: detailedAnalysis,
+        success: result.success,
+        message: result.success
+          ? 'Analyse réussie'
+          : 'Analyse partielle (certaines données manquantes)',
+        data: {
+          supplier: result.result.supplier,
+          address: {
+            full: result.result.supplierAddress,
+            zipCode: result.result.supplierZipCode,
+            city: result.result.supplierCity,
+          },
+          lineItems: result.result.lineItems,
+          totals: {
+            ht: result.result.totalHT,
+            tva: result.result.totalTVA,
+            ttc: result.result.totalTTC,
+          },
+          paymentInfo: result.result.paymentInfo,
+          confidence: result.result.confidence,
+        },
       };
     } catch (error) {
-      this.logger.error("Erreur lors de l'analyse des factures:", error);
+      this.logger.error(
+        "Erreur lors de l'analyse avancée de la facture:",
+        error,
+      );
       return {
         success: false,
         message: `Erreur: ${error.message}`,
-        processed: 0,
-        failed: 0,
-        details: [],
+        data: null,
       };
     }
+  }
+
+  @Post('analyze-file')
+  async analyzeSpecificFile(
+    @Param('filePath') filePath: string,
+    @Param('includePdf') includePdf: boolean = false,
+  ) {
+    this.logger.log(`Analyse du fichier spécifique: ${filePath}`);
+
+    try {
+      // Vérifier si le fichier existe
+      if (!fs.existsSync(filePath)) {
+        return {
+          success: false,
+          message: `Le fichier ${filePath} n'existe pas`,
+          data: null,
+        };
+      }
+
+      // Lire le fichier PDF
+      const pdfBuffer = await fs.promises.readFile(filePath);
+
+      // Utiliser la méthode d'analyse combinée
+      const result = await this.invoiceParserService.analyzeInvoiceFile(
+        pdfBuffer,
+        includePdf,
+      );
+
+      return {
+        success: result.success,
+        message: result.success
+          ? 'Analyse réussie'
+          : 'Analyse partielle (certaines données manquantes)',
+        data: {
+          supplier: result.result.supplier,
+          address: {
+            full: result.result.supplierAddress,
+            zipCode: result.result.supplierZipCode,
+            city: result.result.supplierCity,
+          },
+          lineItems: result.result.lineItems,
+          totals: {
+            ht: result.result.totalHT,
+            tva: result.result.totalTVA,
+            ttc: result.result.totalTTC,
+          },
+          paymentInfo: result.result.paymentInfo,
+          confidence: result.result.confidence,
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'analyse du fichier ${filePath}:`,
+        error,
+      );
+      return {
+        success: false,
+        message: `Erreur: ${error.message}`,
+        data: null,
+      };
+    }
+  }
+
+  @Post('parse-with-donut')
+  @UseInterceptors(FileInterceptor('file'))
+  async parseInvoiceWithDonut(@UploadedFile() file) {
+    if (!file) {
+      throw new BadRequestException("Fichier d'invoice manquant");
+    }
+    return this.invoiceParserService.parseInvoiceWithDonut(file.buffer);
   }
 
   private async processPdfWithTesseract(pdfBuffer: Buffer): Promise<string> {
@@ -764,5 +771,308 @@ export class InvoiceParserController {
       .replace(/[\\:*?"<>|]/g, '_')
       .replace(/\s+/g, '_')
       .substring(0, 50); // Limiter la longueur
+  }
+
+  /**
+   * Endpoint pour analyser les factures avec OCR et LayoutLM et les stocker dans toAnalyse
+   */
+  @Post('analyze-combined-step1')
+  async analyzeInvoicesStep1() {
+    this.logger.log(
+      'Étape 1: Analyse des factures avec OCR et LayoutLM (impira/layoutlm-invoices)',
+    );
+
+    try {
+      // Vérifier si le dossier Factures existe
+      if (!fs.existsSync(this.persistencePath)) {
+        return {
+          success: false,
+          message: "Le dossier persistence/Factures n'existe pas",
+          processed: 0,
+          failed: 0,
+        };
+      }
+
+      // Créer le dossier toAnalyse s'il n'existe pas
+      if (!fs.existsSync(this.toAnalysePath)) {
+        await fs.promises.mkdir(this.toAnalysePath, { recursive: true });
+      }
+
+      // Lire tous les fichiers PDF du dossier Factures
+      const files = await fs.promises.readdir(this.persistencePath);
+      const pdfFiles = files.filter((file) =>
+        file.toLowerCase().endsWith('.pdf'),
+      );
+
+      if (pdfFiles.length === 0) {
+        return {
+          success: false,
+          message: 'Aucun fichier PDF trouvé dans le dossier Factures',
+          processed: 0,
+          failed: 0,
+        };
+      }
+
+      this.logger.log(`${pdfFiles.length} fichiers PDF trouvés dans Factures`);
+
+      let processedCount = 0;
+      let failedCount = 0;
+      const processedInvoices: {
+        invoiceNumber: string;
+        originalFile: string;
+        folderPath: string;
+      }[] = [];
+
+      // Traiter chaque fichier PDF
+      for (const pdfFile of pdfFiles) {
+        try {
+          const filePath = path.join(this.persistencePath, pdfFile);
+          const pdfBuffer = await fs.promises.readFile(filePath);
+
+          // Générer un numéro de facture basé sur le compteur
+          const invoiceNumber = `facture_${processedCount + 1}`;
+
+          // Créer un sous-dossier dans toAnalyse pour cette facture
+          const invoiceFolderPath = path.join(
+            this.toAnalysePath,
+            invoiceNumber,
+          );
+          if (!fs.existsSync(invoiceFolderPath)) {
+            await fs.promises.mkdir(invoiceFolderPath, { recursive: true });
+          }
+
+          // 1. Analyser avec Tesseract OCR
+          const ocrText = await this.processPdfWithTesseract(pdfBuffer);
+          await fs.promises.writeFile(
+            path.join(invoiceFolderPath, `${invoiceNumber}_ocr.txt`),
+            ocrText,
+          );
+
+          // 2. Analyser avec LayoutLM via HuggingFace
+          const layoutLMResult =
+            await this.invoiceParserService.analyzeWithDonutModel(pdfBuffer);
+          await fs.promises.writeFile(
+            path.join(invoiceFolderPath, `${invoiceNumber}_layoutlm.json`),
+            JSON.stringify(layoutLMResult, null, 2),
+          );
+
+          // 3. Extraire le numéro de facture, la date et le fournisseur si possible
+          const extractedInvoiceNo = layoutLMResult?.header?.invoice_no || null;
+          const extractedDate = layoutLMResult?.header?.invoice_date || null;
+          const extractedSupplier = layoutLMResult?.header?.seller || null;
+          const extractedTotal =
+            layoutLMResult?.summary?.total_gross_worth || null;
+
+          // 4. Combiner les résultats
+          const combinedData = {
+            ocr: ocrText,
+            layoutlm: layoutLMResult,
+            extracted: {
+              invoiceNumber: extractedInvoiceNo,
+              date: extractedDate,
+              supplier: extractedSupplier,
+              total: extractedTotal,
+            },
+            filename: pdfFile,
+          };
+
+          await fs.promises.writeFile(
+            path.join(invoiceFolderPath, `${invoiceNumber}_combined.json`),
+            JSON.stringify(combinedData, null, 2),
+          );
+
+          // 5. Copier le PDF original
+          await fs.promises.copyFile(
+            filePath,
+            path.join(invoiceFolderPath, `${invoiceNumber}.pdf`),
+          );
+
+          processedInvoices.push({
+            invoiceNumber: extractedInvoiceNo || invoiceNumber,
+            originalFile: pdfFile,
+            folderPath: invoiceFolderPath,
+          });
+
+          processedCount++;
+          this.logger.log(
+            `Analyse initiale réussie pour ${pdfFile} -> ${invoiceNumber}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Erreur lors de l'analyse initiale de ${pdfFile}:`,
+            error,
+          );
+          failedCount++;
+        }
+      }
+
+      return {
+        success: true,
+        message: `Étape 1 terminée: ${processedCount} factures analysées, ${failedCount} échecs`,
+        processed: processedCount,
+        failed: failedCount,
+        invoices: processedInvoices,
+      };
+    } catch (error) {
+      this.logger.error("Erreur lors de l'étape 1:", error);
+      return {
+        success: false,
+        message: `Erreur: ${error.message}`,
+        processed: 0,
+        failed: 0,
+      };
+    }
+  }
+
+  /**
+   * Endpoint pour l'analyse finale avec Mistral et génération du CSV
+   */
+  @Post('analyze-combined-step2')
+  async analyzeInvoicesStep2() {
+    this.logger.log('Étape 2: Analyse finale avec Mistral et génération CSV');
+
+    try {
+      // Vérifier si le dossier toAnalyse existe
+      if (!fs.existsSync(this.toAnalysePath)) {
+        return {
+          success: false,
+          message: "Le dossier toAnalyse n'existe pas",
+          processed: 0,
+          failed: 0,
+          csvPath: null,
+        };
+      }
+
+      // Lister tous les sous-dossiers (factures) dans toAnalyse
+      const invoiceFolders = await fs.promises.readdir(this.toAnalysePath, {
+        withFileTypes: true,
+      });
+      const folders = invoiceFolders
+        .filter((dirent) => dirent.isDirectory())
+        .map((dirent) => dirent.name);
+
+      if (folders.length === 0) {
+        return {
+          success: false,
+          message: 'Aucun dossier de facture trouvé dans toAnalyse',
+          processed: 0,
+          failed: 0,
+          csvPath: null,
+        };
+      }
+
+      this.logger.log(
+        `${folders.length} dossiers de factures trouvés dans toAnalyse`,
+      );
+
+      let processedCount = 0;
+      let failedCount = 0;
+      const finalResults: {
+        invoiceNumber: string;
+        originalFile: string;
+        supplier: string;
+        totalHT: number;
+        totalTVA: number;
+        totalTTC: number;
+        date: string;
+        confidence: number;
+        lineItemsCount: number;
+      }[] = [];
+
+      // Traiter chaque dossier de facture
+      for (const folder of folders) {
+        try {
+          const folderPath = path.join(this.toAnalysePath, folder);
+
+          // Rechercher les fichiers dans le dossier
+          const files = await fs.promises.readdir(folderPath);
+          const pdfFile = files.find((f) => f.endsWith('.pdf'));
+          const combinedFile = files.find((f) => f.endsWith('_combined.json'));
+
+          if (!pdfFile || !combinedFile) {
+            this.logger.warn(`Dossier ${folder} incomplet, fichiers manquants`);
+            failedCount++;
+            continue;
+          }
+
+          // Charger les données combinées
+          const combinedData = JSON.parse(
+            await fs.promises.readFile(
+              path.join(folderPath, combinedFile),
+              'utf8',
+            ),
+          );
+
+          // Charger le PDF
+          const pdfBuffer = await fs.promises.readFile(
+            path.join(folderPath, pdfFile),
+          );
+
+          // Analyser avec Mistral
+          const mistralResult =
+            await this.invoiceParserService.analyzeInvoiceFile(
+              pdfBuffer,
+              true, // Inclure le PDF dans l'analyse
+            );
+
+          // Sauvegarder le résultat final
+          await fs.promises.writeFile(
+            path.join(folderPath, `${folder}_final.json`),
+            JSON.stringify(mistralResult, null, 2),
+          );
+
+          // Ajouter les résultats pour le CSV
+          finalResults.push({
+            invoiceNumber: folder,
+            originalFile: combinedData.filename || 'inconnu',
+            supplier: mistralResult.result.supplier || 'Non trouvé',
+            totalHT: mistralResult.result.totalHT || 0,
+            totalTVA: mistralResult.result.totalTVA || 0,
+            totalTTC: mistralResult.result.totalTTC || 0,
+            date: mistralResult.result.paymentInfo?.dueDate || 'non trouvé',
+            confidence: mistralResult.result.confidence || 0,
+            lineItemsCount: mistralResult.result.lineItems?.length || 0,
+          });
+
+          processedCount++;
+          this.logger.log(`Analyse finale réussie pour ${folder}`);
+        } catch (error) {
+          this.logger.error(
+            `Erreur lors de l'analyse finale de ${folder}:`,
+            error,
+          );
+          failedCount++;
+        }
+      }
+
+      // Générer le CSV
+      const csvPath = path.join(this.toAnalysePath, 'resultats_factures.csv');
+      let csvContent =
+        'Numéro de facture;Fichier original;Fournisseur;Total HT;Total TVA;Total TTC;Date;Confiance;Nombre de lignes\n';
+
+      for (const result of finalResults) {
+        csvContent += `${result.invoiceNumber};${result.originalFile};${result.supplier};${result.totalHT};${result.totalTVA};${result.totalTTC};${result.date};${result.confidence};${result.lineItemsCount}\n`;
+      }
+
+      await fs.promises.writeFile(csvPath, csvContent);
+
+      return {
+        success: true,
+        message: `Étape 2 terminée: ${processedCount} factures analysées, ${failedCount} échecs`,
+        processed: processedCount,
+        failed: failedCount,
+        csvPath,
+        results: finalResults,
+      };
+    } catch (error) {
+      this.logger.error("Erreur lors de l'étape 2:", error);
+      return {
+        success: false,
+        message: `Erreur: ${error.message}`,
+        processed: 0,
+        failed: 0,
+        csvPath: null,
+      };
+    }
   }
 }
