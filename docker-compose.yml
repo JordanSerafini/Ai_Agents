@@ -11,7 +11,7 @@ services:
     env_file:
       - .env
     environment:
-      - HUGGIN_FACE_TOKEN=${HUGGIN_FACE_TOKEN}
+      - HUGGING_FACE_TOKEN=${HUGGING_FACE_TOKEN}
       - CHROMA_URL=http://ChromaDB:8000
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -47,7 +47,7 @@ services:
     env_file:
       - .env
     environment:
-      - HUGGIN_FACE_TOKEN=${HUGGIN_FACE_TOKEN}
+      - HUGGIN_FACE_TOKEN=${HUGGING_FACE_TOKEN}
       - CHROMA_URL=http://ChromaDB:8000
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}

@@ -552,30 +552,63 @@ export class InvoiceParserService {
     };
 
     try {
-      // Extraction du numéro de facture
-      const invoiceRegex =
-        /(?:facture|invoice|n°|no|number|ref)[:\s]*([A-Za-z0-9-_]{3,})/i;
-      const invoiceMatch = text.match(invoiceRegex);
-      if (invoiceMatch && invoiceMatch[1]) {
-        result.invoiceNumber = invoiceMatch[1].trim();
+      // Extraction du numéro de facture - patterns améliorés
+      const invoicePatterns = [
+        /(?:facture|invoice|n°|no|number|ref|reference|FC)[:\s#]*([A-Za-z0-9][\w.-]{2,})/i,
+        /(?:facture|invoice)[:\s#]*(?:n°|no|numéro|number)?[:\s#]*([A-Za-z0-9][\w.-]{2,})/i,
+        /\b(FC\d{3,})\b/i,
+      ];
+
+      for (const pattern of invoicePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          result.invoiceNumber = match[1].trim();
+          break;
+        }
       }
 
-      // Extraction du montant
-      const amountMatch = text.match(this.extractionPatterns.amount);
-      if (amountMatch && amountMatch[1]) {
-        result.amount = amountMatch[1].trim().replace(/\s+/g, '');
+      // Extraction du montant - patterns améliorés
+      const amountPatterns = [
+        /(?:total\s+ttc|net\s+à\s+payer|montant\s+total|total\s+amount)[:\s]*(?:EUR|€|USD|\$)?\s*([0-9\s,.]+)(?:\s*(?:EUR|€|USD|\$))?/i,
+        /(?:montant|amount|total)[:\s]*(?:EUR|€|USD|\$)?\s*([0-9\s,.]+)(?:\s*(?:EUR|€|USD|\$))?/i,
+        /([0-9]+[,.][0-9]{2})\s*(?:EUR|€|USD|\$)/i,
+      ];
+
+      for (const pattern of amountPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          result.amount = match[1].trim().replace(/\s+/g, '');
+          break;
+        }
       }
 
-      // Extraction de la date
-      const dateMatch = text.match(this.extractionPatterns.date);
-      if (dateMatch && dateMatch[1]) {
-        result.date = dateMatch[1].trim();
+      // Extraction de la date - patterns améliorés
+      const datePatterns = [
+        /(?:date)[:\s]*([0-9]{1,2}[/.\\-][0-9]{1,2}[/.\\-][0-9]{2,4})/i,
+        /(?:date\s+d'émission|date\s+facture|invoice\s+date|émise\s+le)[:\s]*([0-9]{1,2}[/.\\-][0-9]{1,2}[/.\\-][0-9]{2,4})/i,
+        /\b([0-9]{1,2}[/.\\-][0-9]{1,2}[/.\\-](?:20)?[0-9]{2})\b/i,
+      ];
+
+      for (const pattern of datePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          result.date = match[1].trim();
+          break;
+        }
       }
 
-      // Extraction du fournisseur
-      const supplierMatch = text.match(this.extractionPatterns.supplier);
-      if (supplierMatch && supplierMatch[1]) {
-        result.supplier = supplierMatch[1].trim();
+      // Extraction du fournisseur - patterns améliorés
+      const supplierPatterns = [
+        /(?:fournisseur|émetteur|émis par|supplier|vendor)[:\s]*([A-Za-z0-9\s,.&]{3,}?)(?:$|\n)/i,
+        /^([A-Z][A-Za-z0-9\s,.&]{2,}?)\n/i,
+      ];
+
+      for (const pattern of supplierPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          result.supplier = match[1].trim();
+          break;
+        }
       }
 
       return result;
