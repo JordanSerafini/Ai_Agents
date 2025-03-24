@@ -116,21 +116,21 @@ services:
   #   networks:
   #     - app-network
 
-  electron:
-    build:
-      context: ./Frontend/ai_assistant
-      dockerfile: Dockerfile
-    container_name: frontend
-    ports:
-      - 5173:5173
-    volumes:
-      - ./Frontend/ai_assistant/src:/app/src
-    env_file:
-      - .env
-    environment:
-      - VITE_API_URL=http://localhost:3001
-    networks:
-      - app-network
+  # electron:
+  #   build:
+  #     context: ./Frontend/ai_assistant
+  #     dockerfile: Dockerfile
+  #   container_name: frontend
+  #   ports:
+  #     - 5173:5173
+  #   volumes:
+  #     - ./Frontend/ai_assistant/src:/app/src
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - VITE_API_URL=http://localhost:3001
+  #   networks:
+  #     - app-network
       
       
 

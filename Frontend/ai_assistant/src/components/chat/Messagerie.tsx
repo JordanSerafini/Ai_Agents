@@ -1,11 +1,22 @@
-import Message from "./Message"
+import { useEffect, useState } from "react";
+import Input from "./Input";
+import Message from "./Message";
 
 function Messagerie() {
+  const [response, setResponse] = useState("");
+
+  useEffect(() => {
+    console.log("Nouvelle réponse:", response);
+  }, ["api", response]);
+
   return (
     <div className="bg-gray-200 w-9.5/10 h-9.5/10 rounded-lg shadow-md flex flex-col items-center justify-start p-2">
-      <Message />
+      <div className="w-full h-9.5/10 overflow-y-auto">
+      < Message />
+      </div>
+      <Input onResponse={setResponse} />
     </div>
-  )
+  );
 }
 
-export default Messagerie
+export default Messagerie;
