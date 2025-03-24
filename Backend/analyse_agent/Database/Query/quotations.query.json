@@ -679,7 +679,7 @@
         "Contrats validés sans facture correspondante",
         "Quels sont les devis validés par le client mais sans facture ?"
       ],
-      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'accepté' AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.quotation_id = q.id) ORDER BY q.issue_date DESC",
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'accepté' AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.project_id = p.id) ORDER BY q.issue_date DESC",
       "description": "Liste des devis acceptés qui n'ont pas encore de facture associée"
     },
     {
