@@ -29,7 +29,7 @@ export class ResponseAgentController {
     @Body('question') question: string,
   ): Promise<FormattedResponse> {
     try {
-      // Obtenir le résultat de l'analyse
+      // Analyser la question
       const analysisResult =
         await this.analyseAgentService.analyzeQuestion(question);
 
@@ -44,7 +44,7 @@ export class ResponseAgentController {
         analysisResult.data = queryResult.rows;
       }
 
-      // Formater la réponse
+      // Formater la réponse avec le ResponseAgentService
       const formattedResponse = await this.responseAgentService.formatResponse(
         question,
         analysisResult,
@@ -53,8 +53,8 @@ export class ResponseAgentController {
       return formattedResponse;
     } catch (error) {
       throw new HttpException(
-        error.message || 'Erreur lors du traitement de la question',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        'Erreur lors du traitement de la question',
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

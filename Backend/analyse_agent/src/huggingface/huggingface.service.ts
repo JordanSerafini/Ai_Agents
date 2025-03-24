@@ -23,6 +23,7 @@ export interface AnalysisResult {
   fields?: string[];
   operations?: string[];
   finalQuery?: string;
+  data?: any[];  // Ajout du champ data pour stocker les résultats de la requête
   // Champs spécifiques pour workflow
   action?: string;
   entities?: string[];

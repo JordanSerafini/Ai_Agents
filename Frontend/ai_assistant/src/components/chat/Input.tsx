@@ -2,7 +2,7 @@ import { useState } from "react";
 import { chatbot } from "../../utils/functions/chatbot/chatbot.function";
 
 interface InputProps {
-    onResponse: (response: string) => void;
+    onResponse: (response: any) => void;
 }
 
 function Input({ onResponse }: InputProps) {
@@ -16,7 +16,7 @@ function Input({ onResponse }: InputProps) {
         try {
             const data = await chatbot.analyze(question);
             console.log("Réponse reçue:", data);
-            onResponse(data.response);
+            onResponse(data);
         } catch (error) {
             console.error("Erreur lors de l'appel API:", error);
             setError("Erreur lors de l'envoi de la question");

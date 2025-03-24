@@ -24,6 +24,12 @@ export class AnalyseQuestionDto {
   question: string;
 }
 
+interface FormattedResponse {
+  data: any;
+  type: 'list' | 'detail';
+  humanResponse: string;
+}
+
 interface AnalyseQuestionResponse {
   source: string;
   result: AnalysisResult;
@@ -88,95 +94,112 @@ export class HuggingFaceController implements OnModuleInit {
   }
 
   @Post('question')
-  @UsePipes(new ValidationPipe({ transform: true }))
+  @UsePipes(new ValidationPipe())
   async analyseQuestion(
     @Body() body: AnalyseQuestionDto,
-  ): Promise<AnalyseQuestionResponse> {
-    const { question } = body;
-    const sanitizedQuestion = this.sanitizeInput(question);
-
-    // Vérification avancée
-    if (sanitizedQuestion.length > 500) {
-      this.logger.warn(
-        `❌ Question trop longue: "${sanitizedQuestion.substring(0, 50)}..."`,
-      );
-      throw new HttpException(
-        'La question est trop longue. Limite: 500 caractères.',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    if (/[^a-zA-Z0-9éèêëàâäôöùûüç?!.,\s-]/.test(sanitizedQuestion)) {
-      this.logger.warn(
-        `❌ Caractères non autorisés détectés: "${sanitizedQuestion}"`,
-      );
-      throw new HttpException(
-        'Caractères spéciaux non autorisés dans la question.',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    this.logger.log(`📢 Analyse de la question: "${sanitizedQuestion}"`);
-
+  ): Promise<FormattedResponse> {
     try {
       // Vérifier d'abord les requêtes prédéfinies
-      const predefinedQueryResult =
-        await this.checkPredefinedQueries(sanitizedQuestion);
-      if (predefinedQueryResult) return predefinedQueryResult;
-
-      // Analyser la question avec Hugging Face
-      const result =
-        await this.huggingFaceService.analyseQuestion(sanitizedQuestion);
-
-      // Vérifier avec la question reformulée
-      if (
-        result.questionReformulated &&
-        result.questionReformulated !== sanitizedQuestion
-      ) {
-        const reformulatedResult = await this.checkReformulatedQuestion(
-          sanitizedQuestion,
-          result.questionReformulated,
-        );
-        if (reformulatedResult) return reformulatedResult;
+      const predefinedResult = await this.checkPredefinedQueries(body.question);
+      if (predefinedResult) {
+        return this.formatResponse(predefinedResult);
       }
-
-      // Vérifier dans le cache SQL
-      const cachedSqlResult = await this.checkSqlCache(sanitizedQuestion);
-      if (cachedSqlResult) return cachedSqlResult;
 
       // Vérifier les questions similaires
-      const similarQuestionResult =
-        await this.checkSimilarQuestions(sanitizedQuestion);
-      if (similarQuestionResult) return similarQuestionResult;
-
-      // Si aucune réponse n'a été trouvée, procéder à l'analyse complète
-      return await this.processAndValidateAnalysis(sanitizedQuestion);
-    } catch (error) {
-      if (error instanceof QueryExecutionError) {
-        throw new HttpException(
-          {
-            source: 'query_execution',
-            error: error.message,
-          },
-          HttpStatus.BAD_REQUEST,
-        );
+      const similarResult = await this.checkSimilarQuestions(body.question);
+      if (similarResult) {
+        return this.formatResponse(similarResult);
       }
-      return this.handleError(error, 'analyse_question');
+
+      // Si aucune correspondance n'est trouvée, traiter avec le modèle
+      const result = await this.processAndValidateAnalysis(body.question);
+      return this.formatResponse(result);
+    } catch (error) {
+      this.logger.error("Erreur lors de l'analyse de la question:", error);
+      throw new HttpException(
+        "Erreur lors de l'analyse de la question",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
-  /**
-   * Sécurise les entrées utilisateur contre les injections
-   * @param input Entrée utilisateur à nettoyer
-   * @returns Entrée nettoyée
-   */
-  private sanitizeInput(input: string): string {
-    if (!input) return '';
+  private formatResponse(result: any): FormattedResponse {
+    const responseType = this.determineResponseType(result.data);
+    let humanResponse = '';
 
-    return input
-      .replace(/['"<>;]/g, '') // Évite les attaques XSS et SQL Injection
-      .replace(/\s{2,}/g, ' ') // Supprime les espaces excessifs
-      .trim(); // Supprime les espaces au début et à la fin
+    if (result.source === 'predefined_query' || result.source === 'model') {
+      if (result.result.agent === 'querybuilder') {
+        humanResponse = this.formatStaffScheduleResponse(result.data);
+      } else {
+        humanResponse = this.formatGeneralResponse(result);
+      }
+    }
+
+    return {
+      data: result,
+      type: responseType,
+      humanResponse: humanResponse,
+    };
+  }
+
+  private determineResponseType(data: any): 'list' | 'detail' {
+    if (Array.isArray(data)) {
+      if (data.length === 1) return 'detail';
+      return 'list';
+    }
+    return 'detail';
+  }
+
+  private formatStaffScheduleResponse(data: any): string {
+    if (!data || !Array.isArray(data)) return 'Aucune donnée disponible';
+
+    const groupedPeople = data.reduce((acc: any, person: any) => {
+      const key = `${person.firstname}-${person.lastname}`;
+      if (!acc[key]) {
+        acc[key] = {
+          ...person,
+          schedules: [],
+        };
+      }
+      acc[key].schedules.push(person.schedule);
+      return acc;
+    }, {});
+
+    let response = 'Voici le planning du personnel pour le mois en cours :\n\n';
+
+    Object.values(groupedPeople).forEach((person: any) => {
+      response += `${person.firstname} ${person.lastname} (${person.role}) :\n`;
+      response += `- Heures programmées : ${person.hours_scheduled}h\n`;
+
+      person.schedules.forEach((schedule: any) => {
+        if (schedule.special_instructions) {
+          response += `- Note : ${schedule.special_instructions}\n`;
+        }
+      });
+      response += '\n';
+    });
+
+    return response;
+  }
+
+  private formatGeneralResponse(result: any): string {
+    if (!result.data) return 'Aucune donnée disponible';
+
+    let response = '';
+    if (result.result.questionReformulated) {
+      response += `Question : ${result.result.questionReformulated}\n\n`;
+    }
+
+    if (Array.isArray(result.data)) {
+      response += `Nombre de résultats : ${result.data.length}\n\n`;
+      result.data.forEach((item: any, index: number) => {
+        response += `${index + 1}. ${JSON.stringify(item)}\n`;
+      });
+    } else {
+      response += JSON.stringify(result.data);
+    }
+
+    return response;
   }
 
   private async checkPredefinedQueries(

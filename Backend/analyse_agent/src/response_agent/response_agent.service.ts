@@ -102,12 +102,13 @@ export class ResponseAgentService implements OnModuleInit {
     data: any,
     type: 'list' | 'detail',
   ): Promise<string> {
-    const prompt = `Tu es un assistant qui aide à formater les réponses de manière naturelle et claire.
-Question posée : "${question}"
-Type de réponse : ${type}
-Données à formater : ${JSON.stringify(data)}
+    const prompt = `En tant qu'assistant, formate la réponse suivante de manière naturelle et claire en français.
 
-Formate une réponse en français qui résume ces informations de manière claire et concise.`;
+Question : "${question}"
+Type de réponse : ${type}
+Données : ${JSON.stringify(data)}
+
+Réponse formatée :`;
 
     try {
       const response = await this.hf.textGeneration({
@@ -117,10 +118,16 @@ Formate une réponse en français qui résume ces informations de manière clair
           max_new_tokens: 500,
           temperature: 0.4,
           top_p: 0.95,
+          stop: [
+            'Question :',
+            'Type de réponse :',
+            'Données :',
+            'Réponse formatée :',
+          ],
         },
       });
 
-      return response.generated_text;
+      return response.generated_text.trim();
     } catch (error) {
       this.logger.error(
         'Erreur lors de la génération de la réponse avec Mistral:',
@@ -135,14 +142,10 @@ Formate une réponse en français qui résume ces informations de manière clair
     analysisResult: AnalysisResult,
   ): Promise<FormattedResponse> {
     try {
-      const responseType = this.determineResponseType(
-        analysisResult.finalQuery,
-      );
-
-      // Générer une réponse humaine avec Mistral
+      const responseType = this.determineResponseType(analysisResult.data);
       const humanResponse = await this.generateHumanResponse(
         question,
-        analysisResult,
+        analysisResult.data || analysisResult,
         responseType,
       );
 
