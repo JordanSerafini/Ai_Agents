@@ -59,62 +59,80 @@ services:
   #   networks:
   #     - app-network
 
-  renforcement_agent:
+  # renforcement_agent:
+  #   build:
+  #     context: ./Backend/renforcement_agent
+  #     dockerfile: Dockerfile
+  #   container_name: renforcement_agent
+  #   ports:
+  #     - "${RENFORCEMENT_AGENT_PORT}:3002"
+  #   volumes:
+  #     - ./Backend/renforcement_agent/persistence:/app/data/persistence
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - HUGGING_FACE_TOKEN=${HUGGING_FACE_TOKEN}
+  #     - CHROMA_URL=http://ChromaDB:8000
+  #     - POSTGRES_USER=${POSTGRES_USER}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  #     - POSTGRES_DB=${POSTGRES_DB}
+  #     - POSTGRES_HOST=postgres
+  #     - POSTGRES_PORT=${POSTGRES_PORT}
+  #   command: >
+  #     sh -c "npm install && npm run start:dev"
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   depends_on:
+  #     - ChromaDB
+  #   networks:
+  #     - app-network
+
+  # workflow_email_agent:
+  #   build:
+  #     context: ./Backend/workflow_email_agent
+  #     dockerfile: Dockerfile
+  #   container_name: workflow_email_agent
+  #   ports:
+  #     - "${WORKFLOW_EMAIL_AGENT_PORT}:3011"
+  #   volumes:
+  #     - ./Backend/workflow_email_agent/persistence:/app/data/persistence
+  #     - ./Backend/workflow_email_agent/persistence/extractPdf:/app/extractPdf
+  #   env_file:
+  #     - .env
+  #   command: >
+  #     sh -c "npm install && npm run start:dev"
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   networks:
+  #     - app-network
+
+  electron:
     build:
-      context: ./Backend/renforcement_agent
+      context: ./Frontend/ai_assistant
       dockerfile: Dockerfile
-    container_name: renforcement_agent
+    container_name: frontend
     ports:
-      - "${RENFORCEMENT_AGENT_PORT}:3002"
+      - 5173:5173
     volumes:
-      - ./Backend/renforcement_agent/persistence:/app/data/persistence
+      - ./Frontend/ai_assistant/src:/app/src
     env_file:
       - .env
     environment:
-      - HUGGING_FACE_TOKEN=${HUGGING_FACE_TOKEN}
-      - CHROMA_URL=http://ChromaDB:8000
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=${POSTGRES_PORT}
-    command: >
-      sh -c "npm install && npm run start:dev"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    depends_on:
-      - ChromaDB
+      - VITE_API_URL=http://localhost:3001
     networks:
       - app-network
-
-  workflow_email_agent:
-    build:
-      context: ./Backend/workflow_email_agent
-      dockerfile: Dockerfile
-    container_name: workflow_email_agent
-    ports:
-      - "${WORKFLOW_EMAIL_AGENT_PORT}:3011"
-    volumes:
-      - ./Backend/workflow_email_agent/persistence:/app/data/persistence
-      - ./Backend/workflow_email_agent/persistence/extractPdf:/app/extractPdf
-    env_file:
-      - .env
-    command: >
-      sh -c "npm install && npm run start:dev"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    networks:
-      - app-network
+      
+      
 
   postgres:
     container_name: postgres

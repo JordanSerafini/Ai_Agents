@@ -9,7 +9,6 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { InvoiceParserService } from './invoice_parser.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as tesseract from 'node-tesseract-ocr';
