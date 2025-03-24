@@ -48,67 +48,19 @@ export class ResponseAgentService implements OnModuleInit {
     return 'detail';
   }
 
-  private formatStaffScheduleResponse(data: any): string {
-    if (!data || !Array.isArray(data)) return 'Aucune donnée disponible';
-
-    // Regrouper les personnes par nom
-    const groupedPeople = data.reduce((acc: any, person: any) => {
-      const key = `${person.firstname}-${person.lastname}`;
-      if (!acc[key]) {
-        acc[key] = {
-          ...person,
-          schedules: [],
-        };
-      }
-      acc[key].schedules.push(person.schedule);
-      return acc;
-    }, {});
-
-    let response = 'Voici le planning du personnel pour le mois en cours :\n\n';
-
-    Object.values(groupedPeople).forEach((person: any) => {
-      response += `${person.firstname} ${person.lastname} (${person.role}) :\n`;
-      response += `- Heures programmées : ${person.hours_scheduled}h\n`;
-
-      person.schedules.forEach((schedule: any) => {
-        if (schedule.special_instructions) {
-          response += `- Note : ${schedule.special_instructions}\n`;
-        }
-      });
-      response += '\n';
-    });
-
-    return response;
-  }
-
-  private formatWorksiteResponse(data: any): string {
-    if (!data || !Array.isArray(data)) return 'Aucune donnée disponible';
-
-    let response = 'Voici la liste des chantiers programmés :\n\n';
-
-    data.forEach((worksite: any) => {
-      response += `Chantier : ${worksite.name}\n`;
-      response += `- Adresse : ${worksite.address}\n`;
-      response += `- Date de début : ${new Date(worksite.start_date).toLocaleDateString()}\n`;
-      response += `- Date de fin : ${new Date(worksite.end_date).toLocaleDateString()}\n`;
-      response += `- Statut : ${worksite.status}\n\n`;
-    });
-
-    return response;
-  }
-
   private async generateHumanResponse(
     question: string,
     data: any,
     type: 'list' | 'detail',
   ): Promise<string> {
-    const prompt = `En tant qu'assistant, formate la réponse suivante de manière naturelle et claire en français.
+    const prompt = `Tu es un assistant qui aide à formater les réponses de manière naturelle et claire en français.
 
+Voici les informations à formater :
 Question : "${question}"
 Type de réponse : ${type}
 Données : ${JSON.stringify(data)}
 
-Réponse formatée :`;
+IMPORTANT : Ne répète pas ces informations dans ta réponse. Commence directement par formater la réponse de manière naturelle.`;
 
     try {
       const response = await this.hf.textGeneration({
@@ -118,16 +70,23 @@ Réponse formatée :`;
           max_new_tokens: 500,
           temperature: 0.4,
           top_p: 0.95,
-          stop: [
-            'Question :',
-            'Type de réponse :',
-            'Données :',
-            'Réponse formatée :',
-          ],
+          stop: ['Question :', 'Type de réponse :', 'Données :', 'IMPORTANT :'],
         },
       });
 
-      return response.generated_text.trim();
+      // Nettoyer la réponse pour enlever tout ce qui pourrait ressembler au prompt
+      const cleanResponse = response.generated_text
+        .replace(/^Tu es un assistant.*?français\./s, '')
+        .replace(/^Voici les informations.*?naturelle\./s, '')
+        .replace(/^Question :.*?naturelle\./s, '')
+        .replace(/^Type de réponse :.*?naturelle\./s, '')
+        .replace(/^Données :.*?naturelle\./s, '')
+        .replace(/^IMPORTANT :.*?naturelle\./s, '')
+        .replace(/^Instructions :.*?naturelle\./s, '')
+        .replace(/^Réponse :.*?naturelle\./s, '')
+        .trim();
+
+      return cleanResponse;
     } catch (error) {
       this.logger.error(
         'Erreur lors de la génération de la réponse avec Mistral:',
