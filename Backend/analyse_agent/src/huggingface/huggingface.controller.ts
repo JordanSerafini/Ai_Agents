@@ -128,11 +128,8 @@ export class HuggingFaceController implements OnModuleInit {
     let humanResponse = '';
 
     if (result.source === 'predefined_query' || result.source === 'model') {
-      if (result.result.agent === 'querybuilder') {
-        humanResponse = this.formatStaffScheduleResponse(result.data);
-      } else {
-        humanResponse = this.formatGeneralResponse(result);
-      }
+      // Utiliser le format général par défaut
+      humanResponse = this.formatGeneralResponse(result);
     }
 
     return {
@@ -172,8 +169,8 @@ export class HuggingFaceController implements OnModuleInit {
       response += `- Heures programmées : ${person.hours_scheduled}h\n`;
 
       person.schedules.forEach((schedule: any) => {
-        if (schedule.special_instructions) {
-          response += `- Note : ${schedule.special_instructions}\n`;
+        if (schedule.notes) {
+          response += `- Note : ${schedule.notes}\n`;
         }
       });
       response += '\n';
