@@ -1,7 +1,7 @@
-import { mistralService, MistralResponse } from './mistral.service';
+import { mistralService } from './mistral.service';
 
 export const mistralController = {
-  async generateText(prompt: string): Promise<MistralResponse> {
+  async generateText(prompt: string): Promise<string> {
     return await mistralService.generateText(prompt);
   },
 };
