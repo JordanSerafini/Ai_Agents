@@ -1,0 +1,829 @@
+{
+  "queries": [
+    {
+      "id": "staff_schedule_next_week",
+      "questions": [
+        "Qui travaille la semaine prochaine ?",
+        "Planning des employés pour la semaine prochaine",
+        "Personnel programmé semaine pro",
+        "Équipe de travail semaine prochaine",
+        "Qui est prévu la semaine prochaine ?",
+        "Planning semaine prochaine",
+        "Qui travaille semaine pro ?",
+        "Personnel prévu semaine prochaine",
+        "Équipe semaine prochaine",
+        "Planning personnel semaine prochaine"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, wws.week_start_date, wws.total_hours, wws.schedule FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id WHERE wws.week_start_date = date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date ORDER BY s.lastname, s.firstname",
+      "description": "Planning du personnel pour la semaine prochaine avec leur nombre d'heures programmées"
+    },
+    {
+      "id": "staff_working_next_month",
+      "questions": [
+        "Qui travaille le mois prochain ?",
+        "Personnel programmé pour le mois prochain",
+        "Équipe du mois prochain",
+        "Qui va travailler le mois prochain"
+      ],
+      "sql": "SELECT DISTINCT s.firstname, s.lastname, s.role, p.name as project_name, p.start_date, p.end_date FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id WHERE (p.start_date <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' + INTERVAL '1 month - 1 day')::date) AND (p.end_date >= date_trunc('month', CURRENT_DATE + INTERVAL '1 month')::date) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel qui travaillera sur des projets actifs le mois prochain"
+    },
+    {
+      "id": "staff_schedule_by_date",
+      "questions": [
+        "Qui travaille le [DATE] ?",
+        "Personnel présent le [DATE]",
+        "Équipe du [DATE]",
+        "Employés programmés pour le [DATE]",
+        "Qui est prévu le [DATE] ?",
+        "Planning du [DATE]",
+        "Personnel le [DATE]",
+        "Qui travaille le [DATE] ?",
+        "Équipe présente le [DATE]",
+        "Planning pour le [DATE]"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'hours' AS hours_scheduled, CASE WHEN (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb ? 'project' THEN (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'project' ELSE NULL END AS project_id, p.name AS project_name, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'role' AS daily_role, (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'notes' AS notes FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id LEFT JOIN projects p ON ((wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD')))::jsonb->>'project')::uuid = p.id WHERE wws.week_start_date <= '[DATE]'::date AND wws.week_start_date + INTERVAL '6 days' >= '[DATE]'::date AND (wws.schedule->>(to_char('[DATE]'::date, 'YYYY-MM-DD'))) IS NOT NULL ORDER BY s.lastname, s.firstname",
+      "description": "Liste des employés programmés pour travailler à une date spécifique",
+      "parameters": [
+        {
+          "name": "DATE",
+          "description": "Date au format YYYY-MM-DD",
+          "default": "CURRENT_DATE"
+        }
+      ]
+    },
+    {
+      "id": "staff_schedule_for_project",
+      "questions": [
+        "Qui travaille sur le projet [PROJECT] ?",
+        "Personnel assigné au chantier [PROJECT]",
+        "Équipe du projet [PROJECT]",
+        "Employés travaillant sur [PROJECT]",
+        "Qui est sur le projet [PROJECT] ?",
+        "Équipe du chantier [PROJECT]",
+        "Personnel du projet [PROJECT]",
+        "Qui travaille sur [PROJECT] ?",
+        "Staff du projet [PROJECT]",
+        "Planning du projet [PROJECT]"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, ps.role AS project_role, ps.start_date, ps.end_date FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id WHERE LOWER(p.name) = LOWER('[PROJECT]') OR p.id::text = '[PROJECT]' ORDER BY ps.role, s.lastname, s.firstname",
+      "description": "Liste des employés assignés à un projet spécifique avec leur rôle",
+      "parameters": [
+        {
+          "name": "PROJECT",
+          "description": "Nom ou ID du projet"
+        }
+      ]
+    },
+    {
+      "id": "events_today",
+      "questions": [
+        "Quels sont les événements aujourd'hui ?",
+        "Activités du jour",
+        "Programme de la journée",
+        "Rendez-vous d'aujourd'hui",
+        "Quoi aujourd'hui ?",
+        "Planning aujourd'hui",
+        "Événements du jour",
+        "Programme aujourd'hui",
+        "Rendez-vous aujourd'hui",
+        "Activités prévues aujourd'hui"
+      ],
+      "sql": "SELECT ce.title, ce.description, ce.start_date, ce.end_date, ce.location, ret.name AS event_type, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE DATE(ce.start_date) = CURRENT_DATE ORDER BY ce.start_date",
+      "description": "Liste de tous les événements programmés pour aujourd'hui"
+    },
+    {
+      "id": "events_tomorrow",
+      "questions": [
+        "Quels sont les événements demain ?",
+        "Activités de demain",
+        "Programme pour demain",
+        "Rendez-vous prévus demain",
+        "Quoi demain ?",
+        "Planning demain",
+        "Événements de demain",
+        "Programme demain",
+        "Rendez-vous demain",
+        "Activités prévues demain"
+      ],
+      "sql": "SELECT ce.title, ce.description, ce.start_date, ce.end_date, ce.location, ret.name AS event_type, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE DATE(ce.start_date) = CURRENT_DATE + INTERVAL '1 day' ORDER BY ce.start_date",
+      "description": "Liste de tous les événements programmés pour demain"
+    },
+    {
+      "id": "events_this_week",
+      "questions": [
+        "Quels sont les événements cette semaine ?",
+        "Activités de la semaine",
+        "Programme de la semaine en cours",
+        "Rendez-vous de la semaine",
+        "Quoi cette semaine ?",
+        "Planning de la semaine",
+        "Événements de la semaine",
+        "Programme semaine",
+        "Rendez-vous semaine",
+        "Activités prévues cette semaine"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id WHERE DATE(ce.start_date) BETWEEN date_trunc('week', CURRENT_DATE)::date AND (date_trunc('week', CURRENT_DATE) + INTERVAL '6 days')::date ORDER BY ce.start_date",
+      "description": "Liste de tous les événements programmés pour la semaine en cours"
+    },
+    {
+      "id": "events_next_week",
+      "questions": [
+        "Quels sont les événements la semaine prochaine ?",
+        "Activités de la semaine prochaine",
+        "Programme de la semaine pro",
+        "Rendez-vous semaine suivante",
+        "Quoi semaine prochaine ?",
+        "Planning semaine prochaine",
+        "Événements semaine pro",
+        "Programme semaine prochaine",
+        "Rendez-vous semaine prochaine",
+        "Activités prévues semaine prochaine"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id WHERE DATE(ce.start_date) BETWEEN date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date AND (date_trunc('week', CURRENT_DATE + INTERVAL '1 week') + INTERVAL '6 days')::date ORDER BY ce.start_date",
+      "description": "Liste de tous les événements programmés pour la semaine prochaine"
+    },
+    {
+      "id": "events_this_month",
+      "questions": [
+        "Quels sont les événements ce mois-ci ?",
+        "Activités du mois",
+        "Programme du mois en cours",
+        "Rendez-vous du mois",
+        "Quoi ce mois ?",
+        "Planning du mois",
+        "Événements du mois",
+        "Programme mois",
+        "Rendez-vous mois",
+        "Activités prévues ce mois"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id WHERE EXTRACT(MONTH FROM ce.start_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM ce.start_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY ce.start_date",
+      "description": "Liste de tous les événements programmés pour le mois en cours"
+    },
+    {
+      "id": "events_by_type",
+      "questions": [
+        "Quels sont les événements de type [TYPE] ?",
+        "Activités de catégorie [TYPE]",
+        "Rendez-vous [TYPE]",
+        "Liste des [TYPE]",
+        "Quoi de type [TYPE] ?",
+        "Planning [TYPE]",
+        "Événements [TYPE]",
+        "Programme [TYPE]",
+        "Rendez-vous type [TYPE]",
+        "Activités [TYPE]"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE ret.name ILIKE '%[TYPE]%' OR ret.code ILIKE '%[TYPE]%' ORDER BY ce.start_date",
+      "description": "Liste des événements filtrés par type spécifique",
+      "parameters": [
+        {
+          "name": "TYPE",
+          "description": "Type d'événement (appel_telephonique, reunion_chantier, visite_technique, rendez_vous_client, reunion_interne)"
+        }
+      ]
+    },
+    {
+      "id": "events_by_date_range",
+      "questions": [
+        "Quels sont les événements entre [START_DATE] et [END_DATE] ?",
+        "Activités programmées du [START_DATE] au [END_DATE]",
+        "Rendez-vous dans la période [START_DATE] - [END_DATE]",
+        "Programme entre [START_DATE] et [END_DATE]",
+        "Quoi du [START_DATE] au [END_DATE] ?",
+        "Planning du [START_DATE] au [END_DATE]",
+        "Événements du [START_DATE] au [END_DATE]",
+        "Programme période [START_DATE] - [END_DATE]",
+        "Rendez-vous période [START_DATE] - [END_DATE]",
+        "Activités prévues du [START_DATE] au [END_DATE]"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id WHERE DATE(ce.start_date) BETWEEN '[START_DATE]'::date AND '[END_DATE]'::date ORDER BY ce.start_date",
+      "description": "Liste des événements programmés dans une plage de dates spécifique",
+      "parameters": [
+        {
+          "name": "START_DATE",
+          "description": "Date de début (format YYYY-MM-DD)",
+          "default": "CURRENT_DATE"
+        },
+        {
+          "name": "END_DATE",
+          "description": "Date de fin (format YYYY-MM-DD)",
+          "default": "CURRENT_DATE + INTERVAL '7 days'"
+        }
+      ]
+    },
+    {
+      "id": "events_by_project",
+      "questions": [
+        "Quels sont les événements pour le projet [PROJECT] ?",
+        "Activités liées au chantier [PROJECT]",
+        "Rendez-vous concernant [PROJECT]",
+        "Planning du projet [PROJECT]",
+        "Quoi pour [PROJECT] ?",
+        "Événements [PROJECT]",
+        "Programme [PROJECT]",
+        "Rendez-vous [PROJECT]",
+        "Planning chantier [PROJECT]",
+        "Activités projet [PROJECT]"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE p.name ILIKE '%[PROJECT]%' OR p.id::text = '[PROJECT]' ORDER BY ce.start_date",
+      "description": "Liste des événements associés à un projet spécifique",
+      "parameters": [
+        {
+          "name": "PROJECT",
+          "description": "Nom ou ID du projet"
+        }
+      ]
+    },
+    {
+      "id": "events_by_staff",
+      "questions": [
+        "Quels sont les événements pour [STAFF] ?",
+        "Activités de [STAFF]",
+        "Rendez-vous de [STAFF]",
+        "Planning de [STAFF]",
+        "Quoi pour [STAFF] ?",
+        "Événements [STAFF]",
+        "Programme [STAFF]",
+        "Rendez-vous [STAFF]",
+        "Planning personnel [STAFF]",
+        "Activités [STAFF]"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id JOIN staff s ON ce.staff_id = s.id WHERE (s.firstname || ' ' || s.lastname) ILIKE '%[STAFF]%' OR s.email ILIKE '%[STAFF]%' ORDER BY ce.start_date",
+      "description": "Liste des événements associés à un membre du personnel spécifique",
+      "parameters": [
+        {
+          "name": "STAFF",
+          "description": "Nom ou email du membre du personnel"
+        }
+      ]
+    },
+    {
+      "id": "upcoming_events",
+      "questions": [
+        "Quels sont les prochains événements ?",
+        "Prochains rendez-vous",
+        "Activités à venir",
+        "Événements futurs",
+        "Quoi à venir ?",
+        "Planning à venir",
+        "Prochains événements",
+        "Programme à venir",
+        "Rendez-vous à venir",
+        "Activités futures"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, ret.name AS event_type, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce LEFT JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE ce.start_date > CURRENT_TIMESTAMP ORDER BY ce.start_date LIMIT 10",
+      "description": "Liste des 10 prochains événements programmés"
+    },
+    {
+      "id": "busy_days",
+      "questions": [
+        "Quels sont les jours les plus chargés ?",
+        "Journées avec le plus d'événements",
+        "Jours à fort planning",
+        "Journées les plus occupées",
+        "Quels jours sont les plus chargés ?",
+        "Jours avec beaucoup d'événements",
+        "Journées chargées",
+        "Jours occupés",
+        "Planning chargé",
+        "Jours à forte activité"
+      ],
+      "sql": "SELECT DATE(ce.start_date) AS day, COUNT(*) AS event_count FROM calendar_events ce WHERE ce.start_date >= CURRENT_DATE GROUP BY DATE(ce.start_date) ORDER BY COUNT(*) DESC LIMIT 10",
+      "description": "Liste des 10 jours avec le plus grand nombre d'événements programmés"
+    },
+    {
+      "id": "site_visits_scheduled",
+      "questions": [
+        "Quelles visites de chantier sont programmées ?",
+        "Prochaines visites techniques",
+        "Planning des visites sur site",
+        "Visites de chantier à venir",
+        "Quelles visites sont prévues ?",
+        "Prochaines visites",
+        "Visites techniques",
+        "Visites de chantier",
+        "Planning visites",
+        "Visites prévues"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name FROM calendar_events ce JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id WHERE (ret.code = 'visite_technique' OR ret.code = 'reunion_chantier') AND ce.start_date > CURRENT_TIMESTAMP ORDER BY ce.start_date",
+      "description": "Liste des visites de chantier et réunions sur site programmées"
+    },
+    {
+      "id": "client_meetings_scheduled",
+      "questions": [
+        "Quels rendez-vous clients sont programmés ?",
+        "Prochaines rencontres avec clients",
+        "Planning des rendez-vous clients",
+        "Rendez-vous clients à venir",
+        "Quels rendez-vous clients ?",
+        "Prochains rendez-vous clients",
+        "Rencontres clients",
+        "Rendez-vous avec clients",
+        "Planning clients",
+        "Visites clients"
+      ],
+      "sql": "SELECT ce.title, ce.description, to_char(ce.start_date, 'Day DD/MM/YYYY HH24:MI') as start_date_formatted, ce.location, p.name AS project_name, s.firstname || ' ' || s.lastname AS staff_name, c.firstname || ' ' || c.lastname AS client_name FROM calendar_events ce JOIN ref_event_types ret ON ce.event_type = ret.id LEFT JOIN projects p ON ce.project_id = p.id LEFT JOIN staff s ON ce.staff_id = s.id LEFT JOIN clients c ON p.client_id = c.id WHERE ret.code = 'rendez_vous_client' AND ce.start_date > CURRENT_TIMESTAMP ORDER BY ce.start_date",
+      "description": "Liste des rendez-vous avec les clients programmés"
+    },
+    {
+      "id": "deadlines_this_month",
+      "questions": [
+        "Quelles sont les échéances ce mois-ci ?",
+        "Dates limites du mois",
+        "Deadlines importantes ce mois",
+        "Échéances à respecter ce mois",
+        "Quelles échéances ce mois ?",
+        "Deadlines du mois",
+        "Échéances mois",
+        "Dates limites",
+        "Fin de mois",
+        "Échéances importantes"
+      ],
+      "sql": "SELECT p.name AS project_name, s.name AS stage_name, s.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, CASE WHEN s.end_date < CURRENT_DATE THEN 'En retard' ELSE 'À venir' END AS deadline_status FROM stages s JOIN projects p ON s.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON s.status = rs.id WHERE EXTRACT(MONTH FROM s.end_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM s.end_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY s.end_date",
+      "description": "Liste des échéances d'étapes de projets pour le mois courant"
+    },
+    {
+      "id": "daily_site_reports_recent",
+      "questions": [
+        "Quels sont les derniers rapports de chantier ?",
+        "Rapports journaliers récents",
+        "Derniers comptes rendus de chantier",
+        "Rapports d'activité récents",
+        "Derniers rapports",
+        "Rapports chantier",
+        "Comptes rendus récents",
+        "Rapports journaliers",
+        "Rapports activité",
+        "Derniers comptes rendus"
+      ],
+      "sql": "SELECT dsr.id, dsr.report_date, p.name AS project_name, dsr.weather_conditions, dsr.temperature, dsr.hours_worked, dsr.work_done, s.firstname || ' ' || s.lastname AS reported_by FROM daily_site_reports dsr JOIN projects p ON dsr.project_id = p.id LEFT JOIN staff s ON dsr.staff_id = s.id ORDER BY dsr.report_date DESC LIMIT 10",
+      "description": "Liste des 10 derniers rapports journaliers de chantier"
+    },
+    {
+      "id": "quality_checkpoints_due",
+      "questions": [
+        "Quels points de contrôle qualité arrivent à échéance ?",
+        "Contrôles qualité à effectuer",
+        "Prochains points de vérification",
+        "Points de contrôle à faire",
+        "Quels contrôles qualité ?",
+        "Points de contrôle",
+        "Vérifications qualité",
+        "Contrôles à faire",
+        "Points de vérification",
+        "Contrôles qualité"
+      ],
+      "sql": "SELECT qc.name, qc.description, qc.deadline, p.name AS project_name, s.name AS stage_name, rqcs.name AS status FROM quality_checkpoints qc JOIN projects p ON qc.project_id = p.id JOIN stages s ON qc.stage_id = s.id JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id WHERE qc.deadline BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '14 days') AND rqcs.code != 'validé' ORDER BY qc.deadline",
+      "description": "Liste des points de contrôle qualité à effectuer dans les deux prochaines semaines"
+    },
+    {
+      "id": "staff_availability_month",
+      "questions": [
+        "Qui est disponible ce mois ?",
+        "Personnel disponible ce mois",
+        "Membres du staff libres ce mois",
+        "Employés non planifiés ce mois",
+        "Qui est dispo ce mois ?",
+        "Personnel libre ce mois",
+        "Staff disponible",
+        "Employés disponibles",
+        "Qui est libre ce mois ?",
+        "Personnel non planifié"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND EXTRACT(MONTH FROM te.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE)) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour le mois en cours (sans entrées dans le planning)"
+    },
+    {
+      "id": "staff_availability_week",
+      "questions": [
+        "Qui est disponible cette semaine ?",
+        "Personnel disponible cette semaine",
+        "Membres du staff libres cette semaine",
+        "Employés non planifiés pour la semaine en cours",
+        "Qui est dispo cette semaine ?",
+        "Personnel libre cette semaine",
+        "Staff disponible semaine",
+        "Employés disponibles semaine",
+        "Qui est libre cette semaine ?",
+        "Personnel non planifié semaine"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND te.date BETWEEN date_trunc('week', CURRENT_DATE)::date AND (date_trunc('week', CURRENT_DATE) + INTERVAL '6 days')::date) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour la semaine en cours (sans entrées dans le planning)"
+    },
+    {
+      "id": "staff_availability_next_week",
+      "questions": [
+        "Qui est disponible la semaine prochaine ?",
+        "Personnel disponible semaine prochaine",
+        "Membres du staff libres semaine prochaine",
+        "Employés non planifiés la semaine prochaine",
+        "Qui est dispo la semaine prochaine ?",
+        "Personnel libre semaine prochaine",
+        "Staff disponible semaine pro",
+        "Employés disponibles semaine pro",
+        "Qui est libre semaine prochaine ?",
+        "Personnel non planifié semaine pro"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND te.date BETWEEN date_trunc('week', CURRENT_DATE + INTERVAL '1 week')::date AND (date_trunc('week', CURRENT_DATE + INTERVAL '1 week') + INTERVAL '6 days')::date) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour la semaine prochaine (sans entrées dans le planning)"
+    },
+    {
+      "id": "staff_availability_tomorrow",
+      "questions": [
+        "Qui est disponible demain ?",
+        "Personnel disponible demain",
+        "Membres du staff libres demain",
+        "Employés non planifiés pour demain",
+        "Qui est dispo demain ?",
+        "Personnel libre demain",
+        "Staff disponible demain",
+        "Employés disponibles demain",
+        "Qui est libre demain ?",
+        "Personnel non planifié demain"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND te.date = CURRENT_DATE + INTERVAL '1 day') ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour demain (sans entrées dans le planning)"
+    },
+    {
+      "id": "staff_schedule_year",
+      "questions": [
+        "Qui travaille cette année ?",
+        "Planning personnel année en cours",
+        "Personnel programmé cette année",
+        "Équipe de travail année en cours",
+        "Qui est prévu cette année ?",
+        "Planning année",
+        "Qui travaille en [YEAR] ?",
+        "Personnel prévu cette année",
+        "Équipe année en cours",
+        "Planning personnel année"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(COUNT(DISTINCT te.date), 0) as days_worked, COALESCE(SUM(te.hours), 0) as total_hours FROM staff s LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE) WHERE s.is_available = true GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY s.lastname, s.firstname",
+      "description": "Planning du personnel pour l'année en cours avec le nombre de jours travaillés et le total des heures",
+      "parameters": [
+        {
+          "name": "YEAR",
+          "description": "Année au format YYYY",
+          "default": "EXTRACT(YEAR FROM CURRENT_DATE)"
+        }
+      ]
+    },
+    {
+      "id": "staff_schedule_month",
+      "questions": [
+        "Qui travaille ce mois ?",
+        "Planning personnel mois en cours",
+        "Personnel programmé ce mois",
+        "Équipe de travail mois en cours",
+        "Qui est prévu ce mois ?",
+        "Planning mois",
+        "Qui travaille en [MONTH] ?",
+        "Personnel prévu ce mois",
+        "Équipe mois en cours",
+        "Planning personnel mois"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, wws.total_hours as hours_scheduled, wws.schedule FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id WHERE s.is_available = true AND EXTRACT(MONTH FROM wws.week_start_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM wws.week_start_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY s.lastname, s.firstname",
+      "description": "Planning du personnel pour le mois en cours avec les heures programmées",
+      "parameters": [
+        {
+          "name": "MONTH",
+          "description": "Mois au format MM",
+          "default": "EXTRACT(MONTH FROM CURRENT_DATE)"
+        }
+      ]
+    },
+    {
+      "id": "annual_report",
+      "questions": [
+        "quel bilan pour cette année ?",
+        "bilan annuel",
+        "rapport annuel",
+        "statistiques de l'année",
+        "résumé de l'année",
+        "bilan de l'année",
+        "rapport de l'année",
+        "statistiques annuelles",
+        "résumé annuel",
+        "bilan de l'exercice"
+      ],
+      "sql": "WITH project_stats AS (SELECT COUNT(*) as total_projects, COUNT(CASE WHEN status = (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') THEN 1 END) as completed_projects, COUNT(CASE WHEN status = (SELECT id FROM ref_status WHERE code = 'en_cours' AND entity_type = 'project') THEN 1 END) as active_projects FROM projects WHERE EXTRACT(YEAR FROM start_date) = EXTRACT(YEAR FROM CURRENT_DATE)), staff_stats AS (SELECT COUNT(*) as total_staff, COUNT(CASE WHEN is_available = true THEN 1 END) as available_staff FROM staff), financial_stats AS (SELECT COUNT(*) as total_quotations, SUM(total_ttc) as total_quotation_amount, (SELECT COUNT(*) FROM invoices WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) as total_invoices, (SELECT SUM(total_ttc) FROM invoices WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) as total_invoice_amount FROM quotations WHERE EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)) SELECT ps.*, ss.*, fs.* FROM project_stats ps CROSS JOIN staff_stats ss CROSS JOIN financial_stats fs",
+      "description": "Bilan complet de l'année en cours avec les statistiques des projets, du personnel et des aspects financiers",
+      "parameters": []
+    },
+    {
+      "id": "staff_most_working_hours",
+      "questions": [
+        "Qui a le plus d'heures de travail ?",
+        "Personnel avec le plus d'heures travaillées",
+        "Collaborateurs les plus actifs",
+        "Employés avec horaires les plus chargés"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, SUM(te.hours) AS total_hours FROM staff s JOIN timesheet_entries te ON s.id = te.staff_id WHERE te.date >= CURRENT_DATE - INTERVAL '30 days' GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY total_hours DESC LIMIT 10",
+      "description": "Liste des 10 employés ayant cumulé le plus d'heures de travail au cours des 30 derniers jours"
+    },
+    {
+      "id": "staff_project_distribution",
+      "questions": [
+        "Comment sont distribués les employés sur les projets ?",
+        "Répartition du personnel par projet",
+        "Distribution des équipes par chantier",
+        "Affectation des ressources humaines"
+      ],
+      "sql": "SELECT p.name AS project_name, COUNT(DISTINCT ps.staff_id) AS staff_count, string_agg(s.firstname || ' ' || s.lastname, ', ') AS staff_members FROM projects p JOIN project_staff ps ON p.id = ps.project_id JOIN staff s ON ps.staff_id = s.id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' GROUP BY p.id, p.name ORDER BY staff_count DESC",
+      "description": "Répartition du personnel sur les différents projets en cours, avec le nombre d'employés et la liste des membres par projet"
+    },
+    {
+      "id": "resource_conflicts",
+      "questions": [
+        "Y a-t-il des conflits de ressources ?",
+        "Employés avec double planning",
+        "Conflits d'horaires dans les plannings",
+        "Personnel sur-programmé"
+      ],
+      "sql": "WITH daily_hours AS (SELECT s.id, s.firstname, s.lastname, te.date, SUM(te.hours) AS total_daily_hours FROM staff s JOIN timesheet_entries te ON s.id = te.staff_id GROUP BY s.id, s.firstname, s.lastname, te.date) SELECT id, firstname, lastname, date, total_daily_hours FROM daily_hours WHERE total_daily_hours > 8 ORDER BY date DESC, total_daily_hours DESC LIMIT 20",
+      "description": "Liste des employés ayant des conflits de planning avec plus de 8 heures programmées par jour"
+    },
+    {
+      "id": "equipment_planning",
+      "questions": [
+        "Quel est le planning des équipements ?",
+        "Matériel utilisé prochainement",
+        "Planning d'utilisation des machines",
+        "Calendrier d'utilisation des équipements"
+      ],
+      "sql": "SELECT e.name AS equipment_name, p.name AS project_name, set.check_out_time, set.expected_return_time, s.firstname || ' ' || s.lastname AS staff_name, rec.name AS condition_at_checkout FROM site_equipment_tracking set JOIN equipment e ON set.equipment_id = e.id JOIN projects p ON set.project_id = p.id JOIN staff s ON set.staff_id = s.id LEFT JOIN ref_equipment_condition rec ON set.condition_at_checkout = rec.id WHERE (set.check_out_time <= CURRENT_DATE + INTERVAL '14 days' AND set.expected_return_time >= CURRENT_DATE) OR (set.check_out_time >= CURRENT_DATE AND set.check_out_time <= CURRENT_DATE + INTERVAL '14 days') ORDER BY set.check_out_time",
+      "description": "Planning d'utilisation des équipements sur les chantiers pour les 14 prochains jours"
+    },
+    {
+      "id": "overdue_equipment_return",
+      "questions": [
+        "Quels équipements sont en retard de retour ?",
+        "Matériel non retourné dans les délais",
+        "Équipements avec dépassement de date",
+        "Outils en retard de retour"
+      ],
+      "sql": "SELECT e.name AS equipment_name, p.name AS project_name, set.check_out_time, set.expected_return_time, CURRENT_DATE - set.expected_return_time AS days_overdue, s.firstname || ' ' || s.lastname AS staff_name FROM site_equipment_tracking set JOIN equipment e ON set.equipment_id = e.id JOIN projects p ON set.project_id = p.id JOIN staff s ON set.staff_id = s.id WHERE set.actual_return_time IS NULL AND set.expected_return_time < CURRENT_DATE ORDER BY days_overdue DESC",
+      "description": "Liste des équipements qui n'ont pas été retournés à la date prévue, classés par nombre de jours de retard"
+    },
+    {
+      "id": "peak_workload_days",
+      "questions": [
+        "Quels jours ont la charge de travail la plus élevée ?",
+        "Journées avec pic d'activité",
+        "Jours avec surcharge de travail",
+        "Périodes à forte charge"
+      ],
+      "sql": "WITH daily_workload AS (SELECT te.date, COUNT(DISTINCT te.staff_id) AS staff_count, SUM(te.hours) AS total_hours FROM timesheet_entries te WHERE te.date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' GROUP BY te.date) SELECT date, staff_count, total_hours, ROUND(total_hours / staff_count, 2) AS avg_hours_per_staff FROM daily_workload ORDER BY total_hours DESC LIMIT 10",
+      "description": "Les 10 jours avec la charge de travail la plus élevée dans les 30 prochains jours, basée sur le nombre total d'heures planifiées"
+    },
+    {
+      "id": "staff_role_analysis",
+      "questions": [
+        "Comment sont répartis les rôles dans l'équipe ?",
+        "Distribution des fonctions dans le personnel",
+        "Analyse des rôles de l'équipe",
+        "Répartition par fonction"
+      ],
+      "sql": "WITH role_stats AS (SELECT s.role, COUNT(*) AS staff_count FROM staff s GROUP BY s.role), project_role_usage AS (SELECT ps.role AS project_role, COUNT(DISTINCT ps.staff_id) AS staff_assigned FROM project_staff ps JOIN projects p ON ps.project_id = p.id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' GROUP BY ps.role) SELECT rs.role, rs.staff_count, COALESCE(pru.staff_assigned, 0) AS currently_assigned, ROUND((COALESCE(pru.staff_assigned, 0)::numeric / rs.staff_count) * 100, 2) AS utilization_percentage FROM role_stats rs LEFT JOIN project_role_usage pru ON rs.role = pru.project_role ORDER BY utilization_percentage DESC",
+      "description": "Analyse de la répartition des rôles dans l'équipe avec le taux d'utilisation actuel sur les projets en cours"
+    },
+    {
+      "id": "location_based_scheduling",
+      "questions": [
+        "Comment sont organisés les chantiers par zone géographique ?",
+        "Répartition géographique des projets",
+        "Planning par localisation",
+        "Organisation territoriale des chantiers"
+      ],
+      "sql": "SELECT a.city, COUNT(*) AS project_count, string_agg(p.name, ', ') AS projects, COUNT(DISTINCT ps.staff_id) AS total_staff FROM projects p JOIN addresses a ON p.address_id = a.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_staff ps ON p.id = ps.project_id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' GROUP BY a.city ORDER BY project_count DESC, total_staff DESC",
+      "description": "Organisation des chantiers par localité avec le nombre de projets et de personnel dans chaque zone"
+    },
+    {
+      "id": "material_delivery_schedule",
+      "questions": [
+        "Quel est le calendrier des livraisons de matériaux ?",
+        "Planning des arrivées de matériaux",
+        "Calendrier des livraisons",
+        "Échéancier des livraisons de fournitures"
+      ],
+      "sql": "SELECT p.name AS project_name, pm.material_name, pm.quantity, pm.unit, pm.delivery_date, s.name AS supplier_name, rs.name AS status FROM project_materials pm JOIN projects p ON pm.project_id = p.id LEFT JOIN suppliers s ON pm.supplier_id = s.id LEFT JOIN ref_status rs ON pm.status = rs.id WHERE pm.delivery_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' ORDER BY pm.delivery_date",
+      "description": "Calendrier des livraisons de matériaux prévues pour les 30 prochains jours"
+    },
+    {
+      "id": "material_requests_pending",
+      "questions": [
+        "Quelles sont les demandes de matériaux en attente ?",
+        "Matériaux demandés non livrés",
+        "Demandes de fournitures en cours",
+        "Requêtes de matériaux pendantes"
+      ],
+      "sql": "SELECT mr.id, p.name AS project_name, mr.request_date, mr.needed_by_date, s.firstname || ' ' || s.lastname AS requested_by, rmrs.name AS status, COUNT(mri.id) AS item_count FROM material_requests mr JOIN projects p ON mr.project_id = p.id JOIN staff s ON mr.requested_by = s.id JOIN ref_material_request_status rmrs ON mr.status = rmrs.id LEFT JOIN material_request_items mri ON mr.id = mri.request_id WHERE rmrs.code IN ('pending', 'approved') GROUP BY mr.id, p.name, mr.request_date, mr.needed_by_date, s.firstname, s.lastname, rmrs.name ORDER BY mr.needed_by_date",
+      "description": "Liste des demandes de matériaux en attente ou approuvées mais non encore livrées"
+    },
+    {
+      "id": "staff_productivity_analysis",
+      "questions": [
+        "Quelle est la productivité du personnel ?",
+        "Efficacité des employés",
+        "Analyse de productivité individuelle",
+        "Performance du personnel"
+      ],
+      "sql": "WITH staff_project_completion AS (SELECT s.id, s.firstname, s.lastname, s.role, p.id AS project_id, p.name AS project_name, COALESCE(AVG(stg.completion_percentage), 0) AS avg_project_completion, SUM(te.hours) AS total_hours FROM staff s JOIN project_staff ps ON s.id = ps.staff_id JOIN projects p ON ps.project_id = p.id LEFT JOIN stages stg ON p.id = stg.project_id AND ps.role = stg.name LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND p.id = te.project_id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' AND ps.start_date <= CURRENT_DATE GROUP BY s.id, s.firstname, s.lastname, s.role, p.id, p.name), productivity_metrics AS (SELECT id, firstname, lastname, role, COUNT(DISTINCT project_id) AS project_count, ROUND(AVG(avg_project_completion), 2) AS avg_project_completion, SUM(total_hours) AS total_hours, CASE WHEN SUM(total_hours) > 0 THEN ROUND(AVG(avg_project_completion) / SUM(total_hours) * 100, 2) ELSE 0 END AS productivity_score FROM staff_project_completion GROUP BY id, firstname, lastname, role) SELECT * FROM productivity_metrics ORDER BY productivity_score DESC",
+      "description": "Analyse de la productivité du personnel basée sur l'avancement des projets par rapport aux heures travaillées"
+    },
+    {
+      "id": "invoice_payment_prediction",
+      "questions": [
+        "Quand les factures seront-elles probablement payées ?",
+        "Prévision des paiements clients",
+        "Dates estimées de paiement des factures",
+        "Calendrier prévisionnel des encaissements"
+      ],
+      "sql": "WITH client_payment_history AS (SELECT c.id AS client_id, c.firstname || ' ' || c.lastname AS client_name, i.reference, i.issue_date, i.due_date, COALESCE(MIN(p.payment_date), CURRENT_DATE + (i.due_date - i.issue_date) + INTERVAL '10 days') AS payment_date, (COALESCE(MIN(p.payment_date), CURRENT_DATE + (i.due_date - i.issue_date) + INTERVAL '10 days') - i.due_date) AS payment_delay FROM clients c JOIN projects pj ON c.id = pj.client_id JOIN invoices i ON pj.id = i.project_id LEFT JOIN payments p ON i.id = p.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE rs.code != 'annulée' AND rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname, i.reference, i.issue_date, i.due_date), avg_delay_by_client AS (SELECT client_id, client_name, AVG(payment_delay) AS avg_payment_delay FROM client_payment_history GROUP BY client_id, client_name), current_invoices AS (SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ttc, c.id AS client_id, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE rs.code IN ('envoyée', 'en_retard') AND rs.entity_type = 'invoice') SELECT ci.reference, ci.issue_date, ci.due_date, ci.total_ttc, ci.client_name, ci.status, ci.due_date + COALESCE(adc.avg_payment_delay, INTERVAL '0 days') AS estimated_payment_date, CURRENT_DATE - (ci.due_date + COALESCE(adc.avg_payment_delay, INTERVAL '0 days')) AS days_until_payment FROM current_invoices ci LEFT JOIN avg_delay_by_client adc ON ci.client_id = adc.client_id ORDER BY estimated_payment_date",
+      "description": "Prévision des dates de paiement des factures en cours basée sur l'historique des délais de paiement des clients"
+    },
+    {
+      "id": "staff_most_worked_current_month",
+      "questions": [
+        "Qui a le plus travaillé ce mois ?",
+        "Personnel avec le plus d'heures ce mois-ci",
+        "Employés ayant fait le plus d'heures ce mois",
+        "Classement du personnel par heures travaillées ce mois",
+        "Top des employés les plus actifs du mois"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(SUM(te.hours), 0) AS total_hours_worked FROM staff s LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND EXTRACT(MONTH FROM te.date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM te.date) = EXTRACT(YEAR FROM CURRENT_DATE) WHERE s.is_available = true GROUP BY s.id, s.firstname, s.lastname, s.role ORDER BY total_hours_worked DESC LIMIT 10",
+      "description": "Top 10 des employés ayant accumulé le plus d'heures de travail effectif durant le mois en cours"
+    },
+    {
+      "id": "staff_availability_next_month",
+      "questions": [
+        "Qui est disponible le mois prochain ?",
+        "Personnel disponible mois prochain",
+        "Membres du staff libres mois prochain",
+        "Employés non planifiés le mois prochain",
+        "Qui est dispo le mois prochain ?",
+        "Personnel libre mois prochain",
+        "Staff disponible mois prochain",
+        "Employés disponibles mois prochain",
+        "Qui est libre mois prochain ?",
+        "Personnel non planifié mois prochain"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, s.email, s.phone FROM staff s WHERE s.is_available = true AND NOT EXISTS (SELECT 1 FROM project_staff ps JOIN projects p ON ps.project_id = p.id WHERE ps.staff_id = s.id AND (p.start_date <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' + INTERVAL '1 month - 1 day')::date) AND (p.end_date >= date_trunc('month', CURRENT_DATE + INTERVAL '1 month')::date)) ORDER BY s.lastname, s.firstname",
+      "description": "Liste du personnel disponible pour le mois prochain (sans affectation à des projets pour cette période)"
+    },
+    {
+      "id": "missing_timesheets",
+      "questions": [
+        "Qui n'a pas pointé aujourd'hui ?",
+        "Employés sans pointage",
+        "Qui est absent aujourd'hui ?",
+        "Personnel sans pointage du jour",
+        "Quels employés n'ont pas de pointage ?",
+        "Qui n'a pas enregistré ses heures aujourd'hui ?",
+        "Liste des employés sans feuille de temps aujourd'hui",
+        "Absences de pointage",
+        "Manque de pointage aujourd'hui",
+        "Membres du personnel sans heures enregistrées"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role FROM staff s WHERE NOT EXISTS (SELECT 1 FROM timesheet_entries te WHERE te.staff_id = s.id AND te.date = CURRENT_DATE) ORDER BY s.lastname, s.firstname",
+      "description": "Liste des employés qui n'ont pas de pointage aujourd'hui"
+    },
+    {
+      "id": "daily_workload",
+      "questions": [
+        "Quelle est la charge de travail cette semaine ?",
+        "Quels jours sont les plus chargés ?",
+        "Nombre d'heures travaillées chaque jour",
+        "Répartition des heures par jour cette semaine",
+        "Charge de travail quotidienne",
+        "Heures totales par jour de la semaine",
+        "Volume de travail journalier",
+        "Combien d'heures ont été travaillées chaque jour ?",
+        "Charge de travail journalière cette semaine",
+        "Distribution des heures par jour"
+      ],
+      "sql": "SELECT te.date, SUM(te.hours) AS total_hours FROM timesheet_entries te WHERE te.date BETWEEN date_trunc('week', CURRENT_DATE) AND date_trunc('week', CURRENT_DATE) + INTERVAL '6 days' GROUP BY te.date ORDER BY te.date",
+      "description": "Nombre total d'heures de travail enregistrées pour chaque jour de la semaine en cours"
+    },
+    {
+      "id": "planned_leaves",
+      "questions": [
+        "Qui est en congé aujourd'hui ?",
+        "Quels sont les congés en cours ?",
+        "Planning des absences",
+        "Employés actuellement en congé",
+        "Absences planifiées aujourd'hui",
+        "Personnel en congés",
+        "Qui est absent en ce moment ?",
+        "Congés en cours aujourd'hui",
+        "Liste des personnes en pause",
+        "Absences du jour"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, l.leave_type, l.start_date, l.end_date FROM staff s JOIN leaves l ON s.id = l.staff_id WHERE l.start_date <= CURRENT_DATE AND l.end_date >= CURRENT_DATE ORDER BY l.start_date",
+      "description": "Liste des employés ayant un congé ou une pause planifiée"
+    },
+    {
+      "id": "work_hours_per_project",
+      "questions": [
+        "Combien d'heures ont été travaillées par projet ?",
+        "Répartition des heures de travail par chantier",
+        "Quel projet a nécessité le plus d'heures ?",
+        "Heures travaillées par projet cette semaine",
+        "Ventilation des heures par chantier",
+        "Projets les plus chronophages",
+        "Temps passé sur chaque projet",
+        "Distribution horaire par projet",
+        "Quels projets ont mobilisé le plus de temps ?",
+        "Répartition du temps par chantier"
+      ],
+      "sql": "SELECT p.name AS project_name, SUM(te.hours) AS total_hours FROM timesheet_entries te JOIN projects p ON te.project_id = p.id WHERE te.date BETWEEN date_trunc('week', CURRENT_DATE) AND date_trunc('week', CURRENT_DATE) + INTERVAL '6 days' GROUP BY p.name ORDER BY total_hours DESC",
+      "description": "Nombre d'heures travaillées par projet cette semaine"
+    },
+    {
+      "id": "staff_hours_planned_vs_worked",
+      "questions": [
+        "Les employés respectent-ils leur planning ?",
+        "Heures prévues vs heures travaillées",
+        "Qui a fait plus/moins d'heures que prévu ?",
+        "Comparaison entre planning et réalité",
+        "Écart entre horaires prévus et réalisés",
+        "Respect des plannings par le personnel",
+        "Différence entre heures planifiées et effectuées",
+        "Analyse du respect des plannings",
+        "Conformité au planning de travail",
+        "Suivi des heures prévues vs travaillées"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, COALESCE(SUM(te.hours), 0) AS total_hours_worked, COALESCE(SUM((wws.schedule->>to_char(te.date, 'YYYY-MM-DD'))::jsonb->>'hours')::int, 0) AS total_hours_scheduled, COALESCE(SUM(te.hours), 0) - COALESCE(SUM((wws.schedule->>to_char(te.date, 'YYYY-MM-DD'))::jsonb->>'hours')::int, 0) AS deviation FROM staff s LEFT JOIN worker_weekly_schedule wws ON s.id = wws.staff_id LEFT JOIN timesheet_entries te ON s.id = te.staff_id AND te.date BETWEEN wws.week_start_date AND wws.week_start_date + INTERVAL '6 days' GROUP BY s.firstname, s.lastname, s.role ORDER BY deviation DESC",
+      "description": "Comparaison entre les heures planifiées et les heures réellement travaillées par employé"
+    },
+    {
+      "id": "staff_under_over_loaded",
+      "questions": [
+        "Quels employés travaillent trop ou pas assez ?",
+        "Qui est en sous-charge ?",
+        "Qui est en surcharge ?",
+        "Personnel en surcharge de travail",
+        "Employés sous-chargés",
+        "Charge de travail anormale par employé",
+        "Déséquilibre dans les charges de travail",
+        "Repérer les employés en sous-utilisation", 
+        "Identifier les employés surchargés",
+        "Détecter les problèmes de charge de travail"
+      ],
+      "sql": "WITH staff_hours AS (SELECT s.id, s.firstname, s.lastname, s.role, SUM(te.hours) AS total_hours_worked FROM staff s JOIN timesheet_entries te ON s.id = te.staff_id WHERE te.date BETWEEN CURRENT_DATE - INTERVAL '30 days' AND CURRENT_DATE GROUP BY s.id, s.firstname, s.lastname, s.role) SELECT sh.*, CASE WHEN total_hours_worked > 160 THEN 'Surcharge' WHEN total_hours_worked < 100 THEN 'Sous-charge' ELSE 'Normal' END AS workload_status FROM staff_hours sh ORDER BY total_hours_worked DESC",
+      "description": "Détection des employés travaillant trop (surcharge) ou trop peu (sous-charge) sur les 30 derniers jours"
+    },
+    {
+      "id": "project_roles_distribution",
+      "questions": [
+        "Comment sont répartis les rôles par projet ?",
+        "Quelle est la distribution des métiers par chantier ?",
+        "Quels projets ont besoin de plus de ressources ?",
+        "Répartition des postes par chantier",
+        "Distribution des compétences par projet",
+        "Quels rôles sont assignés à chaque chantier ?",
+        "Analyse des fonctions par projet",
+        "Cartographie des rôles par projet",
+        "Structure des équipes par projet", 
+        "Composition des équipes projets par fonction"
+      ],
+      "sql": "SELECT p.name AS project_name, ps.role, COUNT(ps.staff_id) AS total_assigned FROM projects p JOIN project_staff ps ON p.id = ps.project_id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' GROUP BY p.name, ps.role ORDER BY p.name, total_assigned DESC",
+      "description": "Analyse de la répartition des rôles sur les projets actifs et nombre d'employés par rôle"
+    },
+    {
+      "id": "staff_unavailable_upcoming",
+      "questions": [
+        "Quels employés seront absents prochainement ?",
+        "Qui a des congés planifiés ?",
+        "Quelles indisponibilités sont à prévoir ?",
+        "Prochaines absences du personnel",
+        "Calendrier des congés à venir",
+        "Planning des indisponibilités futures",
+        "Employés bientôt en congé",
+        "Absences programmées à venir",
+        "Qui sera absent dans les semaines à venir ?",
+        "Futures indisponibilités des équipes"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, l.leave_type, l.start_date, l.end_date FROM staff s JOIN leaves l ON s.id = l.staff_id WHERE l.start_date >= CURRENT_DATE ORDER BY l.start_date",
+      "description": "Liste des employés ayant des absences planifiées dans le futur"
+    },
+    {
+      "id": "staff_schedule_tomorrow",
+      "questions": [
+        "Qui travaille demain ?",
+        "Personnel présent demain",
+        "Équipe de demain",
+        "Employés programmés pour demain",
+        "Qui est prévu demain ?",
+        "Planning pour demain",
+        "Personnel demain",
+        "Qui travaille demain ?",
+        "Équipe présente demain",
+        "Planning de demain"
+      ],
+      "sql": "SELECT s.firstname, s.lastname, s.role, (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'hours' AS hours_scheduled, CASE WHEN (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb ? 'project' THEN (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'project' ELSE NULL END AS project_id, p.name AS project_name, (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'role' AS daily_role, (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'notes' AS notes FROM staff s JOIN worker_weekly_schedule wws ON s.id = wws.staff_id LEFT JOIN projects p ON ((wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD')))::jsonb->>'project')::uuid = p.id WHERE wws.week_start_date <= CURRENT_DATE + INTERVAL '1 day' AND wws.week_start_date + INTERVAL '6 days' >= CURRENT_DATE + INTERVAL '1 day' AND (wws.schedule->>(to_char(CURRENT_DATE + INTERVAL '1 day', 'YYYY-MM-DD'))) IS NOT NULL ORDER BY s.lastname, s.firstname",
+      "description": "Liste des employés programmés pour travailler demain"
+    }
+  ]
+}

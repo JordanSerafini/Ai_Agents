@@ -1,0 +1,1137 @@
+{
+  "queries": [
+    {
+      "id": "projects_tomorrow",
+      "questions": [
+        "Quels chantiers demain ?",
+        "Quels sont les projets qui débutent demain ?",
+        "Liste des chantiers qui commencent demain",
+        "Projets prévus pour demain",
+        "Quels sont les chantiers planifiés pour demain ?",
+        "Quels travaux commencent demain ?",
+        "Y a-t-il des projets qui débutent demain ?",
+        "Peux-tu me donner la liste des chantiers de demain ?",
+        "Quels sont les nouveaux projets qui commencent demain ?",
+        "Quels chantiers débuteront demain matin ?",
+        "Quels sont les travaux prévus pour demain ?",
+        "Quels sont les nouveaux chantiers programmés pour demain ?",
+        "Quels sont les projets prévus pour démarrer demain ?",
+        "Quel sont les chantiers prevu demain ?",
+        "Quels projet debute demain ?",
+        "Liste des chantiets qui commence demain",
+        "Projets prevu pour demain ?",
+        "Y'a t-il des travaux qui démarre demain ?",
+        "Peut tu me donner la listes des chantiers de demain ?",
+        "Quel sont les nouveaux projet qui commence demain ?",
+        "Est-ce qu'il a des chantier demain ?",
+        "Quels son les chantier programmer pour demain ?",
+        "Quels sont les travaux prevus pour le lendemin ?",
+        "Kell sont les chantier prevu dmoin ?",
+        "Quell projet debute dem1 ?",
+        "Lisste des chantié ki comence dm1",
+        "Proje prévi pour dem1 ?",
+        "Ya t'il des travo ki démar dem1 ?",
+        "Peu tu me donn la lisste des chantiers de dm1 ?",
+        "Kel son les nouvo proje ki comence demin ?",
+        "Estc quil a des chantier dm1 ?",
+        "Qels son les chantier programé pr demin ?",
+        "Koi comme traveau prevu pour dmin ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, a.street_number || ' ' || a.street_name || ', ' || a.zip_code || ' ' || a.city AS address FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN addresses a ON p.address_id = a.id WHERE p.start_date = CURRENT_DATE + INTERVAL '1 day' ORDER BY p.name",
+      "description": "Liste des projets qui débutent demain avec informations client et adresse"
+    },
+    {
+      "id": "projects_this_year",
+      "questions": [
+        "Quels sont les chantiers prévus cette année ?",
+        "Projets planifiés pour cette année",
+        "Chantiers programmés cette année",
+        "Liste des projets de l'année en cours",
+        "Quels travaux sont prévus cette année ?",
+        "Chantiers de l'année actuelle",
+        "Projets de l'année",
+        "Chantiers pour l'année en cours",
+        "Quels sont les projets pour cette année ?",
+        "Quels chantiers sont programmés pour cette année ?",
+        "Travaux de l'année courante",
+        "Projets de cette année",
+        "Tous les chantiers de l'année",
+        "Quels sont les projets prévus pour l'année en cours ?",
+        "Chantiers planifiés pour l'année actuelle",
+        "Quel sont les chantiers prevu cette année ?",
+        "Quel sont les projet prevu cette année ??",
+        "Liste des chantier de cette anné",
+        "Projets plannifié cette anné",
+        "Chantiés de l'anné"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, a.city FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN addresses a ON p.address_id = a.id WHERE EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY p.start_date",
+      "description": "Liste de tous les projets dont la date de début est dans l'année en cours"
+    },
+    {
+      "id": "projects_in_progress",
+      "questions": [
+        "Quels sont les projets en cours ?",
+        "Liste des chantiers actifs",
+        "Chantiers actuellement en cours",
+        "Projets en cours de réalisation",
+        "Quels sont les chantiers en cours ?",
+        "Quels projets sont en cours d'exécution ?",
+        "Quels chantiers sont actuellement actifs ?",
+        "Quels travaux sont en train de se faire ?",
+        "Quels sont les projets en cours de réalisation ?",
+        "Peux-tu me donner la liste des chantiers en activité ?",
+        "Quels sont les travaux en cours sur les chantiers ?",
+        "Quels sont les projets qui ne sont pas encore terminés ?",
+        "Quels sont les chantiers en activité en ce moment ?",
+        "Quels chantiers sont en train d'être réalisés ?",
+        "Quels sont les chantiers non terminés ?",
+        "Peux-tu me dire quels sont les travaux en cours ?",
+        "Quels chantiers sont ouverts en ce moment ?",
+        "Quels projets sont en exécution actuellement ?",
+        "Quels chantiers sont en phase de construction ?",
+        "Peux-tu lister les projets en cours d'exécution ?",
+        "Quels sont les chantiers qui ont démarré mais ne sont pas finis ?",
+        "Quels travaux sont en train de progresser ?",
+        "Quels sont les projets qui avancent en ce moment ?",
+        "Quels chantiers ont commencé mais ne sont pas achevés ?",
+        "Quels sont les chantiers en cours ?",
+        "Quels projets sont en cours d'exécution ?",
+        "Quels chantiers sont actuellement actifs ?",
+        "Quels travaux sont en train de se faire ?",
+        "Quels sont les projets en cours de réalisation ?",
+        "Peux-tu me donner la liste des chantiers en activité ?",
+        "Quels sont les travaux en cours sur les chantiers ?",
+        "Kes son les projets en coure ?",
+        "Quel chantier sont toujour en cour ?",
+        "Liste des chantier active ?",
+        "Chanthiers en cor de realissation ?",
+        "Quel projet sont pa encor fini ?",
+        "Koi kom chantier en aktivité ?",
+        "Peu tu me donner la liste des travaux en cor ?",
+        "Les projé ki son tjr entrin de se fer ?",
+        "Ques sont les chantier ke n son pa terminé ?",
+        "Lé projé ki avans en se moment ?",
+        "Quel sont les chantier en cour ?"
+    
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, a.city FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN addresses a ON p.address_id = a.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' ORDER BY p.start_date DESC",
+      "description": "Liste des projets actuellement en cours avec informations client et statut"
+    },
+    {
+      "id": "projects_by_client",
+      "questions": [
+        "Quels sont les projets du client [CLIENT] ?",
+        "Projets pour le client [CLIENT]",
+        "Liste des chantiers de [CLIENT]",
+        "Chantiers associés au client [CLIENT]",
+        "Quels sont les chantiers du client [CLIENT] ?",
+        "Quels projets appartiennent à [CLIENT] ?",
+        "Quels sont les travaux réalisés pour [CLIENT] ?",
+        "Quels sont les chantiers en cours pour [CLIENT] ?",
+        "Peux-tu me lister les projets du client [CLIENT] ?",
+        "Quels chantiers sont associés à [CLIENT] ?",
+        "Quels sont les projets confiés à [CLIENT] ?",
+        "Quels travaux sont attribués à [CLIENT] ?",
+        "Quels sont les chantiers terminés pour [CLIENT] ?",
+        "Quels projets sont en attente pour [CLIENT] ?",
+        "Peux-tu afficher les projets liés à [CLIENT] ?",
+        "Quels chantiers sont en planification pour [CLIENT] ?",
+        "Quels sont les projets en retard pour [CLIENT] ?",
+        "Quels chantiers ont déjà été réalisés pour [CLIENT] ?",
+        "Quels sont les travaux en préparation pour [CLIENT] ?",
+        "Quels projets sont en pause chez [CLIENT] ?",
+        "Quels chantiers sont en exécution pour [CLIENT] ?",
+        "Quels projets sont en discussion avec [CLIENT] ?",
+        "Quels sont les travaux prévus pour [CLIENT] ?",
+        "Quels sont les nouveaux projets pour [CLIENT] ?",
+        "Quel sont les chantier pour [CLIENT] ?",
+        "Quel sont les projets pour [CLIENT] ?",
+        "Quel sont les travaux pour [CLIENT] ?",
+        "Kes son les chantier du cliens [CLIENT] ?",
+        "Quel projet apartien a [CLIENT] ?",
+        "Quel son les traveau pour [CLIENT] ?",
+        "Qels chantier en cor pr [CLIENT] ?",
+        "Peu tu listé les projet du clien [CLIENT] ?",
+        "Quel son les chantie lié a [CLIENT] ?",
+        "Quel chantier on été confier a [CLIENT] ?",
+        "Koi comme travo prevu pour [CLIENT] ?",
+        "Liste des chantie dumande par [CLIENT] ?",
+        "Quel projé son en cours de realisasion pour [CLIENT] ?"
+        
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE (c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' ORDER BY p.start_date DESC",
+      "description": "Liste des projets associés à un client spécifique",
+      "parameters": [
+        {
+          "name": "CLIENT",
+          "description": "Nom ou email du client recherché"
+        }
+      ]
+    },
+    {
+      "id": "projects_ending_soon",
+      "questions": [
+        "Quels projets se terminent bientôt ?",
+        "Chantiers qui finissent prochainement",
+        "Projets avec date de fin proche",
+        "Liste des projets qui se terminent dans les [DAYS] jours",
+        "quel chantier prochainement?",
+        "Quels sont les projets qui se terminent bientôt ?",
+        "Quels chantiers arrivent à leur fin ?",
+        "Quels travaux seront terminés prochainement ?",
+        "Quels sont les projets qui touchent à leur fin ?",
+        "Quels chantiers doivent être terminés dans les prochains jours ?",
+        "Quels sont les projets qui s'achèvent bientôt ?",
+        "Quels travaux se clôturent prochainement ?",
+        "Quels sont les chantiers en phase de finition ?",
+        "Peux-tu me lister les projets qui se terminent bientôt ?",
+        "Quels chantiers doivent être livrés sous peu ?",
+        "Quels projets sont en phase de finalisation ?",
+        "Quels travaux arrivent à échéance ?",
+        "Quels chantiers vont être terminés dans les [DAYS] jours ?",
+        "Peux-tu afficher les projets qui s'achèvent prochainement ?",
+        "Quels sont les projets en fin de parcours ?",
+        "Quels sont les chantiers qui doivent se clôturer bientôt ?",
+        "Quels travaux seront finalisés prochainement ?",
+        "Quels sont les chantiers en fin de cycle ?",
+        "Quels sont les projets sur le point d'être livrés ?",
+        "Quels travaux devraient être terminés sous peu ?",
+        "Kels projet se termin bientot ?",
+        "Qel chantier finisse prochènemen ?",
+        "Quel son les travo ki von se finir biento ?",
+        "Lisste des projet qui ce termine dan [DAYS] jour ?",
+        "kel chantier en kor de finision ?",
+        "Quels travo son prevu de finire bientau ?",
+        "peu tu mé dir quels chantier von etre fini d'ici peux ?",
+        "kes son les projé ki touche a leurs fin ?",
+        "kel chantier doiv etre livre biento ?",
+        "qls sont les chantie ki seron finalizé prochenemnt ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE p.end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days') AND rs.code = 'en_cours' AND rs.entity_type = 'project' ORDER BY p.end_date",
+      "description": "Liste des projets qui se terminent dans un nombre de jours spécifié",
+      "parameters": [
+        {
+          "name": "DAYS",
+          "description": "Nombre de jours à considérer",
+          "default": "30"
+        }
+      ]
+    },
+    {
+      "id": "projects_overdue",
+      "questions": [
+        "Quels projets sont en retard ?",
+        "Chantiers qui ont dépassé leur date de fin",
+        "Projets en retard de livraison",
+        "Liste des projets qui auraient dû être terminés",
+        "Quels sont les projets en retard ?",
+        "Quels chantiers ont dépassé leur date de fin ?",
+        "Quels projets auraient dû être terminés mais ne le sont pas ?",
+        "Quels sont les chantiers en retard de livraison ?",
+        "Quels projets sont en dépassement de délai ?",
+        "Quels travaux sont en retard d'achèvement ?",
+        "Quels chantiers auraient dû être finalisés ?",
+        "Quels sont les projets non terminés dans les délais ?",
+        "Quels chantiers ont dépassé leur date de livraison ?",
+        "Quels travaux ne sont pas finis alors qu'ils auraient dû l'être ?",
+        "Peux-tu me donner la liste des projets en retard ?",
+        "Quels sont les projets qui ont pris du retard ?",
+        "Quels chantiers sont toujours en cours alors qu'ils devaient être finis ?",
+        "Quels projets ont dépassé leur échéance de fin ?",
+        "Quels sont les chantiers qui subissent un retard ?",
+        "Quels projets ont dépassé leur planning prévu ?",
+        "Quels chantiers sont bloqués après leur date de fin prévue ?",
+        "Quels projets sont hors délai ?",
+        "Quels travaux sont en retard sur le calendrier ?",
+        "Quels sont les chantiers dont la fin a été reportée ?",
+        "Kel projet son en ratard ?",
+        "Quels chantier on depassé leur date de fine ?",
+        "Liste des projé qui aurai du être fini ?",
+        "Quel traveaux on du ratard de livrézon ?",
+        "Qel chantier devai etre fini mé ne lé pa ?",
+        "Peu tu me donné la list des chantie en ratard ?",
+        "Kes son les chantie ki on depasser leur dat de fin ?",
+        "Quel projet son toujour en cour alors ki devai etre fini ?",
+        "Quels chantier on pri du ratar sur le planing ?",
+        "Kel son les projé en depassemen de delais ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, CURRENT_DATE - p.end_date AS days_overdue, c.firstname || ' ' || c.lastname AS client_name FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE p.end_date < CURRENT_DATE AND rs.code = 'en_cours' AND rs.entity_type = 'project' ORDER BY days_overdue DESC",
+      "description": "Liste des projets en cours qui ont dépassé leur date de fin prévue"
+    },
+    {
+      "id": "project_details",
+      "questions": [
+        "Détails du projet [PROJECT]",
+        "Informations sur le chantier [PROJECT]",
+        "Données complètes du projet [PROJECT]",
+        "Tout savoir sur le projet [PROJECT]",
+        "Détails du projet [PROJECT] ?",
+        "Informations complètes sur le chantier [PROJECT] ?",
+        "Quelle est la description du projet [PROJECT] ?",
+        "Peux-tu me donner les détails du projet [PROJECT] ?",
+        "Quelles sont les informations sur le chantier [PROJECT] ?",
+        "Je veux tout savoir sur le projet [PROJECT] ?",
+        "Données du projet [PROJECT] ?",
+        "Quel est le statut actuel du projet [PROJECT] ?",
+        "Qui est le client du chantier [PROJECT] ?",
+        "Où se trouve le chantier [PROJECT] ?",
+        "Quels sont les contacts associés au projet [PROJECT] ?",
+        "Peux-tu afficher toutes les données du chantier [PROJECT] ?",
+        "Quelles sont les informations administratives du projet [PROJECT] ?",
+        "Quand commence et finit le projet [PROJECT] ?",
+        "Quels sont les responsables du chantier [PROJECT] ?",
+        "Peux-tu me montrer les détails financiers du projet [PROJECT] ?",
+        "Quels sont les documents associés au projet [PROJECT] ?",
+        "Quel est l'avancement du projet [PROJECT] ?",
+        "Quels sont les travaux en cours sur le projet [PROJECT] ?",
+        "Quelle est l'adresse exacte du chantier [PROJECT] ?",
+        "Detal du projet [PROJECT] ?",
+        "Info sur chantier [PROJECT] ?",
+        "Peu tu me dir le statux du projet [PROJECT] ?",
+        "Quel et le client du projet [PROJECT] ?",
+        "Ou ce trouve le chantie [PROJECT] ?",
+        "Kes donnes du projet [PROJECT] ?",
+        "Quoi comme infos sur le projet [PROJECT] ?",
+        "Je veu savoire tou sur projet [PROJECT] ?",
+        "Quel est lavancemen de chantier [PROJECT] ?",
+        "Info sur la date de fin de [PROJECT] ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.description, p.start_date, p.end_date, rs.name AS status, c.firstname || ' ' || c.lastname AS client_name, c.email AS client_email, c.phone AS client_phone, a.street_number || ' ' || a.street_name || ', ' || a.zip_code || ' ' || a.city AS project_address FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN addresses a ON p.address_id = a.id WHERE p.name ILIKE '%[PROJECT]%' OR p.id::text = '[PROJECT]'",
+      "description": "Détails complets d'un projet spécifique",
+      "parameters": [
+        {
+          "name": "PROJECT",
+          "description": "Nom ou ID du projet recherché"
+        }
+      ]
+    },
+    {
+      "id": "projects_by_city",
+      "questions": [
+        "Quels sont les projets à [CITY] ?",
+        "Chantiers dans la ville de [CITY]",
+        "Projets localisés à [CITY]",
+        "Liste des chantiers sur [CITY]",
+        "Quels sont les projets en cours à [CITY] ?",
+        "Quels chantiers sont en activité à [CITY] ?",
+        "Quels sont les travaux prévus à [CITY] ?",
+        "Quels sont les chantiers en cours dans la ville de [CITY] ?",
+        "Peux-tu me donner la liste des projets situés à [CITY] ?",
+        "Quels projets sont actuellement en cours à [CITY] ?",
+        "Quels sont les nouveaux projets à [CITY] ?",
+        "Quels sont les chantiers prévus prochainement à [CITY] ?",
+        "Quels sont les travaux en construction à [CITY] ?",
+        "Quels chantiers ont débuté récemment à [CITY] ?",
+        "Quels sont les projets terminés récemment à [CITY] ?",
+        "Quels projets sont en attente de démarrage à [CITY] ?",
+        "Quels sont les chantiers actifs sur [CITY] ?",
+        "Quels travaux sont en préparation à [CITY] ?",
+        "Peux-tu afficher les projets liés à [CITY] ?",
+        "Quels sont les chantiers de grande envergure à [CITY] ?",
+        "Quels sont les projets en retard à [CITY] ?",
+        "Quels sont les chantiers ayant rencontré des problèmes à [CITY] ?",
+        "Quels projets nécessitent des interventions urgentes à [CITY] ?",
+        "Quels sont les chantiers achevés ce mois-ci à [CITY] ?",
+        "Kel chantier son en cour a [CITY] ?",
+        "Ques projet son prevu dan la vile de [CITY] ?",
+        "Kel travo son active a [CITY] ?",
+        "Quel son les chantie ki von comence a [CITY] ?",
+        "Peu tu me dir les chantie a [CITY] ?",
+        "Koi kom projet a [CITY] ?",
+        "Quels chantier sont finie dernirment a [CITY] ?",
+        "Liste des chantie ki devrai etre fini a [CITY] ?",
+        "Ou son les chantier prevu a [CITY] ?",
+        "Quel projet on u du ratard a [CITY] ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, rs.name AS status, c.firstname || ' ' || c.lastname AS client_name FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id JOIN addresses a ON p.address_id = a.id WHERE a.city ILIKE '%[CITY]%' ORDER BY p.start_date DESC",
+      "description": "Liste des projets situés dans une ville spécifique",
+      "parameters": [
+        {
+          "name": "CITY",
+          "description": "Nom de la ville recherchée"
+        }
+      ]
+    },
+    {
+      "id": "projects_count_by_status",
+      "questions": [
+        "Nombre de projets par statut",
+        "Combien de projets dans chaque statut ?",
+        "Répartition des chantiers selon leur statut",
+        "Statistiques des projets par statut",
+        "Nombre de projets par statut ?",
+        "Combien de chantiers sont en cours ?",
+        "Quels sont les statuts des projets en cours ?",
+        "Peux-tu afficher la répartition des projets selon leur statut ?",
+        "Quel est le nombre de chantiers en attente ?",
+        "Combien de projets sont terminés ?",
+        "Quels sont les différents statuts des projets ?",
+        "Quels sont les chantiers en pause ?",
+        "Combien de projets sont en cours de réalisation ?",
+        "Peux-tu me donner un aperçu des projets par statut ?",
+        "Quel est le nombre de chantiers annulés ?",
+        "Combien de projets sont en retard ?",
+        "Peux-tu afficher les projets classés par statut ?",
+        "Quels sont les projets en préparation ?",
+        "Quelle est la répartition des projets selon leur état ?",
+        "Peux-tu me donner les statistiques des projets par statut ?",
+        "Quels sont les statuts de tous les projets en cours ?",
+        "Combien de projets ont été reportés ?",
+        "Quels chantiers sont dans la phase finale ?",
+        "Combien de projets ont un statut actif ?",
+        "Nombr de projé par statuts ?",
+        "Kombi1 de chantie par statuts ?",
+        "Répartission des chantier selon leur statuts ?",
+        "P2x-tu afiché le nobre de chantier selun leur statut ?",
+        "Kel son les status des proje en cou ?",
+        "Cmben de projé son termine ?",
+        "Lé chantier en atente son cbien ?",
+        "Qel statuts on les proje en cour ?",
+        "Quel son les chantier en retar ?",
+        "Pez tu done la repartition des chantie par statut ?"
+      ],
+      "sql": "SELECT rs.name AS status, COUNT(p.id) AS nombre_projets FROM projects p JOIN ref_status rs ON p.status = rs.id WHERE rs.entity_type = 'project' GROUP BY rs.name ORDER BY nombre_projets DESC",
+      "description": "Statistiques du nombre de projets pour chaque statut"
+    },
+    {
+      "id": "projects_this_month",
+      "questions": [
+        "Quels projets débutent ce mois-ci ?",
+        "Chantiers qui commencent ce mois",
+        "Projets démarrant dans le mois courant",
+        "Liste des nouveaux projets du mois",
+        "Quels sont les projets qui débutent ce mois-ci ?",
+        "Quels chantiers commencent ce mois-ci ?",
+        "Quels sont les nouveaux projets du mois ?",
+        "Peux-tu me donner la liste des projets démarrant ce mois-ci ?",
+        "Quels sont les chantiers prévus pour ce mois ?",
+        "Quels travaux vont débuter ce mois-ci ?",
+        "Quels sont les projets planifiés pour le mois en cours ?",
+        "Quels chantiers sont programmés pour démarrer ce mois-ci ?",
+        "Quels sont les nouveaux travaux prévus pour ce mois ?",
+        "Quels sont les projets prévus dans les prochaines semaines ?",
+        "Quels chantiers vont être lancés ce mois-ci ?",
+        "Quels projets vont démarrer avant la fin du mois ?",
+        "Quels sont les chantiers qui commencent en ce moment ?",
+        "Quels sont les nouveaux projets en démarrage ?",
+        "Quels sont les chantiers ouverts ce mois-ci ?",
+        "Quels projets de construction débutent ce mois-ci ?",
+        "Quels sont les travaux qui vont débuter d'ici la fin du mois ?",
+        "Quels sont les projets en cours de démarrage ce mois-ci ?",
+        "Quels sont les nouveaux chantiers lancés en ce début de mois ?",
+        "Quels sont les projets inscrits pour commencer ce mois ?",
+        "Kel projet debute ce moi ci ?",
+        "Quel chantier comence ce mois ?",
+        "Quels son les nouvo projet du moi ?",
+        "P2x tu donner la lis des chantier du moi ?",
+        "Quel travo prevu ce moi ?",
+        "Quel chantier son plannifier ce moi ?",
+        "Koi kom projet vont debuter ce moi ?",
+        "Liss des chantier ki vont demarer ce moi ?",
+        "Qels chantier sont ouver en se momment ?",
+        "Les nouvo chantie qui comance se moi ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, c.firstname || ' ' || c.lastname AS client_name, a.city FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN addresses a ON p.address_id = a.id WHERE EXTRACT(MONTH FROM p.start_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY p.start_date",
+      "description": "Liste des projets qui débutent dans le mois courant"
+    },
+    {
+      "id": "projects_average_duration",
+      "questions": [
+        "Quelle est la durée moyenne des projets ?",
+        "Temps moyen des chantiers",
+        "Durée typique d'un projet",
+        "Combien de temps prend un projet en moyenne ?",
+        "Quelle est la durée moyenne des projets ?",
+        "Quel est le temps moyen de réalisation d'un chantier ?",
+        "Combien de jours dure un projet en moyenne ?",
+        "Peux-tu me donner la durée typique d'un projet ?",
+        "Quel est le délai moyen pour terminer un chantier ?",
+        "Combien de temps faut-il en moyenne pour un projet ?",
+        "Quel est le nombre moyen de jours pour achever un projet ?",
+        "Combien de jours en moyenne dure un chantier ?",
+        "Quelle est la durée habituelle d'un projet ?",
+        "Peux-tu me donner la moyenne des durées de projets ?",
+        "En général, combien de temps prend un chantier ?",
+        "Quelle est la durée standard d'un chantier ?",
+        "Quel est le temps estimé moyen pour finir un projet ?",
+        "Combien de jours sont nécessaires en moyenne pour un projet ?",
+        "Quelle est la moyenne des délais des projets terminés ?",
+        "Quel est le temps nécessaire en moyenne pour achever un chantier ?",
+        "Combien de semaines en moyenne pour finaliser un chantier ?",
+        "Quel est le délai moyen de finalisation d'un projet ?",
+        "Combien de temps prennent généralement les chantiers ?",
+        "Peux-tu afficher le temps moyen de complétion des projets ?",
+        "Kel et la duré moyenn des proje ?",
+        "Combien de temp un projet prend en avrage ?",
+        "Qel est la durée typeek des chantier ?",
+        "Kombi1 de jor en moyien pour finir un chantier ?",
+        "Pe tu me donné la duré normal d'un chantier ?",
+        "Cmb de tan pren un chantier an generl ?",
+        "Qel es la dure moyn pour terminer un projé ?",
+        "Kel est le tenp moyen pr fini un projet ?",
+        "Qels sont les délai typique des chantier ?",
+        "Pou tu afiché le temp moyen des proje terminer ?"
+      ],
+      "sql": "SELECT ROUND(AVG(p.end_date - p.start_date)) AS duree_moyenne_jours FROM projects p JOIN ref_status rs ON p.status = rs.id WHERE p.end_date IS NOT NULL AND p.start_date IS NOT NULL AND rs.code = 'termine' AND rs.entity_type = 'project'",
+      "description": "Calcul de la durée moyenne des projets terminés, en jours"
+    },
+    {
+      "id": "projects_recent",
+      "questions": [
+        "Quels sont les projets récemment créés ?",
+        "Derniers projets ajoutés",
+        "Projets les plus récents",
+        "Liste des nouveaux projets"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.created_at, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id ORDER BY p.created_at DESC LIMIT 10",
+      "description": "Liste des 10 projets les plus récemment créés"
+    },
+    {
+      "id": "projects_without_invoices",
+      "questions": [
+        "Quels projets n'ont pas de factures ?",
+        "Projets sans facturation",
+        "Chantiers non facturés",
+        "Liste des projets sans facture"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE NOT EXISTS (SELECT 1 FROM invoices i WHERE i.project_id = p.id) ORDER BY p.start_date DESC",
+      "description": "Liste des projets qui n'ont pas encore de factures associées"
+    },
+    {
+      "id": "projects_with_staff",
+      "questions": [
+        "Quels projets sont assignés à [STAFF] ?",
+        "Chantiers de [STAFF]",
+        "Projets sur lesquels travaille [STAFF]",
+        "Liste des projets de [STAFF]"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, rs.name AS status, ps.role FROM projects p JOIN project_staff ps ON p.id = ps.project_id JOIN staff s ON ps.staff_id = s.id JOIN ref_status rs ON p.status = rs.id WHERE (s.firstname || ' ' || s.lastname) ILIKE '%[STAFF]%' OR s.email ILIKE '%[STAFF]%' ORDER BY p.start_date DESC",
+      "description": "Liste des projets assignés à un membre du personnel spécifique",
+      "parameters": [
+        {
+          "name": "STAFF",
+          "description": "Nom ou email du membre du personnel"
+        }
+      ]
+    },
+    {
+      "id": "projects_with_incomplete_stages",
+      "questions": [
+        "Quels projets ont des étapes incomplètes ?",
+        "Projets avec étapes en cours",
+        "Chantiers ayant des phases non terminées",
+        "Liste des projets avec étapes à finir"
+      ],
+      "sql": "SELECT DISTINCT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(s.id) AS incomplete_stages FROM projects p JOIN clients c ON p.client_id = c.id JOIN stages s ON p.id = s.project_id JOIN ref_status rs ON s.status = rs.id WHERE rs.code != 'termine' AND rs.entity_type = 'stage' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY COUNT(s.id) DESC",
+      "description": "Liste des projets ayant des étapes non terminées, avec le nombre d'étapes incomplètes"
+    },
+    {
+      "id": "projects_by_date_range",
+      "questions": [
+        "Quels projets débutent entre [START_DATE] et [END_DATE] ?",
+        "Projets démarrant dans la période [START_DATE] - [END_DATE]",
+        "Chantiers commençant entre [START_DATE] et [END_DATE]",
+        "Liste des projets débutant de [START_DATE] à [END_DATE]"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE p.start_date BETWEEN '[START_DATE]'::date AND '[END_DATE]'::date ORDER BY p.start_date",
+      "description": "Liste des projets débutant dans une période spécifique",
+      "parameters": [
+        {
+          "name": "START_DATE",
+          "description": "Date de début de la période (format YYYY-MM-DD)",
+          "default": "CURRENT_DATE"
+        },
+        {
+          "name": "END_DATE",
+          "description": "Date de fin de la période (format YYYY-MM-DD)",
+          "default": "CURRENT_DATE + INTERVAL '30 days'"
+        }
+      ]
+    },
+    {
+      "id": "projects_by_materials",
+      "questions": [
+        "Quels projets utilisent [MATERIAL] ?",
+        "Chantiers avec le matériau [MATERIAL]",
+        "Projets nécessitant [MATERIAL]",
+        "Liste des projets utilisant [MATERIAL]"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, rs.name AS status, pm.quantity, pm.unit FROM projects p JOIN project_materials pm ON p.id = pm.project_id JOIN ref_status rs ON p.status = rs.id WHERE pm.material_name ILIKE '%[MATERIAL]%' ORDER BY p.start_date DESC",
+      "description": "Liste des projets utilisant un matériau spécifique",
+      "parameters": [
+        {
+          "name": "MATERIAL",
+          "description": "Nom du matériau recherché"
+        }
+      ]
+    },
+    {
+      "id": "projects_without_stages",
+      "questions": [
+        "Quels projets n'ont pas d'étapes définies ?",
+        "Projets sans planning d'étapes",
+        "Chantiers sans phases",
+        "Liste des projets sans étapes"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE NOT EXISTS (SELECT 1 FROM stages s WHERE s.project_id = p.id) ORDER BY p.start_date DESC",
+      "description": "Liste des projets qui n'ont pas encore d'étapes définies"
+    },
+    {
+      "id": "projects_next_week",
+      "questions": [
+        "Quels projets commencent la semaine prochaine ?",
+        "Chantiers débutant semaine prochaine",
+        "Projets qui démarrent la semaine suivante",
+        "Liste des projets début semaine pro",
+        "Quels chantiers vont débuter la semaine prochaine ?",
+        "Quels sont les projets prévus pour la semaine prochaine ?",
+        "Quels travaux commencent en début de semaine prochaine ?",
+        "Pouvez-vous me montrer les projets débutant la semaine prochaine ?",
+        "Quels sont les nouveaux chantiers de la semaine prochaine ?",
+        "Quels projets sont programmés pour démarrer la semaine prochaine ?",
+        "Quels chantiers seront lancés la semaine prochaine ?",
+        "Liste des chantiers commençant la semaine suivante",
+        "Quels sont les travaux prévus pour débuter la semaine prochaine ?",
+        "Quels projets vont être initiés la semaine à venir ?",
+        "quel chantier prochainement?",
+        "kel chantier en kor de finision ?",
+        "Quels travo son prevu de finire bientau ?",
+        "peu tu mé dir quels chantier von etre fini d'ici peux ?",
+        "kes son les projé ki touche a leurs fin ?",
+        "kel chantier doiv etre livre biento ?",
+        "qls sont les chantie ki seron finalizé prochenemnt ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, a.city FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN addresses a ON p.address_id = a.id WHERE p.start_date BETWEEN (CURRENT_DATE + INTERVAL '1 week - 1 day') - EXTRACT(DOW FROM (CURRENT_DATE + INTERVAL '1 week - 1 day'))::INTEGER * INTERVAL '1 day' AND (CURRENT_DATE + INTERVAL '1 week - 1 day') - EXTRACT(DOW FROM (CURRENT_DATE + INTERVAL '1 week - 1 day'))::INTEGER * INTERVAL '1 day' + INTERVAL '6 days' ORDER BY p.start_date",
+      "description": "Liste des projets qui débutent la semaine prochaine"
+    },
+    {
+      "id": "projects_with_supplier_orders",
+      "questions": [
+        "Quels projets ont des commandes fournisseurs en attente ?",
+        "Projets avec commandes non livrées",
+        "Chantiers en attente de livraison",
+        "Liste des projets avec commandes en cours",
+        "Quels sont les projets avec des commandes fournisseurs non livrées ?",
+        "Quels chantiers attendent des livraisons de fournisseurs ?",
+        "Quels projets ont des commandes en cours chez des fournisseurs ?",
+        "Liste des projets en attente de livraisons",
+        "Quels sont les chantiers avec des commandes en transit ?",
+        "Projets ayant des commandes fournisseurs en suspens",
+        "Quels projets sont en attente de réception de commandes ?",
+        "Chantiers avec approvisionnements en attente",
+        "Liste des projets dont les commandes n'ont pas été livrées",
+        "Quels projets ont des commandes fournisseurs non finalisées ?",
+        "Kel projet son en ratard ?",
+        "Quels chantier on depassé leur date de fine ?",
+        "Liste des projé qui aurai du être fini ?",
+        "Quel traveaux on du ratard de livrézon ?",
+        "Qel chantier devai etre fini mé ne lé pa ?",
+        "Peu tu me donné la list des chantie en ratard ?"
+      ],
+      "sql": "SELECT DISTINCT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(so.id) AS pending_orders FROM projects p JOIN clients c ON p.client_id = c.id JOIN supplier_orders so ON p.id = so.project_id JOIN ref_supplier_order_status rsos ON so.status = rsos.id WHERE rsos.code IN ('en_attente', 'commandé', 'en_transit') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY COUNT(so.id) DESC",
+      "description": "Liste des projets avec des commandes fournisseurs en attente de livraison"
+    },
+    {
+      "id": "projects_with_site_notes",
+      "questions": [
+        "Quels projets ont des notes de chantier importantes ?",
+        "Projets avec notes prioritaires",
+        "Chantiers ayant des problèmes signalés",
+        "Liste des projets avec notes à traiter"
+      ],
+      "sql": "SELECT DISTINCT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(sn.id) AS high_priority_notes FROM projects p JOIN clients c ON p.client_id = c.id JOIN site_notes sn ON p.id = sn.project_id JOIN ref_note_priorities rnp ON sn.priority = rnp.id JOIN ref_note_status rns ON sn.status = rns.id WHERE rnp.code = 'haute' AND rns.code != 'termine' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY COUNT(sn.id) DESC",
+      "description": "Liste des projets ayant des notes de chantier importantes non résolues"
+    },
+    {
+      "id": "projects_budget_status",
+      "questions": [
+        "Quel est le statut budgétaire des projets ?",
+        "Projets classés par budget",
+        "Chantiers et leur budget",
+        "Liste des projets avec information budgétaire"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, rs.name AS status, pb.total_budget, COALESCE(SUM(e.amount), 0) AS total_expenses, pb.total_budget - COALESCE(SUM(e.amount), 0) AS remaining_budget, CASE WHEN pb.total_budget > 0 THEN ROUND((COALESCE(SUM(e.amount), 0) / pb.total_budget * 100), 2) ELSE 0 END as budget_usage_percentage FROM projects p JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_budgets pb ON p.id = pb.project_id LEFT JOIN expenses e ON p.id = e.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, rs.name, pb.total_budget ORDER BY (pb.total_budget - COALESCE(SUM(e.amount), 0)) ASC",
+      "description": "Statut budgétaire des projets montrant le budget total, les dépenses et le budget restant"
+    },
+    {
+      "id": "projects_most_expensive",
+      "questions": [
+        "Quels sont les projets les plus coûteux ?",
+        "Projets avec le plus de dépenses",
+        "Chantiers les plus chers",
+        "Liste des projets par coût décroissant"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COALESCE(SUM(e.amount), 0) AS total_expenses FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN expenses e ON p.id = e.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY total_expenses DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant les coûts les plus élevés"
+    },
+    {
+      "id": "projects_progress",
+      "questions": [
+        "Quel est l'avancement des projets en cours ?",
+        "Projets en cours et leur progression",
+        "État d'avancement des chantiers actifs",
+        "Liste des projets actifs avec pourcentage d'avancement"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COALESCE(AVG(s.completion_percentage), 0) AS avg_completion_percentage FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN stages s ON p.id = s.project_id AND rs.code = 'en_cours' AND rs.entity_type = 'project' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY avg_completion_percentage DESC",
+      "description": "Pourcentage d'avancement moyen des projets en cours, basé sur l'avancement des étapes"
+    },
+    {
+      "id": "projects_last_month",
+      "questions": [
+        "Quels projets ont débuté le mois dernier ?",
+        "Chantiers commencés le mois passé",
+        "Projets du mois précédent",
+        "Liste des projets démarrés le mois dernier"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE EXTRACT(MONTH FROM p.start_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') ORDER BY p.start_date",
+      "description": "Liste des projets qui ont débuté le mois dernier"
+    },
+    {
+      "id": "projects_next_month",
+      "questions": [
+        "Quels projets débutent le mois prochain ?",
+        "Chantiers prévus pour le mois suivant",
+        "Projets du mois à venir",
+        "Liste des projets qui vont commencer le mois prochain"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name FROM projects p JOIN clients c ON p.client_id = c.id WHERE EXTRACT(MONTH FROM p.start_date) = EXTRACT(MONTH FROM CURRENT_DATE + INTERVAL '1 month') AND EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE + INTERVAL '1 month') ORDER BY p.start_date",
+      "description": "Liste des projets qui débuteront le mois prochain"
+    },
+    {
+      "id": "projects_budget_overrun",
+      "questions": [
+        "Quels projets ont dépassé leur budget ?",
+        "Projets avec dépassement budgétaire",
+        "Chantiers hors budget",
+        "Liste des projets en dépassement"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, pb.total_budget, COALESCE(SUM(e.amount), 0) AS total_expenses, (COALESCE(SUM(e.amount), 0) - pb.total_budget) AS budget_overrun, CASE WHEN pb.total_budget > 0 THEN ROUND((COALESCE(SUM(e.amount), 0) / pb.total_budget * 100), 2) ELSE 0 END as budget_usage_percentage FROM projects p JOIN clients c ON p.client_id = c.id JOIN project_budgets pb ON p.id = pb.project_id LEFT JOIN expenses e ON p.id = e.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname, pb.total_budget HAVING COALESCE(SUM(e.amount), 0) > pb.total_budget ORDER BY budget_overrun DESC",
+      "description": "Liste des projets ayant dépassé leur budget initial"
+    },
+    {
+      "id": "projects_quality_issues",
+      "questions": [
+        "Quels projets ont des problèmes de qualité ?",
+        "Projets avec contrôles qualité échoués",
+        "Chantiers avec points de contrôle rejetés",
+        "Liste des projets avec problèmes qualité"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(qc.id) AS rejected_checkpoints FROM projects p JOIN clients c ON p.client_id = c.id JOIN stages s ON p.id = s.project_id JOIN quality_checkpoints qc ON s.id = qc.stage_id JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id WHERE rqcs.code = 'rejeté' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY rejected_checkpoints DESC",
+      "description": "Liste des projets ayant des points de contrôle qualité rejetés"
+    },
+    {
+      "id": "projects_equipment_issues",
+      "questions": [
+        "Quels projets ont des équipements en mauvais état ?",
+        "Projets avec équipements défectueux",
+        "Chantiers avec matériel en panne",
+        "Liste des projets avec problèmes d'équipement"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(eq_track.id) AS problematic_equipment FROM projects p JOIN clients c ON p.client_id = c.id JOIN site_equipment_tracking eq_track ON p.id = eq_track.project_id JOIN equipment e ON eq_track.equipment_id = e.id JOIN ref_equipment_status res ON e.status = res.id WHERE res.code IN ('en_maintenance', 'hors_service') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY problematic_equipment DESC",
+      "description": "Liste des projets avec des équipements en mauvais état ou en maintenance"
+    },
+    {
+      "id": "projects_pending_materials",
+      "questions": [
+        "Quels projets ont des demandes de matériaux en attente ?",
+        "Projets en attente de matériaux",
+        "Chantiers avec demandes de matériaux",
+        "Liste des projets avec demandes de matériaux"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(mr.id) AS pending_requests FROM projects p JOIN clients c ON p.client_id = c.id JOIN material_requests mr ON p.id = mr.project_id JOIN ref_material_request_status rmrs ON mr.status = rmrs.id WHERE rmrs.code = 'pending' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY pending_requests DESC",
+      "description": "Liste des projets avec des demandes de matériaux en attente"
+    },
+    {
+      "id": "projects_recent_reports",
+      "questions": [
+        "Quels projets ont des rapports de chantier récents ?",
+        "Projets avec rapports de chantier",
+        "Chantiers avec rapports journaliers",
+        "Liste des projets avec rapports récents"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(dsr.id) AS recent_reports FROM projects p JOIN clients c ON p.client_id = c.id JOIN daily_site_reports dsr ON p.id = dsr.project_id WHERE dsr.report_date >= CURRENT_DATE - INTERVAL '7 days' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY recent_reports DESC",
+      "description": "Liste des projets avec des rapports de chantier récents (7 derniers jours)"
+    },
+    {
+      "id": "projects_with_problems",
+      "questions": [
+        "Quels projets ont rencontré des problèmes ?",
+        "Projets avec des difficultés",
+        "Chantiers problématiques",
+        "Liste des projets avec des problèmes"
+      ],
+      "sql": "WITH problematic_projects AS (SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status, CASE WHEN p.end_date < CURRENT_DATE AND rs.code = 'en_cours' THEN 'Retard de livraison' ELSE NULL END AS delay_issue, CASE WHEN COALESCE(SUM(e.amount), 0) > pb.total_budget THEN 'Dépassement budget' ELSE NULL END AS budget_issue, CASE WHEN COUNT(DISTINCT qc.id) FILTER (WHERE rqcs.code = 'rejeté') > 0 THEN 'Problèmes qualité' ELSE NULL END AS quality_issue, CASE WHEN COUNT(DISTINCT sn.id) FILTER (WHERE rnp.code = 'haute' AND rns.code != 'termine') > 0 THEN 'Notes prioritaires non résolues' ELSE NULL END AS notes_issue FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_budgets pb ON p.id = pb.project_id LEFT JOIN expenses e ON p.id = e.project_id LEFT JOIN stages s ON p.id = s.project_id LEFT JOIN quality_checkpoints qc ON s.id = qc.stage_id LEFT JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id LEFT JOIN site_notes sn ON p.id = sn.project_id LEFT JOIN ref_note_priorities rnp ON sn.priority = rnp.id LEFT JOIN ref_note_status rns ON sn.status = rns.id WHERE rs.entity_type = 'project' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname, rs.name, rs.code, pb.total_budget) SELECT id, name, start_date, end_date, client_name, status, string_agg(DISTINCT problem, ', ') AS problemes FROM (SELECT id, name, start_date, end_date, client_name, status, unnest(ARRAY[delay_issue, budget_issue, quality_issue, notes_issue]) AS problem FROM problematic_projects) sub WHERE problem IS NOT NULL GROUP BY id, name, start_date, end_date, client_name, status ORDER BY start_date DESC",
+      "description": "Liste des projets ayant rencontré des problèmes (retard, budget, qualité, notes prioritaires)"
+    },
+    {
+      "id": "projects_most_profitable",
+      "questions": [
+        "Quel chantier a le plus rapporté d'argent ?",
+        "Projets les plus rentables",
+        "Chantiers avec le plus grand bénéfice",
+        "Quels projets ont généré le plus de profit ?",
+        "Classement des chantiers par rentabilité",
+        "Quels sont les chantiers les plus profitables ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, SUM(i.total_ttc) AS total_revenue, COALESCE(SUM(e.amount), 0) AS total_expenses, SUM(i.total_ttc) - COALESCE(SUM(e.amount), 0) AS profit, CASE WHEN SUM(i.total_ttc) > 0 THEN ROUND((SUM(i.total_ttc) - COALESCE(SUM(e.amount), 0)) / SUM(i.total_ttc) * 100, 2) ELSE 0 END AS profit_margin FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN invoices i ON p.id = i.project_id LEFT JOIN expenses e ON p.id = e.project_id WHERE p.status IN (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY profit DESC",
+      "description": "Liste des projets terminés classés par profit réalisé (revenus moins dépenses)"
+    },
+    {
+      "id": "projects_longest_duration",
+      "questions": [
+        "Quel chantier a duré le plus longtemps ?",
+        "Projet avec la plus longue durée",
+        "Chantier le plus long en termes de temps",
+        "Quel est le projet qui a une durée de réalisation la plus longue?",
+        "quel chantier a durée le plus longtmpes?"
+      ],
+      "sql": "SELECT p.name, p.start_date, p.end_date, (p.end_date - p.start_date) AS duration_days FROM projects p WHERE p.end_date IS NOT NULL AND p.start_date IS NOT NULL ORDER BY (p.end_date - p.start_date) DESC LIMIT 1",
+      "description": "Identifie le projet qui a eu la plus longue durée de réalisation en jours"
+    },
+    {
+      "id": "projects_starting_today",
+      "questions": [
+        "Quels chantiers débutent aujourd'hui ?",
+        "Projets qui commencent aujourd'hui",
+        "Chantiers du jour",
+        "Quels sont les projets qui démarrent aujourd'hui ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, c.firstname || ' ' || c.lastname AS client_name, a.street_number || ' ' || a.street_name || ', ' || a.zip_code || ' ' || a.city AS address FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN addresses a ON p.address_id = a.id WHERE p.start_date = CURRENT_DATE ORDER BY p.name",
+      "description": "Liste des projets qui débutent aujourd'hui avec informations client et adresse"
+    },
+    {
+      "id": "projects_shortest_duration",
+      "questions": [
+        "Quels projets ont été réalisés le plus rapidement ?",
+        "Chantiers les plus courts",
+        "Projets avec les délais les plus courts",
+        "Quels sont les projets terminés le plus rapidement ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, (p.end_date - p.start_date) AS duration_days, c.firstname || ' ' || c.lastname AS client_name FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE p.end_date IS NOT NULL AND p.start_date IS NOT NULL AND rs.code = 'termine' AND rs.entity_type = 'project' ORDER BY (p.end_date - p.start_date) ASC LIMIT 10",
+      "description": "Liste des 10 projets terminés ayant eu la durée de réalisation la plus courte"
+    },
+    {
+      "id": "projects_most_stages",
+      "questions": [
+        "Quels projets ont le plus d'étapes ?",
+        "Chantiers avec beaucoup de phases",
+        "Projets les plus complexes en nombre d'étapes",
+        "Liste des projets avec le plus grand nombre de phases"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(s.id) AS stage_count FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN stages s ON p.id = s.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY stage_count DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant le plus grand nombre d'étapes définies"
+    },
+    {
+      "id": "projects_most_daily_reports",
+      "questions": [
+        "Quels projets ont le plus de rapports journaliers ?",
+        "Chantiers avec beaucoup de rapports quotidiens",
+        "Projets avec suivi détaillé",
+        "Liste des projets les mieux documentés"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(dsr.id) AS report_count FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN daily_site_reports dsr ON p.id = dsr.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY report_count DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant le plus grand nombre de rapports journaliers"
+    },
+    {
+      "id": "projects_most_expenses_categories",
+      "questions": [
+        "Quels projets ont des dépenses dans le plus de catégories différentes ?",
+        "Chantiers avec variété de dépenses",
+        "Projets avec dépenses diversifiées",
+        "Liste des projets avec le plus de types de dépenses"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(DISTINCT e.category_id) AS expense_category_count FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN expenses e ON p.id = e.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY expense_category_count DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant des dépenses réparties dans le plus grand nombre de catégories différentes"
+    },
+    {
+      "id": "projects_most_staff",
+      "questions": [
+        "Quels projets mobilisent le plus de personnel ?",
+        "Chantiers avec beaucoup d'employés",
+        "Projets avec équipes nombreuses",
+        "Liste des projets avec le plus grand nombre de collaborateurs"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(DISTINCT ps.staff_id) AS staff_count FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN project_staff ps ON p.id = ps.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY staff_count DESC LIMIT 10",
+      "description": "Liste des 10 projets mobilisant le plus grand nombre de membres du personnel"
+    },
+    {
+      "id": "projects_most_site_notes",
+      "questions": [
+        "Quels projets ont le plus de notes de chantier ?",
+        "Chantiers avec beaucoup d'annotations",
+        "Projets avec nombreuses notes",
+        "Liste des projets avec le plus de commentaires terrain"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(sn.id) AS note_count FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN site_notes sn ON p.id = sn.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY note_count DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant le plus grand nombre de notes de chantier"
+    },
+    {
+      "id": "projects_with_high_quality",
+      "questions": [
+        "Quels projets ont les meilleurs scores de qualité ?",
+        "Chantiers avec excellence qualitative",
+        "Projets exemplaires en qualité",
+        "Liste des projets avec contrôles qualité parfaits"
+      ],
+      "sql": "WITH project_checkpoints AS (SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(qc.id) AS total_checkpoints, COUNT(qc.id) FILTER (WHERE rqcs.code = 'validé') AS passed_checkpoints FROM projects p JOIN clients c ON p.client_id = c.id JOIN stages s ON p.id = s.project_id JOIN quality_checkpoints qc ON s.id = qc.stage_id JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname) SELECT id, name, start_date, end_date, client_name, total_checkpoints, passed_checkpoints, CASE WHEN total_checkpoints > 0 THEN ROUND((passed_checkpoints::numeric / total_checkpoints) * 100, 2) ELSE 0 END AS quality_score FROM project_checkpoints WHERE total_checkpoints >= 5 ORDER BY quality_score DESC, total_checkpoints DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant les meilleurs scores de qualité basés sur le pourcentage de points de contrôle validés"
+    },
+    {
+      "id": "projects_most_calendar_events",
+      "questions": [
+        "Quels projets ont le planning le plus chargé ?",
+        "Chantiers avec beaucoup d'événements",
+        "Projets avec agenda complet",
+        "Liste des projets avec le plus de rendez-vous"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(ce.id) AS event_count FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN calendar_events ce ON p.id = ce.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY event_count DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant le plus grand nombre d'événements calendrier"
+    },
+    {
+      "id": "projects_current_week",
+      "questions": [
+        "Quels projets sont en cours cette semaine ?",
+        "Chantiers actifs cette semaine",
+        "Projets de la semaine en cours",
+        "Liste des projets actifs cette semaine"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' AND CURRENT_DATE BETWEEN (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::INTEGER * INTERVAL '1 day') AND (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::INTEGER * INTERVAL '1 day' + INTERVAL '6 days') ORDER BY p.name",
+      "description": "Liste des projets actifs durant la semaine courante"
+    },
+    {
+      "id": "projects_most_materials",
+      "questions": [
+        "Quels projets utilisent le plus de matériaux différents ?",
+        "Chantiers avec grande variété de matériaux",
+        "Projets avec beaucoup de matériaux",
+        "Liste des projets utilisant le plus de fournitures"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(DISTINCT pm.material_id) AS material_count FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN project_materials pm ON p.id = pm.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY material_count DESC LIMIT 10",
+      "description": "Liste des 10 projets utilisant le plus grand nombre de matériaux différents"
+    },
+    {
+      "id": "projects_with_equipment",
+      "questions": [
+        "Quels projets utilisent des équipements spécifiques ?",
+        "Chantiers avec équipements [EQUIPMENT]",
+        "Projets utilisant le matériel [EQUIPMENT]",
+        "Liste des projets avec l'équipement [EQUIPMENT]"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(set.id) AS equipment_usage FROM projects p JOIN clients c ON p.client_id = c.id JOIN site_equipment_tracking set ON p.id = set.project_id JOIN equipment e ON set.equipment_id = e.id WHERE e.name ILIKE '%[EQUIPMENT]%' OR e.serial_number ILIKE '%[EQUIPMENT]%' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY p.start_date DESC",
+      "description": "Liste des projets utilisant un type d'équipement spécifique",
+      "parameters": [
+        {
+          "name": "EQUIPMENT",
+          "description": "Nom ou numéro de série de l'équipement recherché"
+        }
+      ]
+    },
+    {
+      "id": "projects_high_humidity",
+      "questions": [
+        "Quels projets ont été réalisés pendant des périodes de forte humidité ?",
+        "Chantiers avec conditions humides",
+        "Projets sous la pluie",
+        "Liste des projets avec mauvaises conditions météo"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(dsr.id) AS rainy_days FROM projects p JOIN clients c ON p.client_id = c.id JOIN daily_site_reports dsr ON p.id = dsr.project_id WHERE dsr.weather_conditions ILIKE '%pluie%' OR dsr.weather_conditions ILIKE '%humide%' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY rainy_days DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant eu le plus grand nombre de jours avec des conditions météorologiques humides ou pluvieuses"
+    },
+    {
+      "id": "projects_frequent_issues",
+      "questions": [
+        "Sur quels projets signale-t-on souvent des problèmes ?",
+        "Chantiers avec problèmes récurrents",
+        "Projets nécessitant beaucoup d'interventions",
+        "Liste des projets à problèmes fréquents"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(sn.id) AS issues_count FROM projects p JOIN clients c ON p.client_id = c.id JOIN site_notes sn ON p.id = sn.project_id WHERE sn.note_type IN (SELECT id FROM ref_note_types WHERE code = 'probleme') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY issues_count DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant le plus grand nombre de notes signalant des problèmes"
+    },
+    {
+      "id": "projects_worker_hours",
+      "questions": [
+        "Quels projets ont nécessité le plus d'heures de travail ?",
+        "Chantiers avec le plus d'heures de main d'œuvre",
+        "Projets avec beaucoup d'heures travaillées",
+        "Liste des projets par heures de travail"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, SUM(te.hours) AS total_hours FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN timesheet_entries te ON p.id = te.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY total_hours DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant comptabilisé le plus grand nombre d'heures de travail"
+    },
+    {
+      "id": "projects_hourly_costs",
+      "questions": [
+        "Quels projets ont le coût horaire le plus élevé ?",
+        "Chantiers avec coûts horaires importants",
+        "Projets avec main d'œuvre coûteuse",
+        "Liste des projets par coût horaire"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, SUM(te.hours) AS total_hours, SUM(te.hours * te.hourly_rate) AS labor_cost, CASE WHEN SUM(te.hours) > 0 THEN ROUND(SUM(te.hours * te.hourly_rate) / SUM(te.hours), 2) ELSE 0 END AS avg_hourly_cost FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN timesheet_entries te ON p.id = te.project_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname HAVING SUM(te.hours) > 0 ORDER BY avg_hourly_cost DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant le coût horaire moyen le plus élevé pour la main d'œuvre"
+    },
+    {
+      "id": "projects_staff_efficiency",
+      "questions": [
+        "Quels projets ont la meilleure efficacité de main d'œuvre ?",
+        "Chantiers avec main d'œuvre efficace",
+        "Projets avec bon rendement des équipes",
+        "Liste des projets les plus efficaces"
+      ],
+      "sql": "WITH project_efficiency AS (SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(DISTINCT ps.staff_id) AS staff_count, SUM(te.hours) AS total_hours, COALESCE(SUM(i.total_ttc), 0) AS total_revenue, CASE WHEN SUM(te.hours) > 0 THEN ROUND(COALESCE(SUM(i.total_ttc), 0) / SUM(te.hours), 2) ELSE 0 END AS revenue_per_hour FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN project_staff ps ON p.id = ps.project_id LEFT JOIN timesheet_entries te ON p.id = te.project_id LEFT JOIN invoices i ON p.id = i.project_id WHERE p.status IN (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname) SELECT * FROM project_efficiency WHERE total_hours >= 40 ORDER BY revenue_per_hour DESC LIMIT 10",
+      "description": "Liste des 10 projets terminés ayant généré le plus de revenus par heure de travail (minimum 40 heures de travail)"
+    },
+    {
+      "id": "projects_by_supplier",
+      "questions": [
+        "Quels projets utilisent des matériaux du fournisseur [SUPPLIER] ?",
+        "Chantiers approvisionnés par [SUPPLIER]",
+        "Projets avec commandes chez [SUPPLIER]",
+        "Liste des projets avec commandes [SUPPLIER]"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(so.id) AS order_count, SUM(so.total_amount) AS total_orders FROM projects p JOIN clients c ON p.client_id = c.id JOIN supplier_orders so ON p.id = so.project_id JOIN suppliers s ON so.supplier_id = s.id WHERE s.name ILIKE '%[SUPPLIER]%' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY total_orders DESC",
+      "description": "Liste des projets ayant passé des commandes auprès d'un fournisseur spécifique",
+      "parameters": [
+        {
+          "name": "SUPPLIER",
+          "description": "Nom du fournisseur recherché"
+        }
+      ]
+    },
+    {
+      "id": "projects_complex_quotations",
+      "questions": [
+        "Quels projets ont les devis les plus complexes ?",
+        "Chantiers avec devis détaillés",
+        "Projets avec devis comportant beaucoup d'éléments",
+        "Liste des projets avec devis complexes"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, q.reference AS quotation_ref, COUNT(qp.id) AS product_count FROM projects p JOIN clients c ON p.client_id = c.id JOIN quotations q ON p.id = q.project_id JOIN quotation_products qp ON q.id = qp.quotation_id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname, q.reference ORDER BY product_count DESC LIMIT 10",
+      "description": "Liste des 10 projets avec les devis comportant le plus grand nombre d'éléments"
+    },
+    {
+      "id": "projects_highest_temperature",
+      "questions": [
+        "Quels projets ont été réalisés pendant les périodes les plus chaudes ?",
+        "Chantiers avec températures élevées",
+        "Projets sous forte chaleur",
+        "Liste des projets en conditions de températures élevées"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, ROUND(AVG(dsr.temperature)) AS avg_temperature, MAX(dsr.temperature) AS max_temperature FROM projects p JOIN clients c ON p.client_id = c.id JOIN daily_site_reports dsr ON p.id = dsr.project_id WHERE dsr.temperature IS NOT NULL GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname HAVING AVG(dsr.temperature) > 25 ORDER BY avg_temperature DESC LIMIT 10",
+      "description": "Liste des 10 projets ayant eu les températures moyennes les plus élevées pendant leur réalisation (supérieures à 25°C)"
+    },
+    {
+      "id": "projects_deadline_approaching",
+      "questions": [
+        "Quels projets approchent de leur deadline ?",
+        "Chantiers dont l'échéance est proche",
+        "Projets avec deadline imminente",
+        "Liste des projets avec fin de délai approchant"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, (p.end_date - CURRENT_DATE) AS days_remaining, COALESCE(AVG(s.completion_percentage), 0) AS avg_completion_percentage FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id LEFT JOIN stages s ON p.id = s.project_id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' AND p.end_date IS NOT NULL AND p.end_date > CURRENT_DATE AND p.end_date <= CURRENT_DATE + INTERVAL '14 days' GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY days_remaining ASC",
+      "description": "Liste des projets en cours dont la date d'échéance est dans les 14 prochains jours, avec pourcentage d'avancement"
+    },
+    {
+      "id": "projects_delayed_stages",
+      "questions": [
+        "Quels projets ont des étapes en retard ?",
+        "Chantiers avec des phases dépassant leur date d'échéance",
+        "Projets avec retards au niveau des étapes",
+        "Liste des projets avec des étapes en retard"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, s.name AS stage_name, s.end_date AS stage_due_date, (CURRENT_DATE - s.end_date) AS days_overdue FROM projects p JOIN clients c ON p.client_id = c.id JOIN stages s ON p.id = s.project_id JOIN ref_status rs ON s.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'stage' AND s.end_date < CURRENT_DATE ORDER BY days_overdue DESC",
+      "description": "Liste des projets ayant des étapes en cours qui ont dépassé leur date d'échéance"
+    },
+    {
+      "id": "projects_client_satisfaction",
+      "questions": [
+        "Quels projets ont les clients les plus satisfaits ?",
+        "Chantiers avec retours clients positifs",
+        "Projets avec clients contents",
+        "Liste des projets par satisfaction client"
+      ],
+      "sql": "SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(sn.id) FILTER (WHERE sn.note_type IN (SELECT id FROM ref_note_types WHERE code = 'client')) AS client_notes, COUNT(qc.id) FILTER (WHERE rqcs.code = 'validé') AS passed_checkpoints, COUNT(qc.id) AS total_checkpoints, CASE WHEN COUNT(qc.id) > 0 THEN ROUND((COUNT(qc.id) FILTER (WHERE rqcs.code = 'validé')::numeric / COUNT(qc.id)) * 100, 2) ELSE NULL END AS quality_score FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN site_notes sn ON p.id = sn.project_id LEFT JOIN stages s ON p.id = s.project_id LEFT JOIN quality_checkpoints qc ON s.id = qc.stage_id LEFT JOIN ref_quality_checkpoint_status rqcs ON qc.status = rqcs.id GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname ORDER BY quality_score DESC NULLS LAST, client_notes ASC LIMIT 10",
+      "description": "Liste des 10 projets ayant les meilleurs indicateurs de satisfaction client basés sur la qualité et les notes client"
+    },
+    {
+      "id": "projects_incomplete_documentation",
+      "questions": [
+        "Quels projets ont une documentation incomplète ?",
+        "Chantiers avec dossiers incomplets",
+        "Projets nécessitant plus de documentation",
+        "Liste des projets avec documentation manquante"
+      ],
+      "sql": "WITH project_docs AS (SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, COUNT(DISTINCT qc.id) FILTER (WHERE qc.required_photos = true AND qc.completed_at IS NOT NULL) AS completed_photo_checkpoints, COUNT(DISTINCT dsr.id) AS daily_reports, COUNT(DISTINCT s.id) AS stages, EXTRACT(DAY FROM CASE WHEN p.end_date < CURRENT_DATE THEN p.end_date - p.start_date ELSE CURRENT_DATE - p.start_date END) AS project_days FROM projects p JOIN clients c ON p.client_id = c.id LEFT JOIN stages s ON p.id = s.project_id LEFT JOIN quality_checkpoints qc ON s.id = qc.stage_id LEFT JOIN daily_site_reports dsr ON p.id = dsr.project_id WHERE p.start_date IS NOT NULL GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname) SELECT id, name, start_date, end_date, client_name, completed_photo_checkpoints, daily_reports, stages, project_days, CASE WHEN project_days > 0 THEN ROUND((daily_reports::numeric / project_days) * 100, 2) ELSE 0 END AS daily_report_completion FROM project_docs WHERE (project_days > 7 AND daily_reports < project_days * 0.7) OR (stages > 2 AND completed_photo_checkpoints < stages) ORDER BY daily_report_completion ASC, completed_photo_checkpoints ASC LIMIT 15",
+      "description": "Liste des projets ayant une documentation incomplète (rapports journaliers manquants ou photos de contrôle qualité manquantes)"
+    },
+    {
+      "id": "projects_material_efficiency",
+      "questions": [
+        "Quels projets sont les plus efficaces en utilisation de matériaux ?",
+        "Chantiers avec utilisation optimale des matériaux",
+        "Projets avec bon ratio matériaux/revenus",
+        "Liste des projets par efficacité matériaux"
+      ],
+      "sql": "WITH material_costs AS (SELECT p.id, p.name, p.start_date, p.end_date, c.firstname || ' ' || c.lastname AS client_name, SUM(i.total_ttc) AS total_revenue, SUM(pm.total_price) AS material_cost, SUM(pm.quantity) AS material_quantity FROM projects p JOIN clients c ON p.client_id = c.id JOIN invoices i ON p.id = i.project_id JOIN project_materials pm ON p.id = pm.project_id WHERE p.status IN (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') GROUP BY p.id, p.name, p.start_date, p.end_date, c.firstname, c.lastname HAVING SUM(i.total_ttc) > 0 AND SUM(pm.total_price) > 0) SELECT id, name, start_date, end_date, client_name, total_revenue, material_cost, ROUND((total_revenue / material_cost), 2) AS revenue_per_material_cost FROM material_costs ORDER BY revenue_per_material_cost DESC LIMIT 10",
+      "description": "Liste des 10 projets terminés ayant le meilleur ratio revenus/coûts des matériaux"
+    },
+    {
+      "id": "projects_seasonal_performance",
+      "questions": [
+        "Comment performent les projets selon les saisons ?",
+        "Chantiers par saison et leur performance",
+        "Projets par saison avec indicateurs",
+        "Analyse saisonnière des projets"
+      ],
+      "sql": "WITH seasonal_projects AS (SELECT p.id, p.name, CASE WHEN EXTRACT(MONTH FROM p.start_date) IN (12, 1, 2) THEN 'Hiver' WHEN EXTRACT(MONTH FROM p.start_date) IN (3, 4, 5) THEN 'Printemps' WHEN EXTRACT(MONTH FROM p.start_date) IN (6, 7, 8) THEN 'Été' WHEN EXTRACT(MONTH FROM p.start_date) IN (9, 10, 11) THEN 'Automne' END AS season, (p.end_date - p.start_date) AS duration_days, COALESCE(SUM(i.total_ttc), 0) AS total_revenue, COALESCE(SUM(e.amount), 0) AS total_expenses FROM projects p LEFT JOIN invoices i ON p.id = i.project_id LEFT JOIN expenses e ON p.id = e.project_id WHERE p.start_date IS NOT NULL AND p.end_date IS NOT NULL AND p.status IN (SELECT id FROM ref_status WHERE code = 'termine' AND entity_type = 'project') GROUP BY p.id, p.name, p.start_date, p.end_date) SELECT season, COUNT(*) AS project_count, ROUND(AVG(duration_days)) AS avg_duration, ROUND(AVG(total_revenue)) AS avg_revenue, ROUND(AVG(total_expenses)) AS avg_expenses, ROUND(AVG(total_revenue - total_expenses)) AS avg_profit FROM seasonal_projects GROUP BY season ORDER BY CASE WHEN season = 'Hiver' THEN 1 WHEN season = 'Printemps' THEN 2 WHEN season = 'Été' THEN 3 WHEN season = 'Automne' THEN 4 END",
+      "description": "Analyse des performances des projets par saison (nombre de projets, durée moyenne, revenus moyens, dépenses moyennes, profit moyen)"
+    },
+    {
+      "id": "projects_period_comparison",
+      "questions": [
+        "Compare les projets entre [PERIOD1_START] et [PERIOD1_END] avec ceux entre [PERIOD2_START] et [PERIOD2_END]",
+        "Différences entre les projets de [PERIOD1_START] à [PERIOD1_END] et de [PERIOD2_START] à [PERIOD2_END]",
+        "Analyse comparative des projets sur deux périodes",
+        "Évolution des projets entre deux périodes",
+        "Quelles sont les différences entre les projets de deux périodes",
+        "Compare les chantiers de deux périodes différentes",
+        "Comparatif des projets entre deux périodes"
+      ],
+      "sql": "WITH periode1 AS (SELECT COUNT(*) AS nombre_projets, COUNT(DISTINCT client_id) AS nombre_clients, ROUND(AVG(EXTRACT(DAY FROM (end_date - start_date)))) AS duree_moyenne, SUM(CASE WHEN rs.code = 'termine' THEN 1 ELSE 0 END) AS projets_termines, ROUND(AVG(COALESCE(pb.total_budget, 0))) AS budget_moyen FROM projects p JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_budgets pb ON p.id = pb.project_id WHERE p.start_date BETWEEN '[PERIOD1_START]'::date AND '[PERIOD1_END]'::date), periode2 AS (SELECT COUNT(*) AS nombre_projets, COUNT(DISTINCT client_id) AS nombre_clients, ROUND(AVG(EXTRACT(DAY FROM (end_date - start_date)))) AS duree_moyenne, SUM(CASE WHEN rs.code = 'termine' THEN 1 ELSE 0 END) AS projets_termines, ROUND(AVG(COALESCE(pb.total_budget, 0))) AS budget_moyen FROM projects p JOIN ref_status rs ON p.status = rs.id LEFT JOIN project_budgets pb ON p.id = pb.project_id WHERE p.start_date BETWEEN '[PERIOD2_START]'::date AND '[PERIOD2_END]'::date) SELECT p1.nombre_projets AS projets_periode1, p2.nombre_projets AS projets_periode2, (p2.nombre_projets - p1.nombre_projets) AS diff_projets, CASE WHEN p1.nombre_projets > 0 THEN ROUND(((p2.nombre_projets - p1.nombre_projets)::numeric / p1.nombre_projets) * 100, 2) ELSE NULL END AS variation_projets_pct, p1.nombre_clients AS clients_periode1, p2.nombre_clients AS clients_periode2, (p2.nombre_clients - p1.nombre_clients) AS diff_clients, p1.duree_moyenne AS duree_moyenne_periode1, p2.duree_moyenne AS duree_moyenne_periode2, (p2.duree_moyenne - p1.duree_moyenne) AS diff_duree, p1.projets_termines AS termines_periode1, p2.projets_termines AS termines_periode2, (p2.projets_termines - p1.projets_termines) AS diff_termines, p1.budget_moyen AS budget_moyen_periode1, p2.budget_moyen AS budget_moyen_periode2, (p2.budget_moyen - p1.budget_moyen) AS diff_budget FROM periode1 p1, periode2 p2",
+      "description": "Analyse comparative des projets démarrés sur deux périodes distinctes (nombre de projets, clients, durée moyenne, projets terminés, budget moyen)",
+      "parameters": [
+        {
+          "name": "PERIOD1_START",
+          "description": "Date de début de la première période (format YYYY-MM-DD)",
+          "default": "DATE_TRUNC('month', CURRENT_DATE)::date - INTERVAL '1 month'"
+        },
+        {
+          "name": "PERIOD1_END",
+          "description": "Date de fin de la première période (format YYYY-MM-DD)",
+          "default": "DATE_TRUNC('month', CURRENT_DATE)::date - INTERVAL '1 day'"
+        },
+        {
+          "name": "PERIOD2_START",
+          "description": "Date de début de la seconde période (format YYYY-MM-DD)",
+          "default": "DATE_TRUNC('month', CURRENT_DATE)::date"
+        },
+        {
+          "name": "PERIOD2_END",
+          "description": "Date de fin de la seconde période (format YYYY-MM-DD)",
+          "default": "CURRENT_DATE"
+        },
+        {
+          "id": "projects_starting_next_month",
+          "questions": [
+            "Quels projets commencent le mois prochain ?",
+            "Liste des projets qui débutent le mois prochain",
+            "Projets démarrant le mois prochain",
+            "quel proejts commencent le mois prochain"
+          ],
+          "sql": "SELECT p.name, p.description, p.start_date, p.end_date, rs.name as status, c.firstname || ' ' || c.lastname as client_name FROM projects p JOIN ref_status rs ON p.status = rs.id JOIN clients c ON p.client_id = c.id WHERE EXTRACT(MONTH FROM p.start_date) = EXTRACT(MONTH FROM CURRENT_DATE + INTERVAL '1 month') AND EXTRACT(YEAR FROM p.start_date) = EXTRACT(YEAR FROM CURRENT_DATE + INTERVAL '1 month') ORDER BY p.start_date",
+          "description": "Liste des projets qui commencent le mois prochain"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1294 @@
+{
+  "queries": [
+    {
+      "id": "quotations_recent",
+      "questions": [
+        "Quels sont les devis récents ?",
+        "Derniers devis créés",
+        "Devis récemment établis",
+        "Liste des devis récents",
+        "Devis les plus récents",
+        "Afficher les derniers devis",
+        "Quels sont les devis créés dernièrement ?",
+        "Montrer les devis les plus récents",
+        "Devis établis récemment",
+        "Dernières propositions commerciales",
+        "Devis émis récemment",
+        "Dernières offres établies",
+        "Nouveaux devis",
+        "Devis récents à consulter",
+        "Quels sont les devis créés récemment ?",
+        "Propositions récentes",
+        "Devis datant des derniers jours",
+        "Montrer les devis les plus récemment créés",
+        "Afficher les derniers devis émis",
+        "Propositions commerciales récentes"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, rqs.name AS status, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id ORDER BY q.issue_date DESC LIMIT 10 OFFSET 0",
+      "description": "Liste des 10 devis les plus récents avec détails du client et projet associé",
+      "pagination": true
+    },
+    {
+      "id": "quotations_by_status",
+      "questions": [
+        "Quels sont les devis [STATUS] ?",
+        "Liste des devis en statut [STATUS]",
+        "Devis avec le statut [STATUS]",
+        "Afficher les devis [STATUS]",
+        "Montrer les devis [STATUS]",
+        "Devis au statut [STATUS]",
+        "Voir les devis [STATUS]",
+        "Propositions commerciales [STATUS]",
+        "Devis marqués [STATUS]",
+        "Quels devis sont [STATUS] ?",
+        "Affiche-moi les devis [STATUS]",
+        "Je veux voir les devis [STATUS]",
+        "Montre les devis ayant le statut [STATUS]",
+        "Quels sont tous les devis [STATUS] ?",
+        "Liste de tous les devis [STATUS]",
+        "Propositions [STATUS]",
+        "Devis classés comme [STATUS]",
+        "Tous les devis en statut [STATUS]",
+        "Cherche les devis [STATUS]",
+        "Devis avec l'état [STATUS]"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.validity_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = '[STATUS]' OR rqs.name ILIKE '%[STATUS]%' ORDER BY q.issue_date DESC LIMIT 20 OFFSET 0",
+      "description": "Liste des devis filtrés par statut",
+      "parameters": [
+        {
+          "name": "STATUS",
+          "description": "Statut des devis (en_attente, accepté, refusé)",
+          "default": "en_attente"
+        }
+      ],
+      "pagination": true
+    },
+    {
+      "id": "quotations_by_client",
+      "questions": [
+        "Quels sont les devis pour le client [CLIENT] ?",
+        "Devis du client [CLIENT]",
+        "Liste des devis associés à [CLIENT]",
+        "Afficher tous les devis de [CLIENT]",
+        "Montrer les devis de [CLIENT]",
+        "Propositions commerciales pour [CLIENT]",
+        "Devis liés au client [CLIENT]",
+        "Afficher les devis pour [CLIENT]",
+        "Montrer les propositions pour [CLIENT]",
+        "Quels devis ont été créés pour [CLIENT] ?",
+        "Devis au nom de [CLIENT]",
+        "Tous les devis de [CLIENT]",
+        "Historique des devis de [CLIENT]",
+        "Devis existants pour [CLIENT]",
+        "Montrer l'historique des devis de [CLIENT]",
+        "Quelles sont les propositions pour [CLIENT] ?",
+        "Devis actuels pour le client [CLIENT]",
+        "Voir les devis au nom de [CLIENT]",
+        "Quelles offres ont été faites à [CLIENT] ?",
+        "Liste complète des devis de [CLIENT]"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.validity_date, q.total_ht, q.total_ttc, rqs.name AS status, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE (c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' ORDER BY q.issue_date DESC LIMIT 20 OFFSET 0",
+      "description": "Liste des devis associés à un client spécifique",
+      "parameters": [
+        {
+          "name": "CLIENT",
+          "description": "Nom ou email du client"
+        }
+      ],
+      "pagination": true
+    },
+    {
+      "id": "quotations_by_project",
+      "questions": [
+        "Quels sont les devis pour le projet [PROJECT] ?",
+        "Devis associés au chantier [PROJECT]",
+        "Liste des devis du projet [PROJECT]",
+        "Afficher les devis liés à [PROJECT]",
+        "Montrer les devis du projet [PROJECT]",
+        "Devis rattachés au projet [PROJECT]",
+        "Propositions commerciales pour [PROJECT]",
+        "Offres liées au chantier [PROJECT]",
+        "Devis pour le chantier [PROJECT]",
+        "Voir les devis du projet [PROJECT]",
+        "Quels devis ont été créés pour [PROJECT] ?",
+        "Liste des propositions pour [PROJECT]",
+        "Devis existants pour le projet [PROJECT]",
+        "Tous les devis liés à [PROJECT]",
+        "Historique des devis du projet [PROJECT]",
+        "Montrer toutes les propositions pour [PROJECT]",
+        "Devis concernant [PROJECT]",
+        "Afficher les offres pour le projet [PROJECT]",
+        "Quels sont tous les devis pour [PROJECT] ?",
+        "Propositions commerciales associées à [PROJECT]"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.validity_date, q.total_ht, q.total_ttc, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE p.name ILIKE '%[PROJECT]%' OR p.id::text = '[PROJECT]' ORDER BY q.issue_date DESC LIMIT 20 OFFSET 0",
+      "description": "Liste des devis associés à un projet spécifique",
+      "parameters": [
+        {
+          "name": "PROJECT",
+          "description": "Nom ou ID du projet"
+        }
+      ],
+      "pagination": true
+    },
+    {
+      "id": "quotation_details",
+      "questions": [
+        "Détails du devis [REFERENCE]",
+        "Afficher le devis [REFERENCE]",
+        "Information complète sur le devis [REFERENCE]",
+        "Voir le devis numéro [REFERENCE]",
+        "Montre-moi le devis [REFERENCE]",
+        "Détailles le devis [REFERENCE]",
+        "Informations du devis [REFERENCE]",
+        "Données complètes du devis [REFERENCE]",
+        "Consulter le devis [REFERENCE]",
+        "Affiche les détails du devis [REFERENCE]",
+        "Je veux voir le devis [REFERENCE]",
+        "Données du devis [REFERENCE]",
+        "Contenu du devis [REFERENCE]",
+        "Montre le devis [REFERENCE] en détail",
+        "Donne-moi toutes les informations sur le devis [REFERENCE]",
+        "Tout savoir sur le devis [REFERENCE]",
+        "Caractéristiques du devis [REFERENCE]",
+        "Quelles sont les informations du devis [REFERENCE] ?",
+        "Détail complet du devis n° [REFERENCE]",
+        "Montrer toutes les informations du devis [REFERENCE]"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.validity_date, q.total_ht, q.tva_rate, q.total_ttc, rqs.name AS status, p.name AS project_name, c.firstname || ' ' || c.lastname AS client_name, c.email AS client_email, c.phone AS client_phone, q.payment_conditions, q.notes FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.reference ILIKE '%[REFERENCE]%' OR q.id::text = '[REFERENCE]'",
+      "description": "Détails complets d'un devis spécifique",
+      "parameters": [
+        {
+          "name": "REFERENCE",
+          "description": "Référence ou ID du devis"
+        }
+      ]
+    },
+    {
+      "id": "quotation_products",
+      "questions": [
+        "Produits du devis [REFERENCE]",
+        "Détail des produits pour le devis [REFERENCE]",
+        "Lignes de produits dans le devis [REFERENCE]",
+        "Que contient le devis [REFERENCE] ?",
+        "Contenu du devis [REFERENCE]",
+        "Articles inclus dans le devis [REFERENCE]",
+        "Liste des produits du devis [REFERENCE]",
+        "Quels sont les articles du devis [REFERENCE] ?",
+        "Composition du devis [REFERENCE]",
+        "Éléments présents dans le devis [REFERENCE]",
+        "Détail des articles du devis [REFERENCE]",
+        "Quels produits figurent dans le devis [REFERENCE] ?",
+        "Montrer le contenu du devis [REFERENCE]",
+        "Afficher les lignes du devis [REFERENCE]",
+        "Voir les produits du devis [REFERENCE]",
+        "Quels sont les éléments du devis [REFERENCE] ?",
+        "Prestations listées dans le devis [REFERENCE]",
+        "Détailler le contenu du devis [REFERENCE]",
+        "Éléments chiffrés dans le devis [REFERENCE]",
+        "Quelles sont les lignes détaillées du devis [REFERENCE] ?"
+      ],
+      "sql": "SELECT qp.id, qp.description, qp.quantity, qp.unit_price, qp.total_price, rpc.name AS category FROM quotation_products qp LEFT JOIN ref_product_categories rpc ON qp.category = rpc.id JOIN quotations q ON qp.quotation_id = q.id WHERE q.reference ILIKE '%[REFERENCE]%' OR q.id::text = '[REFERENCE]' ORDER BY qp.id",
+      "description": "Liste détaillée des produits inclus dans un devis spécifique",
+      "parameters": [
+        {
+          "name": "REFERENCE",
+          "description": "Référence ou ID du devis"
+        }
+      ]
+    },
+    {
+      "id": "quotations_expiring_soon",
+      "questions": [
+        "Quels devis expirent bientôt ?",
+        "Devis avec date de validité proche",
+        "Liste des devis qui expirent dans les [DAYS] jours",
+        "Devis à relancer rapidement",
+        "Quels sont les devis qui arrivent à expiration ?",
+        "Devis sur le point d'expirer",
+        "Devis dont la validité se termine bientôt",
+        "Propositions commerciales expirant prochainement",
+        "Devis arrivant en fin de validité dans les [DAYS] jours",
+        "Quels devis vont expirer dans les [DAYS] jours ?",
+        "Afficher les devis proches de l'expiration",
+        "Devis à suivre pour expiration imminente",
+        "Quelles offres expirent dans les [DAYS] jours ?",
+        "Devis dont la validité expire sous [DAYS] jours",
+        "Liste des offres commerciales expirant bientôt",
+        "Devis en attente expirant dans [DAYS] jours",
+        "Montrer les devis qui arrivent à échéance",
+        "Devis avec date limite de validité proche",
+        "Quels devis arrivent en fin de période de validité ?",
+        "Propositions qui expirent dans les prochains [DAYS] jours"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.validity_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, (q.validity_date - CURRENT_DATE) AS days_left FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.validity_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '[DAYS] days') AND rqs.code = 'en_attente' ORDER BY q.validity_date",
+      "description": "Liste des devis qui expirent prochainement et sont encore en attente",
+      "parameters": [
+        {
+          "name": "DAYS",
+          "description": "Nombre de jours avant expiration",
+          "default": "14"
+        }
+      ]
+    },
+    {
+      "id": "quotations_expired",
+      "questions": [
+        "Quels devis sont expirés ?",
+        "Devis avec date de validité dépassée",
+        "Liste des devis expirés",
+        "Devis dont la validité est terminée",
+        "Quels sont les devis qui ont expiré ?",
+        "Propositions commerciales expirées",
+        "Devis hors délai de validité",
+        "Quels devis ont dépassé leur date de validité ?",
+        "Afficher les devis expirés",
+        "Devis périmés",
+        "Liste des offres expirées",
+        "Devis qui ne sont plus valides",
+        "Montrer les devis expirés",
+        "Devis ayant dépassé leur date d'expiration",
+        "Quels devis ont atteint leur date limite de validité ?",
+        "Devis en attente expirés",
+        "Propositions commerciales périmées",
+        "Devis dont la date de validité est passée",
+        "Quelles offres ont expiré ?",
+        "Devis non valides car expirés",
+        "Devis dépassant la date de validité",
+        "Quels sont les devis arrivés à expiration ?",
+        "Devis caduques par dépassement de date",
+        "Liste des propositions ayant expiré",
+        "Devis avec validité terminée",
+        "Montrer les devis dont la validité est échue",
+        "Devis obsolètes à cause de la date de validité",
+        "Quels devis sont considérés comme non valides car expirés ?",
+        "Devis en attente avec date de validité dépassée",
+        "Devis dont la date limite est dépassée",
+        "Propositions commerciales non valides car trop anciennes",
+        "Quels devis ont dépassé leur validité ?",
+        "Afficher les devis qui ont dépassé leur durée de validité",
+        "Devis arrivés à terme de validité",
+        "Offres commerciales anciennes et expirées",
+        "Propositions avec date d'expiration dépassée"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.validity_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, (CURRENT_DATE - q.validity_date) AS days_overdue FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.validity_date < CURRENT_DATE AND rqs.code = 'en_attente' ORDER BY q.validity_date DESC",
+      "description": "Liste des devis qui ont dépassé leur date de validité mais sont toujours en attente"
+    },
+    {
+      "id": "quotations_this_month",
+      "questions": [
+        "Quels devis ont été créés ce mois-ci ?",
+        "Devis du mois en cours",
+        "Liste des devis émis ce mois",
+        "Devis établis durant le mois courant",
+        "Quels sont les devis du mois actuel ?",
+        "Devis créés en ce mois",
+        "Propositions commerciales du mois",
+        "Devis émis pendant le mois en cours",
+        "Quels devis datent de ce mois-ci ?",
+        "Devis rédigés ce mois",
+        "Liste des devis du mois courant",
+        "Devis établis ce mois-ci",
+        "Propositions commerciales récentes du mois",
+        "Quels sont les devis réalisés durant le mois actuel ?",
+        "Devis générés dans le mois",
+        "Liste des offres du mois en cours",
+        "Quels devis ont été rédigés ce mois ?",
+        "Devis préparés durant le mois actuel",
+        "Propositions faites durant le mois courant",
+        "Devis du mois présent"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE EXTRACT(MONTH FROM q.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM q.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY q.issue_date DESC",
+      "description": "Liste des devis créés dans le mois courant"
+    },
+    {
+      "id": "quotations_accepted_this_month",
+      "questions": [
+        "Quels devis ont été acceptés ce mois-ci ?",
+        "Devis validés dans le mois courant",
+        "Liste des devis acceptés ce mois",
+        "Devis confirmés durant le mois en cours",
+        "Quels sont les devis acceptés du mois ?",
+        "Devis approuvés ce mois-ci",
+        "Liste des propositions acceptées ce mois",
+        "Devis validés en ce mois",
+        "Offres acceptées durant le mois courant",
+        "Quels devis ont reçu une validation ce mois ?",
+        "Devis avec accord client ce mois-ci",
+        "Propositions commerciales validées du mois",
+        "Quels sont les devis qui ont été acceptés ce mois ?",
+        "Devis ayant reçu un accord ce mois",
+        "Liste des contrats validés ce mois-ci",
+        "Devis signés durant le mois courant",
+        "Quelles offres ont été acceptées ce mois ?",
+        "Propositions validées du mois actuel",
+        "Devis acceptés pendant le mois en cours",
+        "Contrats approuvés ce mois"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'accepté' AND EXTRACT(MONTH FROM q.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM q.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY q.issue_date DESC",
+      "description": "Liste des devis acceptés dans le mois courant"
+    },
+    {
+      "id": "quotations_highest_value",
+      "questions": [
+        "Quels sont les devis avec les montants les plus élevés ?",
+        "Devis les plus chers",
+        "Liste des devis par montant décroissant",
+        "Devis avec les plus grands montants",
+        "Quels sont les devis les plus importants en valeur ?",
+        "Top des devis par montant",
+        "Devis les plus élevés financièrement",
+        "Quels sont les devis avec les plus gros montants ?",
+        "Propositions commerciales les plus importantes",
+        "Devis de plus grande valeur",
+        "Top 10 des devis les plus chers",
+        "Quels sont les devis les plus coûteux ?",
+        "Devis aux montants les plus significatifs",
+        "Classement des devis par valeur",
+        "Offres commerciales de plus grande valeur",
+        "Quels sont les devis aux montants les plus conséquents ?",
+        "Devis à forte valeur financière",
+        "Liste des devis les plus importants",
+        "Top des propositions par montant",
+        "Devis ayant les plus grandes valeurs"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id ORDER BY q.total_ht DESC LIMIT 10",
+      "description": "Liste des 10 devis avec les montants les plus élevés"
+    },
+    {
+      "id": "quotations_conversion_rate",
+      "questions": [
+        "Quel est le taux de conversion des devis ?",
+        "Pourcentage de devis acceptés",
+        "Statistiques de conversion des devis",
+        "Ratio d'acceptation des devis",
+        "Quel pourcentage de devis sont acceptés ?",
+        "Taux de réussite des devis",
+        "Quel est le taux d'acceptation des devis ?",
+        "Performance de conversion des propositions",
+        "Ratio de devis transformés en ventes",
+        "Pourcentage de succès des devis",
+        "Quelle est l'efficacité de nos devis ?",
+        "Mesure de la performance commerciale des devis",
+        "Taux de transformation des propositions",
+        "Quel est le taux de succès commercial ?",
+        "Pourcentage d'acceptation des offres",
+        "Statistiques de réussite des propositions",
+        "Efficacité des devis en pourcentage",
+        "Taux de conversion des propositions commerciales",
+        "Quelle proportion de devis est acceptée ?",
+        "Indicateur de performance des devis"
+      ],
+      "sql": "SELECT COUNT(*) AS total_quotations, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_quotations, ROUND((SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END)::decimal / COUNT(*)) * 100, 2) AS conversion_rate FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date >= CURRENT_DATE - INTERVAL '1 year'",
+      "description": "Calcul du taux de conversion des devis (pourcentage de devis acceptés) sur la dernière année"
+    },
+    {
+      "id": "quotations_by_product_category",
+      "questions": [
+        "Quels devis contiennent des produits de catégorie [CATEGORY] ?",
+        "Devis avec des produits [CATEGORY]",
+        "Liste des devis incluant [CATEGORY]",
+        "Devis proposant des produits [CATEGORY]",
+        "Devis contenant la catégorie [CATEGORY]",
+        "Quelles offres incluent des produits [CATEGORY] ?",
+        "Propositions avec articles [CATEGORY]",
+        "Devis avec catégorie [CATEGORY]",
+        "Quels sont les devis proposant [CATEGORY] ?",
+        "Liste des offres avec produits [CATEGORY]",
+        "Devis qui comprennent [CATEGORY]",
+        "Quels devis ont des éléments de type [CATEGORY] ?",
+        "Propositions commerciales incluant [CATEGORY]",
+        "Devis avec des prestations [CATEGORY]",
+        "Devis où figurent des produits [CATEGORY]",
+        "Quels devis contiennent des articles de type [CATEGORY] ?",
+        "Offres avec composants [CATEGORY]",
+        "Devis comportant la catégorie [CATEGORY]",
+        "Quelles sont les propositions avec [CATEGORY] ?"
+      ],
+      "sql": "SELECT DISTINCT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN quotation_products qp ON q.id = qp.quotation_id JOIN ref_product_categories rpc ON qp.category = rpc.id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rpc.name ILIKE '%[CATEGORY]%' OR rpc.code ILIKE '%[CATEGORY]%' ORDER BY q.issue_date DESC",
+      "description": "Liste des devis qui contiennent des produits d'une catégorie spécifique",
+      "parameters": [
+        {
+          "name": "CATEGORY",
+          "description": "Catégorie de produit (matériaux, main_doeuvre, transport, autres)"
+        }
+      ]
+    },
+    {
+      "id": "quotations_without_project",
+      "questions": [
+        "Quels devis ne sont pas liés à un projet actif ?",
+        "Devis sans projet en cours",
+        "Liste des devis orphelins",
+        "Devis dont le projet n'est pas actif",
+        "Devis acceptés sans projet actif",
+        "Quels devis ont été acceptés mais sont sans projet actif ?",
+        "Devis validés avec projet inactif",
+        "Propositions acceptées sans projet correspondant actif",
+        "Devis approuvés dont le projet est inactif",
+        "Quels sont les devis acceptés sans projet en cours ?",
+        "Devis validés pour des projets non démarrés",
+        "Liste des devis avec statut accepté mais projet inactif",
+        "Devis approuvés pour des projets non actifs",
+        "Quels devis sont liés à des projets non démarrés ?",
+        "Devis confirmés sans projet en cours",
+        "Propositions commerciales validées sans projet actif associé"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, p_status.name AS project_status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id JOIN ref_status p_status ON p.status = p_status.id WHERE p_status.code != 'en_cours' AND rqs.code = 'accepté' ORDER BY q.issue_date DESC",
+      "description": "Liste des devis acceptés mais dont le projet associé n'est pas en cours"
+    },
+    {
+      "id": "quotations_average_by_month",
+      "questions": [
+        "Quelle est la moyenne des montants des devis par mois ?",
+        "Montant moyen des devis mensuels",
+        "Statistiques des devis par mois",
+        "Evolution mensuelle des montants de devis",
+        "Moyenne mensuelle des devis",
+        "Quelle est la valeur moyenne des devis par mois ?",
+        "Tendance du montant moyen des devis",
+        "Statistiques mensuelles de la valeur des devis",
+        "Montant moyen mensuel des devis",
+        "Comment évolue la moyenne des devis chaque mois ?",
+        "Analyse de la moyenne des montants par mois",
+        "Quel est le montant moyen mensuel des devis ?",
+        "Moyenne des valeurs des devis par mois",
+        "Tendance mensuelle du montant moyen des devis",
+        "Évolution de la valeur moyenne mensuelle des devis",
+        "Montants moyens des propositions commerciales par mois",
+        "Analyse mensuelle de la moyenne des devis"
+      ],
+      "sql": "SELECT EXTRACT(YEAR FROM q.issue_date) AS year, EXTRACT(MONTH FROM q.issue_date) AS month, TO_CHAR(q.issue_date, 'Month YYYY') AS month_name, COUNT(*) AS quotation_count, ROUND(AVG(q.total_ht), 2) AS average_amount_ht FROM quotations q WHERE q.issue_date >= CURRENT_DATE - INTERVAL '12 months' GROUP BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date), TO_CHAR(q.issue_date, 'Month YYYY') ORDER BY EXTRACT(YEAR FROM q.issue_date) DESC, EXTRACT(MONTH FROM q.issue_date) DESC",
+      "description": "Statistiques des montants moyens de devis par mois sur les 12 derniers mois"
+    },
+    {
+      "id": "quotations_pending_approval",
+      "questions": [
+        "Quels devis sont en attente de validation ?",
+        "Devis à suivre pour approbation",
+        "Liste des devis non décidés",
+        "Devis nécessitant une relance",
+        "Devis en attente de décision client",
+        "Quels sont les devis sans réponse ?",
+        "Devis en cours de validation",
+        "Liste des devis en attente de réponse",
+        "Devis valides attendant une décision",
+        "Quels devis n'ont pas encore reçu de réponse ?",
+        "Propositions commerciales en attente",
+        "Devis qui nécessitent un suivi client",
+        "Liste des devis sans décision finale",
+        "Devis actifs en attente d'approbation",
+        "Quels sont les devis qui attendent une décision ?",
+        "Propositions commerciales à relancer",
+        "Devis envoyés en attente de validation",
+        "Offres commerciales nécessitant une relance",
+        "Devis sans statut définitif"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.validity_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, c.phone AS client_phone, c.email AS client_email, (CURRENT_DATE - q.issue_date) AS days_outstanding FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'en_attente' AND q.validity_date > CURRENT_DATE ORDER BY (CURRENT_DATE - q.issue_date) DESC",
+      "description": "Liste des devis en attente de validation et toujours valides avec coordonnées client pour relance"
+    },
+    {
+      "id": "quotations_monthly_summary",
+      "questions": [
+        "Quel est le résumé des devis ce mois-ci ?",
+        "Bilan des devis du mois",
+        "Statistiques des devis du mois",
+        "Résumé des devis du mois en cours",
+        "Bilan mensuel des devis",
+        "Statistiques mensuelles des devis",
+        "Résumé mensuel des devis",
+        "Bilan des devis du mois courant",
+        "Statistiques des devis mensuelles",
+        "Résumé des devis du mois",
+        "Synthèse des devis du mois actuel",
+        "Quel est le bilan mensuel des devis ?",
+        "Chiffres clés des devis ce mois-ci",
+        "Performance des devis du mois courant",
+        "Situation des devis pour le mois en cours",
+        "Tableau de bord mensuel des devis",
+        "État des devis pour ce mois",
+        "Quelle est la synthèse des devis du mois actuel ?",
+        "Vue d'ensemble des devis ce mois",
+        "Chiffres du mois pour les devis",
+        "Indicateurs mensuels des devis",
+        "Rapport mensuel sur les devis",
+        "Compilation des données de devis du mois",
+        "Analyse du mois pour les devis",
+        "Point mensuel sur les devis"
+      ],
+      "sql": "SELECT COUNT(*) as total_quotations, COUNT(CASE WHEN rqs.code = 'accepté' THEN 1 END) as accepted_quotations, COUNT(CASE WHEN rqs.code = 'en_attente' THEN 1 END) as pending_quotations, COUNT(CASE WHEN rqs.code = 'refusé' THEN 1 END) as rejected_quotations, SUM(total_ttc) as total_amount, ROUND(AVG(total_ttc), 2) as average_amount FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE EXTRACT(MONTH FROM q.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM q.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)",
+      "description": "Résumé des devis du mois en cours avec statistiques et montants"
+    },
+    {
+      "id": "quotations_by_amount_range",
+      "questions": [
+        "Quels sont les devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€ ?",
+        "Devis dans la fourchette [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Liste des devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Devis avec montant entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Quels devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€ ?",
+        "Devis dans la tranche [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Liste des devis [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Devis montant [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Quels devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Devis fourchette [MIN_AMOUNT]€ - [MAX_AMOUNT]€",
+        "Devis compris entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Quelles offres ont un montant entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€ ?",
+        "Propositions commerciales de [MIN_AMOUNT]€ à [MAX_AMOUNT]€",
+        "Devis de valeur [MIN_AMOUNT]€ à [MAX_AMOUNT]€",
+        "Quels sont les devis dont le prix est entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€ ?",
+        "Devis au tarif compris entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Liste des propositions entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Devis valorisés entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Montrer les devis de [MIN_AMOUNT]€ à [MAX_AMOUNT]€",
+        "Devis avec valeur dans l'intervalle [MIN_AMOUNT]€-[MAX_AMOUNT]€",
+        "Offres entre [MIN_AMOUNT] et [MAX_AMOUNT] euros"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.total_ttc BETWEEN [MIN_AMOUNT] AND [MAX_AMOUNT] ORDER BY q.total_ttc DESC",
+      "description": "Liste des devis dont le montant est compris dans une fourchette spécifique",
+      "parameters": [
+        {
+          "name": "MIN_AMOUNT",
+          "description": "Montant minimum en euros"
+        },
+        {
+          "name": "MAX_AMOUNT",
+          "description": "Montant maximum en euros"
+        }
+      ]
+    },
+    {
+      "id": "quotations_without_products",
+      "questions": [
+        "Quels devis n'ont pas de produits ?",
+        "Devis sans produits",
+        "Liste des devis vides",
+        "Devis sans articles",
+        "Quels devis sont vides ?",
+        "Devis sans lignes",
+        "Devis sans produits",
+        "Liste des devis sans articles",
+        "Devis vides",
+        "Devis sans contenu",
+        "Devis n'ayant aucun produit",
+        "Quels devis ne contiennent aucun article ?",
+        "Propositions commerciales sans ligne de produit",
+        "Devis avec zéro produit",
+        "Quels sont les devis sans aucun article attaché ?",
+        "Devis sans aucune ligne de détail",
+        "Liste des devis incomplets sans produit",
+        "Devis à compléter car sans produit",
+        "Quels devis manquent de produits ?",
+        "Propositions commerciales incomplètes sans article",
+        "Devis créés mais sans produit ajouté",
+        "Offres sans détail de prestations",
+        "Devis vierges de tout produit",
+        "Quels sont les devis sans lignes de produits ?"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE NOT EXISTS (SELECT 1 FROM quotation_products qp WHERE qp.quotation_id = q.id) ORDER BY q.issue_date DESC",
+      "description": "Liste des devis qui n'ont pas de produits associés"
+    },
+    {
+      "id": "quotations_with_high_discount",
+      "questions": [
+        "Quels devis ont une remise importante ?",
+        "Devis avec forte remise",
+        "Liste des devis avec remise importante",
+        "Devis avec remise significative",
+        "Quels sont les devis à forte remise ?",
+        "Devis avec réduction importante",
+        "Propositions commerciales fortement remisées",
+        "Quels devis incluent une remise conséquente ?",
+        "Devis avec des remises élevées",
+        "Offres à forte réduction tarifaire",
+        "Devis comportant des remises importantes",
+        "Quels sont les devis avec plus de 10% de remise ?",
+        "Liste des devis avec des réductions élevées",
+        "Devis proposant des remises significatives",
+        "Offres commerciales avec rabais importants",
+        "Quels devis ont des remises exceptionnelles ?",
+        "Devis avec des prix réduits significativement",
+        "Propositions avec importantes réductions",
+        "Devis avec rabais conséquents",
+        "Quels sont les devis avec remises notables ?"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.tva_rate, q.total_ttc, ROUND((q.total_ttc - (q.total_ht * (1 + q.tva_rate/100))) / (q.total_ht * (1 + q.tva_rate/100)) * 100, 2) as discount_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE (q.total_ttc - (q.total_ht * (1 + q.tva_rate/100))) / (q.total_ht * (1 + q.tva_rate/100)) * 100 < -10 ORDER BY discount_percentage ASC",
+      "description": "Liste des devis avec une remise supérieure à 10% (calculée à partir de la différence entre le montant TTC théorique et le montant TTC réel)"
+    },
+    {
+      "id": "quotations_by_payment_terms",
+      "questions": [
+        "Quels devis ont des conditions de paiement [TERMS] ?",
+        "Devis avec conditions [TERMS]",
+        "Liste des devis avec paiement [TERMS]",
+        "Devis conditions de paiement [TERMS]",
+        "Quels devis avec paiement [TERMS] ?",
+        "Devis paiement [TERMS]",
+        "Devis avec conditions [TERMS]",
+        "Liste des devis [TERMS]",
+        "Devis conditions [TERMS]",
+        "Devis paiement [TERMS]",
+        "Devis dont les conditions de paiement contiennent [TERMS]",
+        "Quelles propositions incluent des conditions [TERMS] ?",
+        "Offres avec modalités de paiement [TERMS]",
+        "Devis comprenant des conditions [TERMS]",
+        "Quels sont les devis avec des termes de paiement [TERMS] ?",
+        "Propositions commerciales avec clauses de paiement [TERMS]",
+        "Devis ayant pour condition [TERMS]",
+        "Quels devis mentionnent [TERMS] dans leurs conditions ?",
+        "Offres avec mention [TERMS] dans les paiements",
+        "Devis spécifiant [TERMS] comme modalité",
+        "Liste des propositions avec termes [TERMS]",
+        "Devis dont le paiement prévoit [TERMS]",
+        "Quels sont les devis stipulant [TERMS] ?"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, q.payment_conditions, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id WHERE q.payment_conditions ILIKE '%[TERMS]%' ORDER BY q.issue_date DESC",
+      "description": "Liste des devis avec des conditions de paiement spécifiques",
+      "parameters": [
+        {
+          "name": "TERMS",
+          "description": "Conditions de paiement à rechercher"
+        }
+      ]
+    },
+    {
+      "id": "quotations_without_invoice",
+      "questions": [
+        "Quels devis acceptés n'ont pas de facture ?",
+        "Devis acceptés sans facture",
+        "Liste des devis sans facture",
+        "Devis à facturer",
+        "Quels devis à facturer ?",
+        "Devis sans facture",
+        "Devis à facturer",
+        "Liste des devis sans facture",
+        "Devis sans facture",
+        "Devis à facturer",
+        "Devis acceptés mais non facturés",
+        "Quels devis validés sont en attente de facturation ?",
+        "Propositions acceptées sans facture associée",
+        "Devis validés à transformer en facture",
+        "Quels sont les devis acceptés qui n'ont pas été facturés ?",
+        "Devis confirmés mais sans facture émise",
+        "Liste des devis acceptés à facturer",
+        "Devis signés sans facturation",
+        "Quels devis approuvés sont en attente de facturation ?",
+        "Propositions commerciales validées sans facture",
+        "Devis acceptés nécessitant facturation",
+        "Offres acceptées mais non facturées",
+        "Contrats validés sans facture correspondante",
+        "Quels sont les devis validés par le client mais sans facture ?"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'accepté' AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.project_id = p.id) ORDER BY q.issue_date DESC",
+      "description": "Liste des devis acceptés qui n'ont pas encore de facture associée"
+    },
+    {
+      "id": "quotations_by_product_count",
+      "questions": [
+        "Quels devis ont plus de [COUNT] produits ?",
+        "Devis avec plus de [COUNT] articles",
+        "Liste des devis avec plus de [COUNT] produits",
+        "Devis avec plus de [COUNT] lignes",
+        "Quels devis ont plus de [COUNT] articles ?",
+        "Devis plus de [COUNT] produits",
+        "Devis avec plus de [COUNT] articles",
+        "Liste des devis plus de [COUNT] produits",
+        "Devis plus de [COUNT] articles",
+        "Devis avec plus de [COUNT] lignes"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, COUNT(qp.id) as product_count, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN quotation_products qp ON q.id = qp.quotation_id GROUP BY q.id, q.reference, q.issue_date, q.total_ttc, c.firstname, c.lastname, p.name HAVING COUNT(qp.id) > [COUNT] ORDER BY COUNT(qp.id) DESC",
+      "description": "Liste des devis ayant plus d'un certain nombre de produits",
+      "parameters": [
+        {
+          "name": "COUNT",
+          "description": "Nombre minimum de produits",
+          "default": "5"
+        }
+      ]
+    },
+    {
+      "id": "quotations_performance_by_month",
+      "questions": [
+        "Quelle est l'évolution des devis par mois ?",
+        "Performance mensuelle des devis",
+        "Évolution des devis dans le temps",
+        "Comparer les devis par mois",
+        "Statistiques mensuelles des devis",
+        "Tableau de performance mensuelle des devis",
+        "Comment évoluent les devis mois par mois ?",
+        "Analyse de performance des devis par mois",
+        "Tendance mensuelle des devis",
+        "Suivi des performances des devis mensuels",
+        "Évolution du taux de conversion des devis par mois",
+        "Tableau de bord mensuel des performances de devis",
+        "Indicateurs mensuels des devis",
+        "Quel est le bilan mensuel des performances de devis ?",
+        "Comment se comportent les devis chaque mois ?",
+        "Suivi mensuel des chiffres clés des devis",
+        "Données de performance des devis sur les derniers mois",
+        "Évolution temporelle des indicateurs de devis",
+        "Analyse comparative des devis mois par mois",
+        "Quelles sont les performances mensuelles de nos devis ?",
+        "Tableau d'évolution mensuelle des devis",
+        "Historique des performances des devis par mois",
+        "Mesure de la performance des devis sur les derniers mois",
+        "Évolution du nombre et montant des devis par mois",
+        "Analyse des tendances mensuelles pour les devis",
+        "Dashboard mensuel des performances de devis",
+        "Mesures de performance mensuelle des devis",
+        "Comment ont évolué nos devis au fil des mois ?",
+        "Suivi de l'évolution des performances des devis",
+        "Rapport d'évolution mensuelle des devis"
+      ],
+      "sql": "SELECT EXTRACT(YEAR FROM q.issue_date) AS year, EXTRACT(MONTH FROM q.issue_date) AS month, TO_CHAR(q.issue_date, 'Month YYYY') AS month_name, COUNT(*) AS total_count, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_count, SUM(CASE WHEN rqs.code = 'refusé' THEN 1 ELSE 0 END) AS rejected_count, ROUND(AVG(q.total_ttc), 2) AS average_amount, ROUND(SUM(q.total_ttc), 2) AS total_amount, ROUND((SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END)::decimal / NULLIF(COUNT(*), 0)) * 100, 2) AS conversion_rate FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date >= CURRENT_DATE - INTERVAL '12 months' GROUP BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date), TO_CHAR(q.issue_date, 'Month YYYY') ORDER BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date)",
+      "description": "Tableau complet de performance des devis par mois (nombre, montant, taux de conversion)"
+    },
+    {
+      "id": "quotations_most_profitable",
+      "questions": [
+        "Quels sont les devis les plus rentables ?",
+        "Devis avec la meilleure marge",
+        "Devis les plus profitables",
+        "Quels devis ont la plus grande marge ?",
+        "Top des devis les plus rentables",
+        "Devis à forte marge",
+        "Quels sont les devis avec les meilleures marges ?",
+        "Classement des devis par rentabilité",
+        "Devis générant le plus de profit",
+        "Quels devis offrent les meilleures marges ?",
+        "Top 10 des devis les plus rentables",
+        "Devis les plus profitables en pourcentage",
+        "Quels sont nos devis à haute rentabilité ?",
+        "Meilleurs devis en termes de marge",
+        "Devis avec les marges les plus élevées",
+        "Quels sont les devis ayant le meilleur taux de marge ?",
+        "Classement des devis par marge bénéficiaire",
+        "Devis les plus avantageux financièrement",
+        "Quels devis présentent la rentabilité la plus élevée ?",
+        "Propositions commerciales les plus rentables",
+        "Devis offrant les meilleurs taux de profit",
+        "Quels sont les devis les plus lucratifs ?",
+        "Analyses des devis à forte profitabilité",
+        "Devis avec marge bénéficiaire importante",
+        "Quels sont nos devis champions en rentabilité ?"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, qp.total_cost, (q.total_ht - COALESCE(qp.total_cost, 0)) as margin, ROUND(((q.total_ht - COALESCE(qp.total_cost, 0)) / NULLIF(q.total_ht, 0) * 100), 2) as margin_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN (SELECT quotation_id, SUM(quantity * unit_price) as total_cost FROM quotation_products GROUP BY quotation_id) qp ON q.id = qp.quotation_id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id ORDER BY margin DESC LIMIT 10",
+      "description": "Liste des 10 devis avec les meilleures marges, calculées à partir des coûts des produits"
+    },
+    {
+      "id": "quotations_with_low_margin",
+      "questions": [
+        "Quels devis ont une marge faible ?",
+        "Devis peu rentables",
+        "Devis avec marge insuffisante",
+        "Quels devis ont une marge inférieure à [THRESHOLD] % ?",
+        "Devis à faible rentabilité",
+        "Quelles offres ont une marge trop basse ?",
+        "Devis dont la marge est inférieure à [THRESHOLD]%",
+        "Propositions commerciales à faible profit",
+        "Devis en dessous du seuil de rentabilité de [THRESHOLD]%",
+        "Quels sont les devis peu profitables ?",
+        "Devis avec marge critique sous [THRESHOLD]%",
+        "Liste des devis à marge réduite",
+        "Quels devis présentent une rentabilité insuffisante ?",
+        "Devis à surveiller pour marge faible",
+        "Offres commerciales avec marge basse",
+        "Quels devis sont en dessous de [THRESHOLD]% de marge ?",
+        "Devis à risque avec marge limitée",
+        "Propositions dont la rentabilité est problématique",
+        "Quels sont les devis à faible taux de profit ?",
+        "Devis avec marge en dessous du seuil de [THRESHOLD]%",
+        "Analyse des devis à rentabilité insuffisante",
+        "Quels devis génèrent une marge trop faible ?",
+        "Devis avec profit inférieur à [THRESHOLD]%",
+        "Offres à marge bénéficiaire réduite",
+        "Quels sont les devis dont la rentabilité est sous [THRESHOLD]% ?",
+        "Devis nécessitant optimisation de marge"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, qp.total_cost, (q.total_ht - COALESCE(qp.total_cost, 0)) as margin, ROUND(((q.total_ht - COALESCE(qp.total_cost, 0)) / NULLIF(q.total_ht, 0) * 100), 2) as margin_percentage, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN (SELECT quotation_id, SUM(quantity * unit_price) as total_cost FROM quotation_products GROUP BY quotation_id) qp ON q.id = qp.quotation_id JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE ((q.total_ht - COALESCE(qp.total_cost, 0)) / NULLIF(q.total_ht, 0) * 100) < [THRESHOLD] AND rqs.code = 'en_attente' ORDER BY ((q.total_ht - COALESCE(qp.total_cost, 0)) / NULLIF(q.total_ht, 0) * 100) ASC",
+      "description": "Liste des devis en attente avec une marge inférieure au seuil défini",
+      "parameters": [
+        {
+          "name": "THRESHOLD",
+          "description": "Seuil de marge minimum en pourcentage",
+          "default": "15"
+        }
+      ]
+    },
+    {
+      "id": "quotations_by_commercial",
+      "questions": [
+        "Quels sont les devis créés par [COMMERCIAL] ?",
+        "Devis du commercial [COMMERCIAL]",
+        "Performance du commercial [COMMERCIAL]",
+        "Devis émis par [COMMERCIAL]",
+        "Statistiques du commercial [COMMERCIAL]",
+        "Quelles propositions commerciales a fait [COMMERCIAL] ?",
+        "Contrats établis par [COMMERCIAL]",
+        "Historique des devis de [COMMERCIAL]",
+        "Quels sont les devis dont [COMMERCIAL] est l'auteur ?",
+        "Propositions de [COMMERCIAL]",
+        "Travail commercial de [COMMERCIAL]",
+        "Devis rédigés par le commercial [COMMERCIAL]",
+        "Liste des offres de [COMMERCIAL]",
+        "Quels devis [COMMERCIAL] a-t-il préparés ?",
+        "Activité commerciale de [COMMERCIAL]",
+        "Suivi des devis de [COMMERCIAL]",
+        "Quelles sont les propositions faites par [COMMERCIAL] ?",
+        "Offres commerciales créées par [COMMERCIAL]",
+        "Devis générés par [COMMERCIAL]",
+        "Performance commerciale de [COMMERCIAL]",
+        "Quels sont les devis sous la responsabilité de [COMMERCIAL] ?",
+        "Suivi du travail commercial de [COMMERCIAL]",
+        "Devis attribués à [COMMERCIAL]",
+        "Productions commerciales de [COMMERCIAL]",
+        "Quels sont les clients démarchés par [COMMERCIAL] ?",
+        "Activité de [COMMERCIAL] en termes de devis",
+        "Devis signés par le commercial [COMMERCIAL]",
+        "Portefeuille commercial de [COMMERCIAL]"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, rqs.name AS status, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id JOIN users u ON q.created_by = u.id WHERE u.firstname ILIKE '%[COMMERCIAL]%' OR u.lastname ILIKE '%[COMMERCIAL]%' OR (u.firstname || ' ' || u.lastname) ILIKE '%[COMMERCIAL]%' ORDER BY q.issue_date DESC",
+      "description": "Liste des devis créés par un commercial spécifique",
+      "parameters": [
+        {
+          "name": "COMMERCIAL",
+          "description": "Nom ou prénom du commercial"
+        }
+      ]
+    },
+    {
+      "id": "quotations_comparison_by_period",
+      "questions": [
+        "Comment les devis ont évolué entre [PERIOD1] et [PERIOD2] ?",
+        "Comparer les devis entre [PERIOD1] et [PERIOD2]",
+        "Évolution des devis de [PERIOD1] à [PERIOD2]",
+        "Analyse comparative des devis [PERIOD1] vs [PERIOD2]",
+        "Quelle différence entre les devis de [PERIOD1] et [PERIOD2] ?",
+        "Comparatif des performances de devis [PERIOD1] / [PERIOD2]",
+        "Variation des devis entre [PERIOD1] et [PERIOD2]",
+        "Quels changements dans les devis entre [PERIOD1] et [PERIOD2] ?",
+        "Bilan comparatif des devis [PERIOD1] et [PERIOD2]",
+        "Mesurer l'évolution des devis de [PERIOD1] à [PERIOD2]",
+        "Analyse des écarts de devis entre [PERIOD1] et [PERIOD2]",
+        "Progression des devis entre [PERIOD1] et [PERIOD2]",
+        "Comment ont progressé les devis de [PERIOD1] à [PERIOD2] ?",
+        "Comparaison des statistiques de devis [PERIOD1] - [PERIOD2]",
+        "Tableau comparatif des devis [PERIOD1] versus [PERIOD2]",
+        "Évolution des indicateurs de devis entre [PERIOD1] et [PERIOD2]",
+        "Quelle a été l'évolution des devis de [PERIOD1] à [PERIOD2] ?",
+        "Mesure des écarts de performance entre [PERIOD1] et [PERIOD2]",
+        "Différentiel des devis entre [PERIOD1] et [PERIOD2]",
+        "Tendances des devis en comparant [PERIOD1] et [PERIOD2]",
+        "Quelles évolutions entre les devis de [PERIOD1] et ceux de [PERIOD2] ?",
+        "Analyse des tendances de devis [PERIOD1] vs [PERIOD2]",
+        "Comparaison des résultats entre [PERIOD1] et [PERIOD2]",
+        "Bilan d'évolution des devis entre [PERIOD1] et [PERIOD2]",
+        "Performance comparative des devis [PERIOD1] et [PERIOD2]",
+        "Quelle est la comparaison des devis entre [PERIOD1] et [PERIOD2] ?",
+        "Contraste entre les devis de [PERIOD1] et [PERIOD2]",
+        "Comparer les chiffres des devis entre [PERIOD1] et [PERIOD2]"
+      ],
+      "sql": "WITH period1 AS (SELECT COUNT(*) AS total_count, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_count, SUM(CASE WHEN rqs.code = 'refusé' THEN 1 ELSE 0 END) AS rejected_count, ROUND(AVG(q.total_ttc), 2) AS average_amount, ROUND(SUM(q.total_ttc), 2) AS total_amount FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date BETWEEN '[PERIOD1_START]'::date AND '[PERIOD1_END]'::date), period2 AS (SELECT COUNT(*) AS total_count, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_count, SUM(CASE WHEN rqs.code = 'refusé' THEN 1 ELSE 0 END) AS rejected_count, ROUND(AVG(q.total_ttc), 2) AS average_amount, ROUND(SUM(q.total_ttc), 2) AS total_amount FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date BETWEEN '[PERIOD2_START]'::date AND '[PERIOD2_END]'::date) SELECT p1.total_count AS period1_total, p2.total_count AS period2_total, (p2.total_count - p1.total_count) AS count_diff, ROUND(((p2.total_count - p1.total_count)::decimal / NULLIF(p1.total_count, 0)) * 100, 2) AS count_diff_percent, p1.accepted_count AS period1_accepted, p2.accepted_count AS period2_accepted, p1.rejected_count AS period1_rejected, p2.rejected_count AS period2_rejected, p1.average_amount AS period1_avg, p2.average_amount AS period2_avg, p1.total_amount AS period1_total_amount, p2.total_amount AS period2_total_amount, (p2.total_amount - p1.total_amount) AS amount_diff, ROUND(((p2.total_amount - p1.total_amount)::decimal / NULLIF(p1.total_amount, 0)) * 100, 2) AS amount_diff_percent FROM period1 p1, period2 p2",
+      "description": "Analyse comparative des devis entre deux périodes",
+      "parameters": [
+        {
+          "name": "PERIOD1_START",
+          "description": "Date de début de la première période (YYYY-MM-DD)"
+        },
+        {
+          "name": "PERIOD1_END",
+          "description": "Date de fin de la première période (YYYY-MM-DD)"
+        },
+        {
+          "name": "PERIOD2_START",
+          "description": "Date de début de la deuxième période (YYYY-MM-DD)"
+        },
+        {
+          "name": "PERIOD2_END",
+          "description": "Date de fin de la deuxième période (YYYY-MM-DD)"
+        }
+      ]
+    },
+    {
+      "id": "quotations_total_accepted",
+      "questions": [
+        "Quel est le montant total des devis acceptés ?",
+        "Montant total cumulé des devis acceptés",
+        "Somme totale des devis acceptés",
+        "Total global des devis validés",
+        "Valeur totale des devis acceptés",
+        "Montant total des devis acceptés",
+        "Quel est le montant des devis acceptés ?",
+        "Combien représentent tous les devis acceptés ?",
+        "Montant total des devis accepté",
+        "Quel est le montant des devis accepté ?",
+        "Montant des devis accepté",
+        "Total des devis accepté",
+        "Montant global des devis acceptés",
+        "Total de tous les devis acceptés",
+        "Chiffre d'affaires total des devis acceptés",
+        "Montant cumulé de tous les devis acceptés",
+        "Quelle est la somme totale des devis acceptés ?"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté'",
+      "description": "Montant total cumulé de tous les devis acceptés dans la base de données"
+    },
+    {
+      "id": "quotations_total_accepted_current_month",
+      "questions": [
+        "Quel est le montant des devis acceptés du mois en cours ?",
+        "Montant des devis acceptés du mois",
+        "Quel est le montant des devis acceptés du mois en cours ?",
+        "Montant cumulé des devis acceptés ce mois-ci",
+        "Somme des devis acceptés du mois",
+        "Total des devis validés ce mois",
+        "Valeur des devis acceptés ce mois-ci",
+        "Combien représentent les devis acceptés du mois ?",
+        "Montant des devis acceptés ce mois",
+        "Total des devis acceptés du mois en cours",
+        "Devis acceptés du mois montant",
+        "Montant mensuel des devis acceptés",
+        "Quel est le total des devis acceptés ce mois-ci ?",
+        "Devis acceptés du mois courant montant total",
+        "Montant des devis acceptés pour le mois actuel",
+        "Combien a-t-on de devis acceptés ce mois ?",
+        "Total mensuel des devis acceptés",
+        "Devis validés du mois montant"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM quotations.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE)",
+      "description": "Montant total cumulé des devis acceptés pendant le mois en cours uniquement"
+    },
+    {
+      "id": "quotations_total_accepted_next_month",
+      "questions": [
+        "Quel est le montant des devis acceptés du mois prochain ?",
+        "Montant des devis acceptés le mois prochain",
+        "Somme des devis acceptés pour le mois à venir",
+        "Total des devis validés pour le mois suivant",
+        "Quel est le montant des devis accepté du mois porchain?",
+        "Montant des devis acceptés pour le mois prochain",
+        "Devis acceptés prévus pour le mois prochain",
+        "Combien représentent les devis acceptés du mois prochain ?",
+        "Montant des devis acceptés mois suivant",
+        "Total des devis acceptés du mois prochain",
+        "Devis acceptés du mois suivant montant",
+        "Montant des devis validés mois prochain",
+        "Quel est le total des devis acceptés pour le mois à venir ?",
+        "Devis acceptés mois prochain montant total",
+        "Montant total des devis acceptés mois suivant"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE + INTERVAL '1 month') AND EXTRACT(YEAR FROM quotations.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE + INTERVAL '1 month')",
+      "description": "Montant total cumulé des devis acceptés pour le mois prochain uniquement"
+    },
+    {
+      "id": "quotations_total_accepted_last_month",
+      "questions": [
+        "Quel est le montant des devis acceptés du mois dernier ?",
+        "Montant des devis acceptés le mois dernier",
+        "Somme des devis acceptés pour le mois passé",
+        "Total des devis validés pour le mois précédent",
+        "Montant des devis acceptés pour le mois écoulé",
+        "Devis acceptés du mois précédent montant",
+        "Combien représentent les devis acceptés du mois dernier ?",
+        "Montant des devis acceptés mois passé",
+        "Total des devis acceptés du mois précédent",
+        "Montant des devis validés mois dernier",
+        "Quel est le total des devis acceptés pour le mois passé ?",
+        "Devis acceptés mois précédent montant total",
+        "Montant cumulé des devis validés le mois dernier",
+        "Valeur totale des devis acceptés pour le mois précédent",
+        "Quel était le montant des devis validés le mois passé ?",
+        "Montant global des devis acceptés du mois dernier",
+        "Devis approuvés du mois dernier montant",
+        "Quel est le chiffre total des devis validés le mois précédent ?",
+        "Total financier des devis acceptés mois dernier",
+        "Combien ont rapporté les devis acceptés du mois passé ?",
+        "Revenu total des devis du mois précédent",
+        "Combien s'élève le montant des devis acceptés le mois passé ?",
+        "Somme totale générée par les devis du mois dernier",
+        "Quel est le revenu des devis acceptés du mois précédent ?",
+        "Montant en euros des devis validés le mois dernier",
+        "Total des recettes des devis du mois passé",
+        "Valeur cumulée des devis acceptés pour le mois précédent",
+        "Combien ont généré les devis acceptés le mois passé ?"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM quotations.issue_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month')",
+      "description": "Montant total cumulé des devis acceptés pour le mois précédent uniquement"
+    },
+    {
+      "id": "quotations_total_accepted_specific_month",
+      "questions": [
+        "Quel est le montant des devis acceptés pour le mois de [MONTH] [YEAR] ?",
+        "Montant des devis acceptés en [MONTH] [YEAR]",
+        "Somme des devis acceptés du mois de [MONTH] [YEAR]",
+        "Total des devis validés de [MONTH] [YEAR]",
+        "Montant total des devis acceptés en [MONTH] [YEAR]",
+        "Combien représentent les devis acceptés de [MONTH] [YEAR] ?",
+        "Montant des devis acceptés pour [MONTH] [YEAR]",
+        "Quel est le total des devis acceptés en [MONTH] [YEAR] ?",
+        "Devis acceptés [MONTH] [YEAR] montant",
+        "Montant devis acceptés [MONTH] [YEAR]",
+        "Chiffre d'affaires des devis acceptés pour [MONTH] [YEAR]"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code = 'accepté' AND EXTRACT(MONTH FROM quotations.issue_date) = [MONTH_NUMBER] AND EXTRACT(YEAR FROM quotations.issue_date) = [YEAR]",
+      "description": "Montant total cumulé des devis acceptés pour un mois et une année spécifiques",
+      "parameters": [
+        {
+          "name": "MONTH",
+          "description": "Le mois en texte (janvier, février, mars, etc.)"
+        },
+        {
+          "name": "YEAR",
+          "description": "L'année en chiffres (2023, 2024, etc.)"
+        },
+        {
+          "name": "MONTH_NUMBER",
+          "description": "Le numéro du mois (1 pour janvier, 2 pour février, etc.)",
+          "computed": true,
+          "mapping": {
+            "janvier": 1,
+            "février": 2,
+            "mars": 3,
+            "avril": 4,
+            "mai": 5,
+            "juin": 6,
+            "juillet": 7,
+            "août": 8,
+            "septembre": 9,
+            "octobre": 10,
+            "novembre": 11,
+            "décembre": 12,
+            "jan": 1,
+            "fév": 2,
+            "fev": 2,
+            "mar": 3,
+            "avr": 4,
+            "jun": 6,
+            "jui": 7,
+            "jul": 7,
+            "aou": 8,
+            "aoû": 8,
+            "sep": 9,
+            "oct": 10,
+            "nov": 11,
+            "déc": 12,
+            "dec": 12
+          }
+        }
+      ]
+    },
+    {
+      "id": "quotations_evolution_from_month",
+      "questions": [
+        "Quelle évolution des devis de [MONTH] [YEAR] à aujourd'hui ?",
+        "Evolution des devis depuis [MONTH] [YEAR]",
+        "Tendance des devis de [MONTH] [YEAR] à maintenant",
+        "Comment ont évolué les devis depuis [MONTH] [YEAR] ?",
+        "Evolution mensuelle des devis depuis [MONTH] [YEAR]",
+        "Analyse des devis entre [MONTH] [YEAR] et aujourd'hui",
+        "Progression des devis depuis [MONTH] [YEAR]",
+        "Quel évolution des devis de [MONTH] [YEAR] a aujourdhui",
+        "Statistiques mensuelles des devis depuis [MONTH] [YEAR]",
+        "Bilan des devis depuis [MONTH] [YEAR]"
+      ],
+      "sql": "SELECT EXTRACT(YEAR FROM q.issue_date) AS year, EXTRACT(MONTH FROM q.issue_date) AS month, TO_CHAR(q.issue_date, 'Month YYYY') AS month_name, COUNT(*) AS total_count, SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END) AS accepted_count, SUM(CASE WHEN rqs.code = 'refusé' THEN 1 ELSE 0 END) AS rejected_count, ROUND(AVG(q.total_ttc), 2) AS average_amount, ROUND(SUM(q.total_ttc), 2) AS total_amount, ROUND((SUM(CASE WHEN rqs.code = 'accepté' THEN 1 ELSE 0 END)::decimal / NULLIF(COUNT(*), 0)) * 100, 2) AS conversion_rate FROM quotations q JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.issue_date >= TO_DATE('[YEAR]-[MONTH_NUMBER]-01', 'YYYY-MM-DD') AND q.issue_date <= CURRENT_DATE GROUP BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date), TO_CHAR(q.issue_date, 'Month YYYY') ORDER BY EXTRACT(YEAR FROM q.issue_date), EXTRACT(MONTH FROM q.issue_date)",
+      "description": "Analyse mensuelle de l'évolution des devis depuis un mois spécifique jusqu'à aujourd'hui",
+      "parameters": [
+        {
+          "name": "MONTH",
+          "description": "Le mois de départ en texte (janvier, février, mars, etc.)"
+        },
+        {
+          "name": "YEAR",
+          "description": "L'année de départ en chiffres (2023, 2024, etc.)"
+        },
+        {
+          "name": "MONTH_NUMBER",
+          "description": "Le numéro du mois de départ (1 pour janvier, 2 pour février, etc.)",
+          "computed": true,
+          "mapping": {
+            "janvier": 1,
+            "février": 2,
+            "mars": 3,
+            "avril": 4,
+            "mai": 5,
+            "juin": 6,
+            "juillet": 7,
+            "août": 8,
+            "septembre": 9,
+            "octobre": 10,
+            "novembre": 11,
+            "décembre": 12,
+            "jan": 1,
+            "fév": 2,
+            "fev": 2,
+            "mar": 3,
+            "avr": 4,
+            "jun": 6,
+            "jui": 7,
+            "jul": 7,
+            "aou": 8,
+            "aoû": 8,
+            "sep": 9,
+            "oct": 10,
+            "nov": 11,
+            "déc": 12,
+            "dec": 12
+          }
+        }
+      ]
+    },
+    {
+      "id": "quotations_monthly_comparison",
+      "questions": [
+        "Comparaison financière entre [MONTH1] et [MONTH2] [YEAR]",
+        "Comparer les finances entre [MONTH1] et [MONTH2] [YEAR]",
+        "Différence financière entre [MONTH1] et [MONTH2] [YEAR]",
+        "Evolution des montants entre [MONTH1] et [MONTH2] [YEAR]"
+      ],
+      "sql": "SELECT '[MONTH1]' AS mois, COUNT(*) as total_quotations, SUM(total_ttc) as montant_total, ROUND(AVG(total_ttc), 2) as montant_moyen FROM quotations WHERE EXTRACT(MONTH FROM issue_date) = EXTRACT(MONTH FROM DATE '[YEAR]-[MONTH1]-01') AND EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM DATE '[YEAR]-[MONTH1]-01') UNION ALL SELECT '[MONTH2]' AS mois, COUNT(*) as total_quotations, SUM(total_ttc) as montant_total, ROUND(AVG(total_ttc), 2) as montant_moyen FROM quotations WHERE EXTRACT(MONTH FROM issue_date) = EXTRACT(MONTH FROM DATE '[YEAR]-[MONTH2]-01') AND EXTRACT(YEAR FROM issue_date) = EXTRACT(YEAR FROM DATE '[YEAR]-[MONTH2]-01') ORDER BY mois",
+      "description": "Comparaison des statistiques financières entre deux mois spécifiés",
+      "parameters": [
+        {
+          "name": "MONTH1",
+          "description": "Premier mois (format: 01, 02, ..., 12)",
+          "default": "01"
+        },
+        {
+          "name": "MONTH2",
+          "description": "Second mois (format: 01, 02, ..., 12)",
+          "default": "02"
+        },
+        {
+          "name": "YEAR",
+          "description": "Année de comparaison (format: YYYY)",
+          "default": "2024"
+        }
+      ]
+    },
+    {
+      "id": "quotations_total_all",
+      "questions": [
+        "Quel est le montant cumulé des devis existants ?",
+        "Montant total de tous les devis",
+        "Somme totale des devis",
+        "Total global des devis",
+        "Valeur totale des devis",
+        "Montant total des devis",
+        "Quel est le montant des devis ?",
+        "Combien représentent tous les devis ?",
+        "Montant cumulé des devis",
+        "Quel est le montant de tous les devis cumulé?"
+      ],
+      "sql": "SELECT SUM(quotations.total_ttc) AS montant_total_ttc FROM quotations JOIN ref_quotation_status ON quotations.status = ref_quotation_status.id WHERE ref_quotation_status.code IN ('en_attente', 'accepté', 'refusé')",
+      "description": "Montant total cumulé de tous les devis dans la base de données, tous statuts confondus"
+    },
+    {
+      "id": "quotations_list_with_amounts",
+      "questions": [
+        "quel est le montant individuel de chaque devis existant?",
+        "Liste des devis avec leurs montants",
+        "Montant individuel des devis existants",
+        "Montants de chaque devis",
+        "Quels sont les montants de tous les devis ?",
+        "Devis avec leurs montants respectifs",
+        "Montrer les devis avec leurs totaux",
+        "Afficher les montants de chaque devis",
+        "Liste détaillée des devis avec montants"
+      ],
+      "sql": "SELECT q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id ORDER BY q.issue_date DESC LIMIT 20 OFFSET 0",
+      "description": "Liste détaillée de tous les devis avec leurs montants individuels et informations associées",
+      "pagination": true
+    },
+    {
+      "id": "quotations_by_amount_range_paginated",
+      "questions": [
+        "Quels sont les devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€ ?",
+        "Devis dans la fourchette [MIN_AMOUNT]€ - [MAX_AMOUNT]€ par page",
+        "Liste paginée des devis entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€",
+        "Devis avec montant entre [MIN_AMOUNT]€ et [MAX_AMOUNT]€ (page [PAGE])"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE q.total_ttc BETWEEN [MIN_AMOUNT] AND [MAX_AMOUNT] ORDER BY q.total_ttc DESC LIMIT 10 OFFSET ([PAGE] - 1) * 10",
+      "description": "Liste paginée des devis dont le montant est compris dans une fourchette spécifique",
+      "parameters": [
+        {
+          "name": "MIN_AMOUNT",
+          "description": "Montant minimum en euros"
+        },
+        {
+          "name": "MAX_AMOUNT",
+          "description": "Montant maximum en euros"
+        },
+        {
+          "name": "PAGE",
+          "description": "Numéro de page à afficher",
+          "default": "1"
+        }
+      ],
+      "pagination": true
+    },
+    {
+      "id": "quotations_refused_recent",
+      "questions": [
+        "Quels devis ont été refusés récemment ?",
+        "Devis refusés récemment",
+        "Liste des devis refusés",
+        "Devis récemment refusés",
+        "Quels sont les derniers devis refusés ?",
+        "Devis rejetés récemment",
+        "Derniers refus de devis",
+        "Récentes propositions refusées",
+        "Devis non acceptés dernièrement",
+        "Contrats rejetés récemment",
+        "Quels sont les devis qui ont été refusés ?",
+        "Montrer les devis refusés récents",
+        "Propositions commerciales refusées récemment",
+        "Derniers devis ayant reçu un refus",
+        "Offres commerciales récemment rejetées",
+        "Quels devis ont essuyé un refus récemment ?",
+        "Devis qui n'ont pas été acceptés récemment",
+        "Propositions non retenues récentes",
+        "Quels sont les derniers devis rejetés ?",
+        "Afficher les devis refusés récents"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE rqs.code = 'refusé' ORDER BY q.issue_date DESC LIMIT 20 OFFSET 0",
+      "description": "Liste des devis récemment refusés, triés par date",
+      "pagination": true
+    },
+    {
+      "id": "quotations_by_status_recent",
+      "questions": [
+        "Quels devis [STATUS] récemment ?",
+        "Devis récents avec statut [STATUS]",
+        "Devis [STATUS] des derniers jours",
+        "Liste des derniers devis [STATUS]",
+        "Devis [STATUS] récents",
+        "Quels sont les devis [STATUS] les plus récents ?",
+        "Devis [STATUS] des [DAYS] derniers jours",
+        "Devis [STATUS] du dernier mois"
+      ],
+      "sql": "SELECT q.id, q.reference, q.issue_date, q.total_ht, q.total_ttc, c.firstname || ' ' || c.lastname AS client_name, p.name AS project_name, rqs.name AS status FROM quotations q JOIN projects p ON q.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_quotation_status rqs ON q.status = rqs.id WHERE (rqs.code = '[STATUS]' OR rqs.name ILIKE '%[STATUS]%') AND q.issue_date >= CURRENT_DATE - INTERVAL '[DAYS] days' ORDER BY q.issue_date DESC LIMIT 20 OFFSET 0",
+      "description": "Liste des devis récents avec un statut spécifique, limités à une période définie",
+      "parameters": [
+        {
+          "name": "STATUS",
+          "description": "Statut des devis (en_attente, accepté, refusé)",
+          "default": "refusé"
+        },
+        {
+          "name": "DAYS",
+          "description": "Nombre de jours à considérer",
+          "default": "30"
+        }
+      ],
+      "pagination": true
+    }
+  ],
+  "suggested_indexes": [
+    "CREATE INDEX IF NOT EXISTS idx_quotations_status ON quotations(status);",
+    "CREATE INDEX IF NOT EXISTS idx_quotations_project_id ON quotations(project_id);",
+    "CREATE INDEX IF NOT EXISTS idx_quotations_issue_date ON quotations(issue_date);",
+    "CREATE INDEX IF NOT EXISTS idx_quotations_total_ttc ON quotations(total_ttc);",
+    "CREATE INDEX IF NOT EXISTS idx_quotations_reference ON quotations(reference);"
+  ]
+}
