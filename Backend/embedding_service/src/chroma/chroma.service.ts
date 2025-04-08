@@ -32,7 +32,9 @@ export class ChromaService implements OnModuleInit {
     private embeddingService: EmbeddingService,
   ) {
     this.chromaUrl =
-      this.configService.get<string>('CHROMA_URL') || 'http://ChromaDB:8000';
+      this.configService.get<string>('CHROMA_URL') || 'http://chroma:8000';
+
+    this.logger.log(`Initialisation avec ChromaDB URL: ${this.chromaUrl}`);
   }
 
   onModuleInit() {

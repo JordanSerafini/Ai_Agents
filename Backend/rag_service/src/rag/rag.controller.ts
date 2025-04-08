@@ -123,7 +123,7 @@ export class RagController {
       dto.limit || 5,
       dto.threshold || 0.5,
     );
-    
+
     // Si nous n'avons pas de questions similaires, essayons de générer une réponse
     if (similarQuestions.questions.length === 0) {
       const response = await this.ragService.generateResponse(dto.query, true);
@@ -133,25 +133,27 @@ export class RagController {
         generatedResponse: response,
         analysis: {
           foundMatch: false,
-          recommendation: "Aucune question similaire trouvée. Une nouvelle réponse a été générée."
-        }
+          recommendation:
+            'Aucune question similaire trouvée. Une nouvelle réponse a été générée.',
+        },
       };
     }
-    
+
     // Obtenir une analyse sémantique des questions similaires
     // Ceci est juste une structure - dans un cas réel, vous pourriez utiliser un LLM pour analyser
     return {
-      originalQuery: dto.query, 
+      originalQuery: dto.query,
       similarQuestions: similarQuestions.questions,
       analysis: {
         foundMatch: true,
         bestMatch: similarQuestions.questions[0],
         confidenceScore: similarQuestions.questions[0].similarity,
         alternativeCount: similarQuestions.questions.length - 1,
-        recommendation: similarQuestions.questions[0].similarity > 0.85 
-          ? "Une correspondance très proche a été trouvée" 
-          : "Plusieurs options possibles, vérification humaine recommandée"
-      }
+        recommendation:
+          similarQuestions.questions[0].similarity > 0.85
+            ? 'Une correspondance très proche a été trouvée'
+            : 'Plusieurs options possibles, vérification humaine recommandée',
+      },
     };
   }
 }

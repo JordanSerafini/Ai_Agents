@@ -7,7 +7,7 @@ services:
       - "${MODEL_SERVICE_PORT}:${MODEL_SERVICE_PORT}"
     environment:
       - MODEL_URL=${MODEL_URL}
-      - CHROMA_URL=http://ChromaDB:8000
+      - CHROMA_URL=http://chroma:8000
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
@@ -15,6 +15,8 @@ services:
       - POSTGRES_PORT=${POSTGRES_PORT}
     depends_on:
       - postgres
+    networks:
+      - ai_network
 
   embedding_service:
     build:
@@ -32,16 +34,16 @@ services:
       - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
       - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
-      - CHROMA_URL=http://ChromaDB:8000
+      - CHROMA_URL=http://chroma:8000
     depends_on:
-      ChromaDB:
+      chroma:
         condition: service_started
     volumes:
       - ./Backend/embedding_service/persistence/chroma:/chroma/chroma
     restart: on-failure
     command: >
       sh -c "echo 'Attente de ChromaDB...' &&
-             sleep 15 &&
+             sleep 30 &&
              npm run start:dev"
     networks:
       - ai_network
@@ -51,15 +53,15 @@ services:
       context: ./ChromaDB
       dockerfile: init.Dockerfile
     environment:
-      - CHROMA_HOST=ChromaDB
+      - CHROMA_HOST=chroma
       - CHROMA_PORT=8000
       - EMBEDDING_SERVICE_URL=http://embedding_service:3002
       - QUERIES_FOLDER=/app/queries
-      - INITIAL_WAIT_TIME=20
+      - INITIAL_WAIT_TIME=30
     volumes:
       - ./ChromaDB/Queries:/app/queries
     depends_on:
-      ChromaDB:
+      chroma:
         condition: service_started
     restart: on-failure
     networks:
@@ -86,9 +88,9 @@ services:
     networks:
       - ai_network
   
-  ChromaDB:
-    container_name: ChromaDB
-    image: ghcr.io/chroma-core/chroma:0.4.10
+  chroma:
+    container_name: chroma
+    image: ghcr.io/chroma-core/chroma:0.4.0
     ports:
       - "8000:8000"
     volumes:
@@ -100,9 +102,10 @@ services:
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
       - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
       - ALLOW_RESET=TRUE
-    depends_on:
-      - otel-collector
-      - zipkin
+    command: >
+      sh -c "pip uninstall -y numpy && 
+             pip install numpy==1.24.4 && 
+             python -m uvicorn chromadb.app:app --reload --workers 1 --host 0.0.0.0 --port 8000 --log-level=info"
 
   pgadmin:
     container_name: pgadmin
@@ -142,7 +145,7 @@ services:
     environment:
       - MODEL_SERVICE_URL=http://model_service:${MODEL_SERVICE_PORT:-3001}
       - EMBEDDING_SERVICE_URL=http://embedding_service:${EMBEDDING_SERVICE_PORT:-3002}
-      - CHROMA_URL=http://ChromaDB:8000
+      - CHROMA_URL=http://chroma:8000
       - SIMILARITY_THRESHOLD=0.85
     depends_on:
       embedding_service:
@@ -150,7 +153,7 @@ services:
     restart: on-failure
     command: >
       sh -c "echo 'Attente des services...' &&
-             sleep 20 &&
+             sleep 30 &&
              npm run start:dev"
     networks:
       - ai_network
