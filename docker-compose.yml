@@ -1,35 +1,93 @@
 services:
   model_service:
     build:
-      context: .
+      context: ./Backend/model_service
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"
+      - "${MODEL_SERVICE_PORT}:${MODEL_SERVICE_PORT}"
     environment:
       - MODEL_URL=${MODEL_URL}
+      - CHROMA_URL=http://ChromaDB:8000
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=${POSTGRES_PORT}
     depends_on:
       - database
 
-  database:
-    image: postgres:15
+  postgres:
+    container_name: postgres
+    image: ankane/pgvector:latest
     environment:
-      - POSTGRES_PASSWORD=postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./Database/init_db.sql:/docker-entrypoint-initdb.d/1-init_db.sql
+      - ./Database/seed.sql:/docker-entrypoint-initdb.d/2-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
   
-  chroma_db:
-    build:
-      context: ./Database
-      dockerfile: Dockerfile  
+  ChromaDB:
+    container_name: ChromaDB
+    image: ghcr.io/chroma-core/chroma
+    volumes:
+      - ./Backend/analyse_agent/persistence/chroma:/chroma/chroma
     ports:
       - "8000:8000"
-    volumes:
-      - chroma_data:/data
+    networks:
+      - app-network
     environment:
-      - POSTGRES_PASSWORD=postgres
+      - CHROMA_OPEN_TELEMETRY__ENDPOINT=http://otel-collector:4317/
+      - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
+      - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
+      - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
+    depends_on:
+      - otel-collector
+      - zipkin
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "pgadmin@pgadmin.com"
+      PGADMIN_DEFAULT_PASSWORD: "pgadmin"
+    networks:
+      - app-network
+
+
+  zipkin:
+    container_name: zipkin
+    image: openzipkin/zipkin
+    ports:
+      - "9411:9411"
+    depends_on: [otel-collector]
+    networks:
+      - app-network
+  otel-collector:
+    container_name: otel-collector
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./ChromaDB/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    networks:
+      - app-network
 
 volumes:
   postgres_data:
   chroma_data:
+
+# networks:
+#   app-network:
+#     driver: bridge
