@@ -39,7 +39,22 @@ services:
     networks:
       - app-network
 
-
+  chroma_init:
+    build:
+      context: ./ChromaDB
+      dockerfile: init.Dockerfile
+    environment:
+      - CHROMA_HOST=ChromaDB
+      - CHROMA_PORT=8000
+      - EMBEDDING_SERVICE_URL=http://embedding_service:3002
+      - QUERIES_FOLDER=/app/queries
+    volumes:
+      - ./ChromaDB/Queries:/app/queries
+    depends_on:
+      - ChromaDB
+      - embedding_service
+    networks:
+      - app-network
 
   postgres:
     container_name: postgres

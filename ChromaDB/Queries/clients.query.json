@@ -1,0 +1,404 @@
+{
+  "queries": [
+    {
+      "id": "clients_recent",
+      "questions": [
+        "Quels sont les clients récents ?",
+        "Derniers clients ajoutés",
+        "Nouveaux clients",
+        "Liste des clients récemment créés",
+        "Clients les plus récents",
+        "Dernières acquisitions clients",
+        "Qui sont les nouveaux clients ?",
+        "Clients ajoutés récemment",
+        "Derniers clients enregistrés",
+        "Nouvelles fiches clients"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, a.city, c.created_at FROM clients c LEFT JOIN addresses a ON c.address_id = a.id ORDER BY c.created_at DESC LIMIT 10",
+      "description": "Liste des 10 clients les plus récemment ajoutés"
+    },
+    {
+      "id": "clients_by_city",
+      "questions": [
+        "Quels sont les clients à [CITY] ?",
+        "Clients habitant à [CITY]",
+        "Liste des clients de [CITY]",
+        "Clients localisés à [CITY]",
+        "Qui habite à [CITY] ?",
+        "Montrer les clients de [CITY]",
+        "Clientèle basée à [CITY]",
+        "Répertoire des clients à [CITY]",
+        "Clients résidant à [CITY]",
+        "Base client [CITY]"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, a.street_number || ' ' || a.street_name || ', ' || a.zip_code || ' ' || a.city AS address FROM clients c JOIN addresses a ON c.address_id = a.id WHERE a.city ILIKE '%[CITY]%' ORDER BY c.lastname, c.firstname",
+      "description": "Liste des clients habitant dans une ville spécifique",
+      "parameters": [
+        {
+          "name": "CITY",
+          "description": "Nom de la ville recherchée"
+        }
+      ]
+    },
+    {
+      "id": "client_details",
+      "questions": [
+        "Détails du client [CLIENT]",
+        "Informations sur le client [CLIENT]",
+        "Fiche client de [CLIENT]",
+        "Coordonnées de [CLIENT]",
+        "Qui est [CLIENT] ?",
+        "Données complètes de [CLIENT]",
+        "Profil client [CLIENT]",
+        "Information détaillée sur [CLIENT]",
+        "Tout savoir sur le client [CLIENT]",
+        "Dossier client [CLIENT]"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, a.street_number || ' ' || a.street_name || ', ' || a.zip_code || ' ' || a.city AS address, c.created_at FROM clients c LEFT JOIN addresses a ON c.address_id = a.id WHERE (c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' OR c.id::text = '[CLIENT]'",
+      "description": "Détails complets d'un client spécifique",
+      "parameters": [
+        {
+          "name": "CLIENT",
+          "description": "Nom, email ou ID du client"
+        }
+      ]
+    },
+    {
+      "id": "client_projects",
+      "questions": [
+        "Quels projets a le client [CLIENT] ?",
+        "Liste des chantiers du client [CLIENT]",
+        "Projets associés à [CLIENT]",
+        "Tous les projets de [CLIENT]",
+        "Chantiers en cours pour [CLIENT]",
+        "Historique des projets de [CLIENT]",
+        "Sur quels projets travaille [CLIENT] ?",
+        "Projets passés et actuels de [CLIENT]",
+        "Activité projet du client [CLIENT]",
+        "Que fait [CLIENT] comme projets ?"
+      ],
+      "sql": "SELECT p.id, p.name, p.description, p.start_date, p.end_date, rs.name AS status FROM projects p JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON p.status = rs.id WHERE (c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' OR c.id::text = '[CLIENT]' ORDER BY p.start_date DESC",
+      "description": "Liste de tous les projets associés à un client spécifique",
+      "parameters": [
+        {
+          "name": "CLIENT",
+          "description": "Nom, email ou ID du client"
+        }
+      ]
+    },
+    {
+      "id": "client_invoices",
+      "questions": [
+        "Quelles factures a le client [CLIENT] ?",
+        "Liste des factures du client [CLIENT]",
+        "Factures associées à [CLIENT]",
+        "Tous les paiements de [CLIENT]",
+        "Historique de facturation de [CLIENT]",
+        "Factures émises pour [CLIENT]",
+        "État des factures de [CLIENT]",
+        "Combien de factures a [CLIENT] ?",
+        "Dossier de facturation [CLIENT]",
+        "Factures en cours pour [CLIENT]"
+      ],
+      "sql": "SELECT i.id, i.reference, i.issue_date, i.due_date, i.total_ht, i.total_ttc, rs.name AS status, p.name AS project_name FROM invoices i JOIN projects p ON i.project_id = p.id JOIN clients c ON p.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE (c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' OR c.id::text = '[CLIENT]' ORDER BY i.issue_date DESC",
+      "description": "Liste de toutes les factures associées à un client spécifique",
+      "parameters": [
+        {
+          "name": "CLIENT",
+          "description": "Nom, email ou ID du client"
+        }
+      ]
+    },
+    {
+      "id": "clients_with_active_projects",
+      "questions": [
+        "Quels clients ont des projets en cours ?",
+        "Clients avec chantiers actifs",
+        "Liste des clients ayant des projets actifs",
+        "Clients actuellement engagés",
+        "Clients avec activité en cours",
+        "Qui a des projets actifs ?",
+        "Clients occupés sur des chantiers",
+        "Liste des clients actifs sur des projets",
+        "Clients avec travaux en cours",
+        "Portfolio clients actifs"
+      ],
+      "sql": "SELECT DISTINCT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(p.id) AS active_projects FROM clients c JOIN projects p ON c.id = p.client_id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' AND rs.entity_type = 'project' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY COUNT(p.id) DESC",
+      "description": "Liste des clients ayant au moins un projet actif, avec le nombre de projets actifs"
+    },
+    {
+      "id": "clients_without_projects",
+      "questions": [
+        "Quels clients n'ont pas de projets ?",
+        "Clients sans chantiers",
+        "Liste des clients sans projet",
+        "Clients inactifs",
+        "Qui n'a aucun projet ?",
+        "Clients sans activité",
+        "Clients à relancer",
+        "Clients sans chantier en cours",
+        "Liste des clients dormants",
+        "Clients sans aucun projet associé"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, c.created_at FROM clients c WHERE NOT EXISTS (SELECT 1 FROM projects p WHERE p.client_id = c.id) ORDER BY c.created_at DESC",
+      "description": "Liste des clients qui n'ont aucun projet associé"
+    },
+    {
+      "id": "clients_unpaid_invoices",
+      "questions": [
+        "Quels clients ont des factures impayées ?",
+        "Clients avec soldes dus",
+        "Liste des clients avec des factures en attente",
+        "Clients ayant des paiements en retard",
+        "Qui doit encore payer des factures ?",
+        "Clients avec des impayés",
+        "Liste des clients débiteurs",
+        "Clients avec des factures en souffrance",
+        "Factures impayées par client",
+        "Clients avec solde débiteur"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(i.id) AS unpaid_invoices, SUM(i.total_ttc) AS total_amount_due FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN ref_status rs ON i.status = rs.id WHERE rs.code IN ('brouillon', 'envoyée', 'payée_partiellement', 'en_retard') AND rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY SUM(i.total_ttc) DESC",
+      "description": "Liste des clients ayant des factures non payées, avec le montant total dû"
+    },
+    {
+      "id": "clients_by_revenue",
+      "questions": [
+        "Quels sont les clients avec le plus grand chiffre d'affaires ?",
+        "Classement des clients par CA",
+        "Clients les plus importants financièrement",
+        "Meilleurs clients en termes de facturation",
+        "Top 10 des clients par revenu",
+        "Clients générant le plus de chiffre d'affaires",
+        "Qui sont les clients les plus rentables ?",
+        "Classement des meilleurs clients par CA",
+        "Clients premium par valeur financière",
+        "Clients avec le plus gros volume d'affaires"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(i.id) AS total_invoices, SUM(i.total_ht) AS total_revenue FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND rs.code != 'annulée' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY SUM(i.total_ht) DESC LIMIT 10",
+      "description": "Top 10 des clients générant le plus de chiffre d'affaires"
+    },
+    {
+      "id": "clients_with_multiple_projects",
+      "questions": [
+        "Quels clients ont plusieurs projets ?",
+        "Clients avec plus d'un chantier",
+        "Liste des clients fidèles avec plusieurs projets",
+        "Clients récurrents",
+        "Qui a plusieurs projets ?",
+        "Clients multi-projets",
+        "Clients fidèles avec projets multiples",
+        "Liste des clients avec au moins deux projets",
+        "Clients avec une forte activité",
+        "Portefeuille clients multi-chantiers"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(p.id) AS project_count FROM clients c JOIN projects p ON c.id = p.client_id GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone HAVING COUNT(p.id) > 1 ORDER BY COUNT(p.id) DESC",
+      "description": "Liste des clients ayant plus d'un projet, triés par nombre de projets décroissant"
+    },
+    {
+      "id": "clients_by_creation_date",
+      "questions": [
+        "Quels clients ont été créés [PERIOD] ?",
+        "Nouveaux clients sur [PERIOD]",
+        "Clients ajoutés [PERIOD]",
+        "Acquisition de clients [PERIOD]",
+        "Qui sont les clients créés durant [PERIOD] ?",
+        "Clients enregistrés depuis [PERIOD]",
+        "Liste des clients créés ces [PERIOD]",
+        "Nouveaux clients des derniers [PERIOD]",
+        "Clients datant de moins de [PERIOD]",
+        "Création de clients sur [PERIOD]"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, c.created_at FROM clients c WHERE c.created_at >= CURRENT_DATE - INTERVAL '[PERIOD]' ORDER BY c.created_at DESC",
+      "description": "Liste des clients créés sur une période spécifique",
+      "parameters": [
+        {
+          "name": "PERIOD",
+          "description": "Période (ex: '1 month', '3 months', '1 year')",
+          "default": "1 month"
+        }
+      ]
+    },
+    {
+      "id": "clients_contact_info",
+      "questions": [
+        "Coordonnées de tous les clients",
+        "Liste des contacts clients",
+        "Annuaire des clients",
+        "Information de contact de la clientèle",
+        "Carnet d'adresses clients",
+        "Répertoire téléphonique clients",
+        "Base de données contacts clients",
+        "Liste complète des coordonnées clients",
+        "Contacts de tous les clients",
+        "Annuaire téléphonique de la clientèle"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, a.street_number || ' ' || a.street_name || ', ' || a.zip_code || ' ' || a.city AS address FROM clients c LEFT JOIN addresses a ON c.address_id = a.id ORDER BY c.lastname, c.firstname",
+      "description": "Coordonnées complètes de tous les clients"
+    },
+    {
+      "id": "clients_payment_stats",
+      "questions": [
+        "Statistiques de paiement par client",
+        "Comportement de paiement des clients",
+        "Délais de paiement par client",
+        "Clients et leurs habitudes de paiement",
+        "Analyse des paiements clients",
+        "Performance de paiement par client",
+        "Qui paie en retard ?",
+        "Délais moyens de règlement client",
+        "Statistiques de règlement clientèle",
+        "Tendances de paiement des clients"
+      ],
+      "sql": "SELECT c.id, c.firstname || ' ' || c.lastname AS client_name, COUNT(i.id) AS total_invoices, COUNT(CASE WHEN rs.code = 'payée' THEN 1 END) AS paid_invoices, ROUND(AVG(CASE WHEN pay.payment_date IS NOT NULL THEN pay.payment_date - i.issue_date END)) AS average_payment_delay_days FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id LEFT JOIN payments pay ON i.id = pay.invoice_id JOIN ref_status rs ON i.status = rs.id WHERE rs.entity_type = 'invoice' AND i.issue_date >= CURRENT_DATE - INTERVAL '1 year' GROUP BY c.id, c.firstname, c.lastname ORDER BY c.lastname, c.firstname",
+      "description": "Statistiques des délais de paiement par client sur la dernière année"
+    },
+    {
+      "id": "top_clients_active_projects",
+      "questions": [
+        "Quels clients ont le plus de projets en cours ?",
+        "Top 10 des clients actifs",
+        "Quels clients ont le plus de chantiers ouverts ?",
+        "Classement des clients par nombre de projets actifs",
+        "Top clients avec projets en cours",
+        "Clients gérant le plus de projets actuellement",
+        "Clients les plus actifs par nombre de chantiers",
+        "Top 10 des clients avec projets en cours",
+        "Classement clients par projets actifs",
+        "Clients multi-projets en cours"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(p.id) AS active_projects FROM clients c JOIN projects p ON c.id = p.client_id JOIN ref_status rs ON p.status = rs.id WHERE rs.code = 'en_cours' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY active_projects DESC LIMIT 10",
+      "description": "Liste des clients ayant le plus de projets en cours"
+    },
+    {
+      "id": "clients_without_paid_invoices",
+      "questions": [
+        "Quels clients n'ont jamais payé une facture ?",
+        "Clients sans paiements enregistrés",
+        "Liste des clients à risque financier",
+        "Clients sans facture payée",
+        "Qui n'a jamais payé de facture ?",
+        "Clients sans historique de paiement",
+        "Clients sans règlement",
+        "Liste des clients n'ayant effectué aucun paiement",
+        "Clients avec factures mais sans paiement",
+        "Clientèle sans historique de règlement"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone FROM clients c WHERE NOT EXISTS (SELECT 1 FROM invoices i JOIN projects p ON i.project_id = p.id JOIN ref_status rs ON i.status = rs.id WHERE p.client_id = c.id AND rs.code = 'payée') ORDER BY c.lastname, c.firstname",
+      "description": "Liste des clients qui n'ont aucune facture payée"
+    },
+    {
+      "id": "clients_payment_history",
+      "questions": [
+        "Historique des paiements du client [CLIENT]",
+        "Quels paiements a effectué [CLIENT] ?",
+        "Liste des règlements de [CLIENT]",
+        "Tous les paiements de [CLIENT]",
+        "Paiements historiques de [CLIENT]",
+        "Quand [CLIENT] a-t-il payé ses factures ?",
+        "Journal des paiements de [CLIENT]",
+        "Détail des règlements effectués par [CLIENT]",
+        "Historique financier du client [CLIENT]",
+        "Transactions de paiement de [CLIENT]"
+      ],
+      "sql": "SELECT p.payment_date, p.amount, i.reference AS invoice_ref, i.total_ttc, rs.name AS invoice_status FROM payments p JOIN invoices i ON p.invoice_id = i.id JOIN projects pr ON i.project_id = pr.id JOIN clients c ON pr.client_id = c.id JOIN ref_status rs ON i.status = rs.id WHERE (c.firstname || ' ' || c.lastname) ILIKE '%[CLIENT]%' OR c.email ILIKE '%[CLIENT]%' OR c.id::text = '[CLIENT]' ORDER BY p.payment_date DESC",
+      "description": "Liste des paiements effectués par un client spécifique",
+      "parameters": [
+        {
+          "name": "CLIENT",
+          "description": "Nom, email ou ID du client"
+        }
+      ]
+    },
+    {
+      "id": "clients_by_zip_code",
+      "questions": [
+        "Quels clients habitent dans le code postal [ZIP] ?",
+        "Clients du code postal [ZIP]",
+        "Liste des clients au code postal [ZIP]",
+        "Clients résidant dans le [ZIP]",
+        "Qui habite dans la zone [ZIP] ?",
+        "Clients localisés dans le code postal [ZIP]",
+        "Répertoire clients par code postal [ZIP]",
+        "Base client code postal [ZIP]",
+        "Clients dans la zone postale [ZIP]",
+        "Recherche clients par code postal [ZIP]"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, a.street_number || ' ' || a.street_name || ', ' || a.zip_code || ' ' || a.city AS address FROM clients c JOIN addresses a ON c.address_id = a.id WHERE a.zip_code LIKE '%[ZIP]%' ORDER BY c.lastname, c.firstname",
+      "description": "Liste des clients habitant dans un code postal spécifique",
+      "parameters": [
+        {
+          "name": "ZIP",
+          "description": "Code postal recherché"
+        }
+      ]
+    },
+    {
+      "id": "clients_with_late_payments",
+      "questions": [
+        "Quels clients sont en retard de paiement ?",
+        "Clients avec des retards de paiement",
+        "Liste des mauvais payeurs",
+        "Clients avec factures en retard",
+        "Qui a des factures en retard de paiement ?",
+        "Clients retardataires sur paiements",
+        "Liste des clients en défaut de paiement",
+        "Factures en retard par client",
+        "Clients avec soldes impayés en retard",
+        "Retards de paiement clients"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(i.id) AS late_invoices, SUM(i.total_ttc) AS total_amount_due FROM clients c JOIN projects p ON c.id = p.client_id JOIN invoices i ON p.id = i.project_id JOIN ref_status rs ON i.status = rs.id WHERE rs.code = 'en_retard' AND rs.entity_type = 'invoice' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY SUM(i.total_ttc) DESC",
+      "description": "Liste des clients ayant des factures en retard de paiement"
+    },
+    {
+      "id": "clients_by_project_count",
+      "questions": [
+        "Classement des clients par nombre de projets",
+        "Qui a le plus de projets ?",
+        "Clients avec le plus grand nombre de projets",
+        "Nombre de projets par client",
+        "Top clients par volume de projets",
+        "Classement clients selon nombre de chantiers",
+        "Clients les plus actifs en nombre de projets",
+        "Qui travaille sur le plus de projets ?",
+        "Liste des clients par quantité de projets",
+        "Répartition des projets par client"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, COUNT(p.id) AS project_count FROM clients c LEFT JOIN projects p ON c.id = p.client_id GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY COUNT(p.id) DESC",
+      "description": "Classement des clients par nombre total de projets, du plus grand au plus petit"
+    },
+    {
+      "id": "clients_recent_activity",
+      "questions": [
+        "Quels clients ont eu une activité récente ?",
+        "Clients avec activité dans les 30 derniers jours",
+        "Activité récente des clients",
+        "Clients actifs récemment",
+        "Dernières activités clients",
+        "Qui a été actif ce mois-ci ?",
+        "Clients avec transactions récentes",
+        "Activité client du dernier mois",
+        "Clients engagés récemment",
+        "Activité client des 30 derniers jours"
+      ],
+      "sql": "SELECT DISTINCT c.id, c.firstname, c.lastname, c.email, c.phone, GREATEST(MAX(p.updated_at), MAX(i.issue_date), MAX(pay.payment_date)) AS last_activity FROM clients c LEFT JOIN projects p ON c.id = p.client_id LEFT JOIN invoices i ON p.id = i.project_id LEFT JOIN payments pay ON i.id = pay.invoice_id WHERE p.updated_at >= CURRENT_DATE - INTERVAL '30 days' OR i.issue_date >= CURRENT_DATE - INTERVAL '30 days' OR pay.payment_date >= CURRENT_DATE - INTERVAL '30 days' GROUP BY c.id, c.firstname, c.lastname, c.email, c.phone ORDER BY last_activity DESC",
+      "description": "Liste des clients ayant eu une activité (projet mis à jour, facture émise ou paiement reçu) dans les 30 derniers jours"
+    },
+    {
+      "id": "clients_all",
+      "questions": [
+        "Liste de tous les clients",
+        "Récupérer tous les clients",
+        "Affiche tous les clients",
+        "Montre-moi tous les clients",
+        "Base complète des clients",
+        "Tous les clients enregistrés",
+        "Qui sont tous les clients ?",
+        "Liste intégrale des clients",
+        "Répertoire complet des clients",
+        "Ensemble des clients"
+      ],
+      "sql": "SELECT c.id, c.firstname, c.lastname, c.email, c.phone, a.city FROM clients c LEFT JOIN addresses a ON c.address_id = a.id ORDER BY c.lastname, c.firstname",
+      "description": "Liste complète de tous les clients enregistrés dans le système"
+    }
+  ]
+}
