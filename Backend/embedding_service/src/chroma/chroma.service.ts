@@ -56,7 +56,7 @@ export class ChromaService implements OnModuleInit {
       const docId =
         id || `doc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-      // Ajouter le document à ChromaDB
+      // Ajouter le document à ChromaDB avec la bonne API
       const response = await axios.post(
         `${this.chromaUrl}/api/v1/collections/${collectionName}/add`,
         {

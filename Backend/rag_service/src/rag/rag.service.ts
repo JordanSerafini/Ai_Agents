@@ -44,6 +44,8 @@ export class RagService {
     query: string,
   ): Promise<{ question: string; answer: string; similarity: number } | null> {
     try {
+      console.log(`[RAG] Recherche de questions similaires pour: "${query}"`);
+      
       // Récupérer les questions déjà posées depuis une collection spécifique de questions-réponses
       const response = await firstValueFrom(
         this.httpService.post(`${this.embeddingServiceUrl}/chroma/query`, {
@@ -54,16 +56,19 @@ export class RagService {
       );
 
       const documents = response.data.documents || [];
-
+      console.log(`[RAG] ${documents.length} documents trouvés dans la collection 'questions'`);
+      
       // Vérifier si l'un des documents a une similarité supérieure au seuil
       for (const doc of documents) {
         // La distance est convertie en similarité (1 - distance)
         const similarity = 1 - doc.metadata.distance;
-
+        console.log(`[RAG] Question trouvée: "${doc.document}" (similarité: ${similarity.toFixed(2)})`);
+        
         if (
           similarity >= this.similarityThreshold &&
           doc.metadata.type === 'question'
         ) {
+          console.log(`[RAG] Question similaire trouvée: "${doc.document}" (similarité: ${similarity.toFixed(2)})`);
           return {
             question: doc.document,
             answer: doc.metadata.answer || 'Pas de réponse enregistrée',
@@ -71,7 +76,8 @@ export class RagService {
           };
         }
       }
-
+      
+      console.log(`[RAG] Aucune question similaire trouvée avec un seuil de ${this.similarityThreshold}`);
       return null;
     } catch (error) {
       console.error(

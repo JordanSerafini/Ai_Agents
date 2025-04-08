@@ -82,7 +82,7 @@ services:
   
   ChromaDB:
     container_name: ChromaDB
-    image: chroma-core/chroma:latest
+    image: chromadb/chroma:latest
     ports:
       - "8000:8000"
     volumes:
