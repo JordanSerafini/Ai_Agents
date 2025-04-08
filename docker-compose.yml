@@ -90,7 +90,7 @@ services:
   
   chroma:
     container_name: chroma
-    image: ghcr.io/chroma-core/chroma:0.4.0
+    image: ghcr.io/chroma-core/chroma
     ports:
       - "8000:8000"
     volumes:
@@ -98,14 +98,13 @@ services:
     networks:
       - ai_network
     environment:
-      - CHROMA_DB_IMPL=duckdb+parquet
+      - CHROMA_OPEN_TELEMETRY__ENDPOINT=http://otel-collector:4317/
+      - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
       - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
-      - ALLOW_RESET=TRUE
-    command: >
-      sh -c "pip uninstall -y numpy && 
-             pip install numpy==1.24.4 && 
-             python -m uvicorn chromadb.app:app --reload --workers 1 --host 0.0.0.0 --port 8000 --log-level=info"
+    depends_on:
+      - otel-collector
+      - zipkin
 
   pgadmin:
     container_name: pgadmin

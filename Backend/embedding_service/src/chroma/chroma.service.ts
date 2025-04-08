@@ -58,7 +58,8 @@ export class ChromaService implements OnModuleInit {
       const docId =
         id || `doc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-      // Ajouter le document à ChromaDB avec la bonne API
+      // API ChromaDB
+      this.logger.log(`Ajout de document à la collection ${collectionName}`);
       const response = await axios.post(
         `${this.chromaUrl}/api/v1/collections/${collectionName}/add`,
         {
@@ -110,7 +111,8 @@ export class ChromaService implements OnModuleInit {
       const queryEmbedding =
         await this.embeddingService.createEmbedding(queryText);
 
-      // Requête de similarité à ChromaDB
+      // API ChromaDB
+      this.logger.log(`Requête à la collection ${collectionName}`);
       const response = await axios.post(
         `${this.chromaUrl}/api/v1/collections/${collectionName}/query`,
         {
@@ -246,7 +248,7 @@ export class ChromaService implements OnModuleInit {
         `Tentative de création de la collection: ${collectionName}`,
       );
 
-      // Créer la collection avec l'API v1
+      // API ChromaDB
       try {
         const response = await axios.post(
           `${this.chromaUrl}/api/v1/collections`,
@@ -256,7 +258,6 @@ export class ChromaService implements OnModuleInit {
               description: `Collection ${collectionName} pour stockage de documents`,
               created_at: new Date().toISOString(),
             },
-            get_or_create: true,
           },
         );
 
