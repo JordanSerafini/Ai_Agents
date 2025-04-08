@@ -1,14 +1,38 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { RagService } from './rag.service';
+import { IsNotEmpty, IsOptional, IsString, IsBoolean } from 'class-validator';
 
 class StoreDocumentDto {
+  @IsNotEmpty()
+  @IsString()
   text: string;
+
+  @IsOptional()
   metadata?: Record<string, any>;
 }
 
 class QueryDto {
+  @IsNotEmpty()
+  @IsString()
   query: string;
+
+  @IsOptional()
+  @IsBoolean()
   includeContext?: boolean;
+}
+
+class ChatbotQueryDto {
+  @IsNotEmpty()
+  @IsString()
+  message: string;
+
+  @IsOptional()
+  @IsBoolean()
+  includeContext?: boolean;
+
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 @Controller('rag')
@@ -29,4 +53,21 @@ export class RagController {
   async search(@Body() dto: { query: string; limit?: number }) {
     return this.ragService.retrieveDocuments(dto.query, dto.limit);
   }
-} 
+
+  @Post('chatbot')
+  async chatbotQuery(@Body() dto: ChatbotQueryDto) {
+    // Récupérer la réponse en utilisant le service RAG
+    const response = await this.ragService.generateResponse(
+      dto.message,
+      dto.includeContext,
+    );
+
+    // Retourner une réponse formatée pour le chatbot
+    return {
+      query: dto.message,
+      response,
+      timestamp: new Date().toISOString(),
+      userId: dto.userId || 'anonymous',
+    };
+  }
+}

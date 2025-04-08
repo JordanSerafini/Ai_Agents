@@ -32,12 +32,13 @@ services:
       - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
       - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
+      - CHROMA_URL=http://ChromaDB:8000
     depends_on:
       - postgres
     volumes:
       - ./Backend/embedding_service/persistence/chroma:/chroma/chroma
     networks:
-      - app-network
+      - ai_network
 
   chroma_init:
     build:
@@ -56,7 +57,7 @@ services:
         condition: service_started
     restart: on-failure
     networks:
-      - app-network
+      - ai_network
 
   postgres:
     container_name: postgres
@@ -77,17 +78,17 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - app-network
+      - ai_network
   
   ChromaDB:
     container_name: ChromaDB
-    image: ghcr.io/chroma-core/chroma
-    volumes:
-      - ./ChromaDB/persistence/chroma:/chroma/chroma
+    image: chroma-core/chroma:latest
     ports:
       - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
     networks:
-      - app-network
+      - ai_network
     environment:
       - CHROMA_OPEN_TELEMETRY__ENDPOINT=http://otel-collector:4317/
       - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
@@ -106,7 +107,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: "pgadmin@pgadmin.com"
       PGADMIN_DEFAULT_PASSWORD: "pgadmin"
     networks:
-      - app-network
+      - ai_network
 
 
   zipkin:
@@ -116,7 +117,7 @@ services:
       - "9411:9411"
     depends_on: [otel-collector]
     networks:
-      - app-network
+      - ai_network
   otel-collector:
     container_name: otel-collector
     image: otel/opentelemetry-collector-contrib:0.111.0
@@ -124,12 +125,19 @@ services:
     volumes:
       - ./ChromaDB/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     networks:
-      - app-network
+      - ai_network
+
+  rag_service:
+    # ...
+    environment:
+      - CHROMA_URL=http://ChromaDB:8000
+    networks:
+      - ai_network
 
 volumes:
   postgres_data:
   chroma_data:
 
 networks:
-  app-network:
+  ai_network:
     driver: bridge

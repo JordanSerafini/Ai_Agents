@@ -1,4 +1,10 @@
-import { Injectable, OnModuleInit, Logger, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  Logger,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmbeddingService } from '../embedding/embedding.service';
 import axios from 'axios';
@@ -200,21 +206,19 @@ export class ChromaService implements OnModuleInit {
 
   async createCollection(collectionName: string): Promise<ChromaCollection> {
     try {
+      // Vérifier si la collection existe déjà
       const collections = await this.listCollections();
-      const collectionExists = collections.some(
-        (col) => col.name === collectionName,
-      );
-
-      if (collectionExists) {
+      if (collections.some((col) => col.name === collectionName)) {
         return await this.getCollection(collectionName);
       }
 
+      // Créer la collection
       const response = await axios.post(
         `${this.chromaUrl}/api/v1/collections`,
         {
           name: collectionName,
           metadata: {
-            description: `Collection pour ${collectionName}`,
+            description: `Collection ${collectionName} pour stockage de documents`,
             created_at: new Date().toISOString(),
           },
         },
@@ -227,7 +231,7 @@ export class ChromaService implements OnModuleInit {
       }
 
       return {
-        name: collectionName,
+        name: response.data.name,
         metadata: response.data.metadata,
       };
     } catch (error) {
@@ -235,6 +239,25 @@ export class ChromaService implements OnModuleInit {
         `Erreur lors de la création de la collection: ${error.message}`,
       );
       throw error;
+    }
+  }
+
+  /**
+   * Initialise les collections nécessaires pour l'application
+   */
+  async initializeDefaultCollections(): Promise<void> {
+    try {
+      // Créer la collection par défaut si elle n'existe pas
+      await this.createCollectionIfNotExists('default');
+
+      // Créer la collection spécifique pour les questions-réponses
+      await this.createCollectionIfNotExists('questions');
+
+      this.logger.log('Collections par défaut initialisées avec succès');
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'initialisation des collections: ${error.message}`,
+      );
     }
   }
 
