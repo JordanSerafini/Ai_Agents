@@ -1,30 +1,36 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmbeddingService } from '../embedding/embedding.service';
+import axios from 'axios';
 
-interface ChromaDocument {
+export interface ChromaDocument {
   id: string;
   embedding: number[];
   metadata: Record<string, any>;
   document: string;
 }
 
+export interface ChromaCollection {
+  name: string;
+  metadata?: Record<string, any>;
+}
+
 @Injectable()
 export class ChromaService implements OnModuleInit {
-  private collections: Map<string, ChromaDocument[]> = new Map();
+  private readonly logger = new Logger(ChromaService.name);
+  private chromaUrl: string;
 
   constructor(
     private configService: ConfigService,
+    @Inject(forwardRef(() => EmbeddingService))
     private embeddingService: EmbeddingService,
-  ) {}
+  ) {
+    this.chromaUrl =
+      this.configService.get<string>('CHROMA_URL') || 'http://ChromaDB:8000';
+  }
 
-  async onModuleInit() {
-    // Initialisation de ChromaDB
-    // Note: Dans une implémentation réelle, on connecterait à une instance ChromaDB
-    console.log('Service ChromaDB initialisé');
-
-    // Créer une collection par défaut
-    this.collections.set('default', []);
+  onModuleInit() {
+    this.logger.log(`Service ChromaDB initialisé avec URL: ${this.chromaUrl}`);
   }
 
   async addDocument(
@@ -33,26 +39,47 @@ export class ChromaService implements OnModuleInit {
     id?: string,
     collectionName: string = 'default',
   ): Promise<ChromaDocument> {
-    // Obtenir l'embedding pour le document via le service d'embedding
-    const embedding = await this.embeddingService.createEmbedding(text);
+    try {
+      // S'assurer que la collection existe
+      await this.createCollectionIfNotExists(collectionName);
 
-    // Créer le document ChromaDB
-    const document: ChromaDocument = {
-      id: id || crypto.randomUUID(),
-      embedding,
-      metadata,
-      document: text,
-    };
+      // Obtenir l'embedding pour le document via le service d'embedding
+      const embedding = await this.embeddingService.createEmbedding(text);
 
-    // S'assurer que la collection existe
-    if (!this.collections.has(collectionName)) {
-      this.collections.set(collectionName, []);
+      // Générer un ID unique si non fourni
+      const docId =
+        id || `doc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+      // Ajouter le document à ChromaDB
+      const response = await axios.post(
+        `${this.chromaUrl}/api/v1/collections/${collectionName}/add`,
+        {
+          ids: [docId],
+          embeddings: [embedding],
+          metadatas: [metadata],
+          documents: [text],
+        },
+      );
+
+      if (response.status !== 200 && response.status !== 201) {
+        throw new Error(
+          `Erreur lors de l'ajout du document à ChromaDB: ${response.status}`,
+        );
+      }
+
+      // Construire et retourner le document
+      const document: ChromaDocument = {
+        id: docId,
+        embedding,
+        metadata,
+        document: text,
+      };
+
+      return document;
+    } catch (error) {
+      this.logger.error(`Erreur lors de l'ajout du document: ${error.message}`);
+      throw error;
     }
-
-    // Ajouter le document à la collection
-    this.collections.get(collectionName).push(document);
-
-    return document;
   }
 
   async queryCollection(
@@ -60,67 +87,166 @@ export class ChromaService implements OnModuleInit {
     collectionName: string = 'default',
     limit: number = 5,
   ): Promise<{ documents: ChromaDocument[]; distances: number[] }> {
-    // Récupérer la collection
-    const collection = this.collections.get(collectionName) || [];
+    try {
+      // Vérifier si la collection existe
+      const collections = await this.listCollections();
+      const collectionExists = collections.some(
+        (col) => col.name === collectionName,
+      );
 
-    if (collection.length === 0) {
+      if (!collectionExists) {
+        return { documents: [], distances: [] };
+      }
+
+      // Obtenir l'embedding pour la requête
+      const queryEmbedding =
+        await this.embeddingService.createEmbedding(queryText);
+
+      // Requête de similarité à ChromaDB
+      const response = await axios.post(
+        `${this.chromaUrl}/api/v1/collections/${collectionName}/query`,
+        {
+          query_embeddings: [queryEmbedding],
+          n_results: limit,
+          include: ['documents', 'metadatas', 'distances', 'embeddings'],
+        },
+      );
+
+      if (response.status !== 200) {
+        throw new Error(
+          `Erreur lors de la requête à ChromaDB: ${response.status}`,
+        );
+      }
+
+      // Extraire les résultats
+      const results = response.data;
+      const documents: ChromaDocument[] = [];
+
+      if (
+        results &&
+        results.ids &&
+        results.ids.length > 0 &&
+        results.ids[0].length > 0
+      ) {
+        for (let i = 0; i < results.ids[0].length; i++) {
+          documents.push({
+            id: results.ids[0][i],
+            embedding: results.embeddings[0][i],
+            metadata: results.metadatas[0][i],
+            document: results.documents[0][i],
+          });
+        }
+      }
+
+      return {
+        documents,
+        distances: results.distances ? results.distances[0] : [],
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la requête de collection: ${error.message}`,
+      );
       return { documents: [], distances: [] };
     }
-
-    // Obtenir l'embedding pour la requête
-    const queryEmbedding =
-      await this.embeddingService.createEmbedding(queryText);
-
-    // Calculer les distances pour chaque document
-    const documentsWithDistance = collection.map((doc) => {
-      const distance = this.cosineSimilarity(queryEmbedding, doc.embedding);
-      return { document: doc, distance };
-    });
-
-    // Trier par similarité (plus grand cosinus = plus similaire)
-    documentsWithDistance.sort((a, b) => b.distance - a.distance);
-
-    // Retourner les documents les plus similaires et leurs distances
-    const topDocuments = documentsWithDistance.slice(0, limit);
-
-    return {
-      documents: topDocuments.map((d) => d.document),
-      distances: topDocuments.map((d) => d.distance),
-    };
   }
 
   async getCollection(
     collectionName: string = 'default',
-  ): Promise<ChromaDocument[]> {
-    return this.collections.get(collectionName) || [];
-  }
+  ): Promise<ChromaCollection> {
+    try {
+      const response = await axios.get(
+        `${this.chromaUrl}/api/v1/collections/${collectionName}`,
+      );
 
-  async createCollection(collectionName: string): Promise<void> {
-    if (!this.collections.has(collectionName)) {
-      this.collections.set(collectionName, []);
+      if (response.status !== 200) {
+        throw new Error(
+          `Erreur lors de la récupération de la collection: ${response.status}`,
+        );
+      }
+
+      return {
+        name: response.data.name,
+        metadata: response.data.metadata,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la récupération de la collection: ${error.message}`,
+      );
+      throw error;
     }
   }
 
-  // Utilitaire: similarité cosinus entre deux vecteurs
-  private cosineSimilarity(vecA: number[], vecB: number[]): number {
-    if (vecA.length !== vecB.length) {
-      throw new Error('Les vecteurs doivent avoir la même dimension');
+  async listCollections(): Promise<ChromaCollection[]> {
+    try {
+      const response = await axios.get(`${this.chromaUrl}/api/v1/collections`);
+
+      if (response.status !== 200) {
+        throw new Error(
+          `Erreur lors de la récupération des collections: ${response.status}`,
+        );
+      }
+
+      return response.data.map((collection) => ({
+        name: collection.name,
+        metadata: collection.metadata,
+      }));
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la récupération des collections: ${error.message}`,
+      );
+      return [];
     }
+  }
 
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
+  async createCollection(collectionName: string): Promise<ChromaCollection> {
+    try {
+      const collections = await this.listCollections();
+      const collectionExists = collections.some(
+        (col) => col.name === collectionName,
+      );
 
-    for (let i = 0; i < vecA.length; i++) {
-      dotProduct += vecA[i] * vecB[i];
-      normA += vecA[i] * vecA[i];
-      normB += vecB[i] * vecB[i];
+      if (collectionExists) {
+        return await this.getCollection(collectionName);
+      }
+
+      const response = await axios.post(
+        `${this.chromaUrl}/api/v1/collections`,
+        {
+          name: collectionName,
+          metadata: {
+            description: `Collection pour ${collectionName}`,
+            created_at: new Date().toISOString(),
+          },
+        },
+      );
+
+      if (response.status !== 200 && response.status !== 201) {
+        throw new Error(
+          `Erreur lors de la création de la collection: ${response.status}`,
+        );
+      }
+
+      return {
+        name: collectionName,
+        metadata: response.data.metadata,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la création de la collection: ${error.message}`,
+      );
+      throw error;
     }
+  }
 
-    if (normA === 0 || normB === 0) {
-      return 0;
+  private async createCollectionIfNotExists(
+    collectionName: string,
+  ): Promise<void> {
+    try {
+      await this.createCollection(collectionName);
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la création automatique de la collection: ${error.message}`,
+      );
     }
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 }

@@ -1,60 +1,58 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { EmbeddingService } from './embedding.service';
-
-class CreateEmbeddingDto {
-  text: string;
-}
-
-class AddDocumentDto {
-  text: string;
-  metadata?: Record<string, any>;
-  id?: string;
-  collectionName?: string;
-}
-
-class QueryCollectionDto {
-  text: string;
-  collectionName?: string;
-  limit?: number;
-}
+import { AddDocumentDto } from './dto/add-document.dto';
+import { QueryCollectionDto } from './dto/query-collection.dto';
+import { ChromaDocument, ChromaCollection } from '../chroma/chroma.service';
 
 @Controller('embedding')
 export class EmbeddingController {
   constructor(private readonly embeddingService: EmbeddingService) {}
 
-  @Post()
-  async createEmbedding(@Body() body: CreateEmbeddingDto) {
-    return {
-      embedding: await this.embeddingService.createEmbedding(body.text),
-    };
+  @Get('health')
+  health() {
+    return { status: 'ok' };
+  }
+
+  @Post('generate')
+  async generateEmbedding(@Body('text') text: string) {
+    const embedding = await this.embeddingService.createEmbedding(text);
+    return { embedding };
   }
 
   @Post('document')
-  async addDocument(@Body() dto: AddDocumentDto) {
-    return this.embeddingService.addDocumentToChroma(
-      dto.text,
-      dto.metadata,
+  async addDocument(@Body() dto: AddDocumentDto): Promise<ChromaDocument> {
+    return this.embeddingService.addDocument(
+      dto.content,
+      dto.metadata || {},
       dto.id,
-      dto.collectionName,
+      dto.collection_name || 'default',
     );
   }
 
   @Post('query')
-  async queryCollection(@Body() dto: QueryCollectionDto) {
+  async queryChromaDB(@Body() dto: QueryCollectionDto) {
     return this.embeddingService.queryChromaDB(
-      dto.text,
-      dto.collectionName,
-      dto.limit,
+      dto.query,
+      dto.collection_name || 'default',
+      dto.limit || 5,
     );
   }
 
+  /**
+   * Récupère les informations d'une collection ChromaDB
+   */
   @Get('collection/:name')
-  async getCollection(@Param('name') name: string) {
+  async getCollection(@Param('name') name: string): Promise<ChromaCollection> {
     return this.embeddingService.getCollection(name);
   }
 
+  /**
+   * Crée une nouvelle collection dans ChromaDB
+   */
   @Post('collection/:name')
-  async createCollection(@Param('name') name: string) {
+  async createCollection(
+    @Param('name') name: string,
+  ): Promise<ChromaCollection> {
     return this.embeddingService.createCollection(name);
   }
 }

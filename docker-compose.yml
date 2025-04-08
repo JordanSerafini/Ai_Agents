@@ -48,11 +48,13 @@ services:
       - CHROMA_PORT=8000
       - EMBEDDING_SERVICE_URL=http://embedding_service:3002
       - QUERIES_FOLDER=/app/queries
+      - INITIAL_WAIT_TIME=20
     volumes:
       - ./ChromaDB/Queries:/app/queries
     depends_on:
-      - ChromaDB
-      - embedding_service
+      ChromaDB:
+        condition: service_started
+    restart: on-failure
     networks:
       - app-network
 

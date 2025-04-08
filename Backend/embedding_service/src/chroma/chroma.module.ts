@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ChromaService } from './chroma.service';
 import { ChromaController } from './chroma.controller';
 import { EmbeddingModule } from '../embedding/embedding.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [EmbeddingModule],
+  imports: [ConfigModule, forwardRef(() => EmbeddingModule)],
   providers: [ChromaService],
   controllers: [ChromaController],
   exports: [ChromaService],

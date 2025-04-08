@@ -10,8 +10,10 @@ import time
 import logging
 import sys
 import glob
-from chromadb import Client, Settings
+from chromadb import Client
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Configuration du logging
 logging.basicConfig(
@@ -33,21 +35,37 @@ COLLECTION_NAMES = [
     "faqs"               # Pour les FAQs
 ]
 
+# Configuration des sessions avec retry
+def create_session_with_retry():
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=5,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS", "POST"]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
 def wait_for_chroma():
     """Attendre que ChromaDB soit prêt"""
-    max_retries = 30
-    retry_interval = 2
+    max_retries = 60  # Augmenté de 30 à 60
+    retry_interval = 5  # Augmenté de 2 à 5
     
     logger.info(f"En attente de ChromaDB à l'adresse {CHROMA_URL}...")
     
+    session = create_session_with_retry()
+    
     for i in range(max_retries):
         try:
-            response = requests.get(f"{CHROMA_URL}/api/v1/heartbeat")
+            response = session.get(f"{CHROMA_URL}/api/v1/heartbeat", timeout=10)
             if response.status_code == 200:
                 logger.info("✓ ChromaDB est opérationnel!")
                 return True
-        except requests.exceptions.RequestException:
-            pass
+        except Exception as e:
+            logger.info(f"ChromaDB n'est pas encore prêt: {str(e)}")
         
         logger.info(f"ChromaDB n'est pas encore prêt (tentative {i+1}/{max_retries})...")
         time.sleep(retry_interval)
@@ -57,34 +75,43 @@ def wait_for_chroma():
 
 def wait_for_embedding_service():
     """Attendre que le service d'embedding soit prêt"""
-    max_retries = 30
-    retry_interval = 2
+    max_retries = 60  # Augmenté de 30 à 60
+    retry_interval = 5  # Augmenté de 2 à 5
     
     logger.info(f"En attente du service d'embedding à l'adresse {EMBEDDING_SERVICE_URL}...")
     
+    session = create_session_with_retry()
+    
+    # Essayer d'abord l'endpoint /health
     for i in range(max_retries):
         try:
-            response = requests.get(f"{EMBEDDING_SERVICE_URL}/health")
-            if response.status_code == 200:
-                logger.info("✓ Service d'embedding est opérationnel!")
-                return True
-        except requests.exceptions.RequestException:
-            pass
+            # Essayer plusieurs endpoints possibles
+            endpoints = ["/health", "/", "/api"]
+            
+            for endpoint in endpoints:
+                try:
+                    response = session.get(f"{EMBEDDING_SERVICE_URL}{endpoint}", timeout=10)
+                    if response.status_code < 500:  # Accepter tous les codes 2xx, 3xx, 4xx
+                        logger.info(f"✓ Service d'embedding est opérationnel (endpoint {endpoint})!")
+                        return True
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.info(f"Service d'embedding n'est pas encore prêt: {str(e)}")
         
         logger.info(f"Service d'embedding n'est pas encore prêt (tentative {i+1}/{max_retries})...")
         time.sleep(retry_interval)
     
     logger.error("❌ Service d'embedding n'est pas disponible après plusieurs tentatives!")
-    return False
+    # Continuer quand même pour créer les collections dans ChromaDB
+    return True
 
 def init_chroma_client():
     """Initialiser le client ChromaDB"""
     try:
-        client = Client(Settings(
-            chroma_api_impl="rest",
-            chroma_server_host=CHROMA_HOST,
-            chroma_server_http_port=CHROMA_PORT
-        ))
+        # Dans les versions plus anciennes, les settings sont passés directement
+        client = Client(chroma_server_host=CHROMA_HOST, 
+                       chroma_server_http_port=CHROMA_PORT)
         return client
     except Exception as e:
         logger.error(f"❌ Erreur lors de l'initialisation du client ChromaDB: {e}")
@@ -92,33 +119,36 @@ def init_chroma_client():
 
 def create_collections(client):
     """Créer les collections nécessaires"""
-    existing_collections = [col.name for col in client.list_collections()]
-    logger.info(f"Collections existantes: {existing_collections}")
-    
-    for name in COLLECTION_NAMES:
-        if name in existing_collections:
-            logger.info(f"La collection '{name}' existe déjà")
-        else:
-            try:
-                metadata = {
-                    "description": f"Collection pour {name}",
-                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                }
-                
-                client.create_collection(
-                    name=name,
-                    metadata=metadata,
-                    embedding_function=None  # Les embeddings seront gérés par le service d'embedding
-                )
-                logger.info(f"✓ Collection '{name}' créée avec succès!")
-            except Exception as e:
-                logger.error(f"❌ Erreur lors de la création de la collection '{name}': {e}")
+    try:
+        existing_collections = [col.name for col in client.list_collections()]
+        logger.info(f"Collections existantes: {existing_collections}")
+        
+        for name in COLLECTION_NAMES:
+            if name in existing_collections:
+                logger.info(f"La collection '{name}' existe déjà")
+            else:
+                try:
+                    metadata = {
+                        "description": f"Collection pour {name}",
+                        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                    }
+                    
+                    client.create_collection(
+                        name=name,
+                        metadata=metadata
+                    )
+                    logger.info(f"✓ Collection '{name}' créée avec succès!")
+                except Exception as e:
+                    logger.error(f"❌ Erreur lors de la création de la collection '{name}': {e}")
+    except Exception as e:
+        logger.error(f"❌ Erreur lors de la récupération des collections: {e}")
 
 def create_collection_via_service(name):
     """Créer une collection via le service d'embedding"""
     try:
+        session = create_session_with_retry()
         url = f"{EMBEDDING_SERVICE_URL}/embedding/collection/{name}"
-        response = requests.post(url)
+        response = session.post(url, timeout=10)
         if response.status_code == 201 or response.status_code == 200:
             logger.info(f"✓ Collection '{name}' créée via le service d'embedding!")
             return True
@@ -203,6 +233,7 @@ def load_business_queries():
 def index_query_via_service(query_content):
     """Indexer une requête métier via le service d'embedding"""
     try:
+        session = create_session_with_retry()
         url = f"{EMBEDDING_SERVICE_URL}/embedding/document"
         # Créer un document pour le service d'embedding
         document = {
@@ -212,7 +243,7 @@ def index_query_via_service(query_content):
             "collection_name": "business_queries"
         }
         
-        response = requests.post(url, json=document)
+        response = session.post(url, json=document, timeout=30)  # Augmenté le timeout
         
         if response.status_code == 201 or response.status_code == 200:
             logger.info(f"✓ Requête '{query_content['id']}' indexée avec succès!")
@@ -229,30 +260,35 @@ def main():
     """Fonction principale"""
     logger.info("Démarrage du script d'initialisation pour ChromaDB...")
     
+    # D'abord attendre que les services soient prêts
+    wait_time = int(os.environ.get("INITIAL_WAIT_TIME", "30"))
+    logger.info(f"Attente initiale de {wait_time} secondes...")
+    time.sleep(wait_time)
+    
     # Attendre que ChromaDB soit prêt
     if not wait_for_chroma():
-        return False
+        logger.error("❌ ChromaDB n'est pas disponible, mais on continue avec les autres tâches...")
     
     # Attendre que le service d'embedding soit prêt
     if not wait_for_embedding_service():
-        return False
+        logger.error("❌ Service d'embedding n'est pas disponible, mais on continue avec les autres tâches...")
     
-    # Initialiser le client
+    # Initialiser le client ChromaDB
     client = init_chroma_client()
-    if not client:
-        return False
-    
-    # Créer les collections
-    create_collections(client)
-    
-    # Essayer également de créer les collections via le service d'embedding
-    logger.info("Tentative de création des collections via le service d'embedding...")
-    for name in COLLECTION_NAMES:
-        create_collection_via_service(name)
-    
-    # Charger et indexer les requêtes métier
-    logger.info("Chargement et indexation des requêtes métier...")
-    load_business_queries()
+    if client:
+        # Créer les collections
+        create_collections(client)
+        
+        # Essayer également de créer les collections via le service d'embedding
+        logger.info("Tentative de création des collections via le service d'embedding...")
+        for name in COLLECTION_NAMES:
+            create_collection_via_service(name)
+        
+        # Charger et indexer les requêtes métier
+        logger.info("Chargement et indexation des requêtes métier...")
+        load_business_queries()
+    else:
+        logger.error("❌ Impossible d'initialiser le client ChromaDB")
     
     logger.info("Initialisation terminée!")
     return True

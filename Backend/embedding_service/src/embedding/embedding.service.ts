@@ -1,217 +1,87 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-
-interface EmbeddingResponse {
-  embedding: number[];
-  original_size?: number;
-  warning?: string;
-  error?: string;
-}
-
-interface ChromaCollection {
-  id: string;
-  name: string;
-  metadata: Record<string, any>;
-}
-
-interface ChromaDocument {
-  id: string;
-  embedding: number[];
-  metadata: Record<string, any>;
-  document: string;
-}
+import {
+  ChromaService,
+  ChromaDocument,
+  ChromaCollection,
+} from '../chroma/chroma.service';
+import axios from 'axios';
 
 @Injectable()
 export class EmbeddingService {
+  private readonly logger = new Logger(EmbeddingService.name);
   private modelUrl: string;
   private chromaUrl: string;
 
   constructor(
     private configService: ConfigService,
-    private httpService: HttpService,
+    @Inject(forwardRef(() => ChromaService))
+    private chromaService: ChromaService,
   ) {
     this.modelUrl =
-      this.configService.get<string>('MODEL_SERVICE_URL') ||
+      this.configService.get<string>('MODEL_URL') ||
       'http://model_service:3001';
     this.chromaUrl =
       this.configService.get<string>('CHROMA_URL') || 'http://ChromaDB:8000';
-    console.log(
+
+    this.logger.log(
       `[EmbeddingService] Configuration: Model URL=${this.modelUrl}, ChromaDB URL=${this.chromaUrl}`,
     );
   }
 
+  /**
+   * Crée un embedding pour un texte donné en utilisant le service de modèle
+   */
   async createEmbedding(text: string): Promise<number[]> {
     try {
-      console.log(
-        `[EmbeddingService] Génération d'embedding pour ${text.length} caractères`,
-      );
-
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.modelUrl}/embedding`, {
-          text,
-        }),
-      );
+      // Faire une requête au service de modèle pour obtenir l'embedding
+      const response = await axios.post(`${this.modelUrl}/embedding`, {
+        text,
+      });
 
       if (response.status !== 200) {
-        throw new Error(
-          `Échec de la génération d'embedding: ${response.status}`,
-        );
+        throw new Error(`Erreur du service de modèle: ${response.status}`);
       }
 
-      const data = response.data as EmbeddingResponse;
-
-      if (data.error) {
-        throw new Error(`Erreur d'embedding: ${data.error}`);
-      }
-
-      if (data.warning) {
-        console.warn(`[EmbeddingService] Avertissement: ${data.warning}`);
-      }
-
-      if (data.original_size) {
-        console.log(
-          `[EmbeddingService] L'embedding a été redimensionné de ${data.original_size} à ${data.embedding.length}`,
-        );
-      }
-
-      return data.embedding;
+      return response.data.embedding;
     } catch (error) {
-      console.error(
-        "[EmbeddingService] Erreur lors de la création de l'embedding:",
-        error,
+      this.logger.error(
+        `[EmbeddingService] Erreur lors de la création de l'embedding: ${error.message}`,
       );
-      throw error;
+      throw new Error(
+        `Erreur lors de la création de l'embedding: ${error.message}`,
+      );
     }
   }
 
-  async listCollections(): Promise<ChromaCollection[]> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.chromaUrl}/api/v1/collections`),
-      );
-
-      return response.data;
-    } catch (error) {
-      console.error(
-        '[EmbeddingService] Erreur lors de la récupération des collections:',
-        error,
-      );
-      throw error;
-    }
-  }
-
-  async createCollection(
-    collectionName: string,
-    metadata: Record<string, any> = {},
-  ): Promise<ChromaCollection> {
-    try {
-      console.log(
-        `[EmbeddingService] Création de collection: ${collectionName}`,
-      );
-
-      const defaultMetadata = {
-        description: `Collection pour ${collectionName}`,
-        created_at: new Date().toISOString(),
-      };
-
-      const fullMetadata = { ...defaultMetadata, ...metadata };
-
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.chromaUrl}/api/v1/collections`, {
-          name: collectionName,
-          metadata: fullMetadata,
-        }),
-      );
-
-      console.log(`[EmbeddingService] Collection créée: ${collectionName}`);
-      return response.data;
-    } catch (error) {
-      console.error(
-        `[EmbeddingService] Erreur lors de la création de la collection ${collectionName}:`,
-        error,
-      );
-      throw error;
-    }
-  }
-
-  async getCollection(collectionName: string): Promise<ChromaCollection> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(
-          `${this.chromaUrl}/api/v1/collections/${collectionName}`,
-        ),
-      );
-
-      return response.data;
-    } catch (error) {
-      if (error.response && error.response.status === 404) {
-        console.log(
-          `[EmbeddingService] Collection ${collectionName} non trouvée, création...`,
-        );
-        return this.createCollection(collectionName);
-      }
-      console.error(
-        `[EmbeddingService] Erreur lors de la récupération de la collection ${collectionName}:`,
-        error,
-      );
-      throw error;
-    }
-  }
-
-  async addDocumentToChroma(
-    text: string,
+  /**
+   * Ajoute un document avec son embedding à une collection ChromaDB
+   */
+  async addDocument(
+    content: string,
     metadata: Record<string, any> = {},
     id?: string,
     collectionName: string = 'default',
   ): Promise<ChromaDocument> {
     try {
-      console.log(
-        `[EmbeddingService] Ajout de document à ${collectionName}, ${text.length} caractères`,
-      );
+      // 1. Vérifier que la collection existe ou la créer
+      await this.createCollectionIfNotExists(collectionName);
 
-      // 1. Récupérer ou créer la collection
-      await this.getCollection(collectionName);
-
-      // 2. Générer un embedding pour le document
-      const embedding = await this.createEmbedding(text);
-
-      // 3. Préparer les métadonnées
-      const enhancedMetadata = {
+      // 2. Ajouter des métadonnées supplémentaires
+      const enrichedMetadata = {
         ...metadata,
-        text_length: text.length,
-        embedding_dimension: embedding.length,
-        added_at: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
       };
 
-      // 4. Ajouter le document à ChromaDB
-      const documentId = id || crypto.randomUUID();
-
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.chromaUrl}/api/v1/collections/${collectionName}/add`,
-          {
-            ids: [documentId],
-            embeddings: [embedding],
-            metadatas: [enhancedMetadata],
-            documents: [text],
-          },
-        ),
+      // 3. Ajouter le document à ChromaDB (le service s'occupera de générer l'embedding)
+      return this.chromaService.addDocument(
+        content,
+        enrichedMetadata,
+        id,
+        collectionName,
       );
-
-      console.log(
-        `[EmbeddingService] Document ajouté avec succès, ID: ${documentId}`,
-      );
-
-      return {
-        id: documentId,
-        embedding,
-        metadata: enhancedMetadata,
-        document: text,
-      };
     } catch (error) {
-      console.error(
+      this.logger.error(
         "[EmbeddingService] Erreur lors de l'ajout du document à ChromaDB:",
         error,
       );
@@ -219,67 +89,75 @@ export class EmbeddingService {
     }
   }
 
+  /**
+   * Recherche les documents similaires dans ChromaDB en utilisant un embedding
+   */
   async queryChromaDB(
-    queryText: string,
+    query: string,
     collectionName: string = 'default',
     limit: number = 5,
-    includeMetadata: boolean = true,
-    includeEmbeddings: boolean = false,
-  ): Promise<any> {
+  ) {
     try {
-      console.log(
-        `[EmbeddingService] Recherche dans ${collectionName} pour "${queryText.substring(0, 50)}..."`,
-      );
-
       // 1. Vérifier que la collection existe
-      await this.getCollection(collectionName);
-
-      // 2. Générer un embedding pour la requête
-      const queryEmbedding = await this.createEmbedding(queryText);
-
-      // 3. Configurer les options d'inclusion
-      const include = ['documents', 'distances'];
-      if (includeMetadata) include.push('metadatas');
-      if (includeEmbeddings) include.push('embeddings');
-
-      // 4. Faire une recherche par similarité dans ChromaDB
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.chromaUrl}/api/v1/collections/${collectionName}/query`,
-          {
-            query_embeddings: [queryEmbedding],
-            n_results: limit,
-            include,
-          },
-        ),
+      const collections = await this.listCollections();
+      const collectionExists = collections.some(
+        (col) => col.name === collectionName,
       );
 
-      const results = response.data;
-      console.log(
-        `[EmbeddingService] ${results.documents[0].length} résultats trouvés`,
-      );
+      if (!collectionExists) {
+        this.logger.warn(`Collection "${collectionName}" non trouvée`);
+        return {
+          documents: [],
+          distances: [],
+        };
+      }
 
-      // 5. Reformater les résultats pour une meilleure lisibilité
-      return {
-        query: queryText,
-        collection: collectionName,
-        count: results.documents[0].length,
-        results: results.documents[0].map((doc, index) => ({
-          document: doc,
-          distance: results.distances[0][index],
-          id: results.ids[0][index],
-          metadata: includeMetadata ? results.metadatas[0][index] : undefined,
-          embedding: includeEmbeddings
-            ? results.embeddings[0][index]
-            : undefined,
-        })),
-      };
+      // 2. Rechercher directement dans ChromaDB (le service s'occupera de générer l'embedding)
+      return this.chromaService.queryCollection(query, collectionName, limit);
     } catch (error) {
-      console.error(
+      this.logger.error(
         '[EmbeddingService] Erreur lors de la recherche dans ChromaDB:',
         error,
       );
-      throw error;
+      return {
+        documents: [],
+        distances: [],
+      };
+    }
+  }
+
+  /**
+   * Récupère les informations d'une collection ChromaDB
+   */
+  async getCollection(name: string): Promise<ChromaCollection> {
+    return this.chromaService.getCollection(name);
+  }
+
+  /**
+   * Récupère la liste des collections dans ChromaDB
+   */
+  async listCollections(): Promise<ChromaCollection[]> {
+    return this.chromaService.listCollections();
+  }
+
+  /**
+   * Crée une nouvelle collection dans ChromaDB
+   */
+  async createCollection(name: string): Promise<ChromaCollection> {
+    return this.chromaService.createCollection(name);
+  }
+
+  /**
+   * Crée une collection si elle n'existe pas déjà
+   */
+  private async createCollectionIfNotExists(name: string): Promise<void> {
+    try {
+      await this.createCollection(name);
+    } catch (error) {
+      // Ignorer l'erreur si la collection existe déjà
+      this.logger.debug(
+        `Collection "${name}" existe déjà ou erreur: ${error.message}`,
+      );
     }
   }
 }
