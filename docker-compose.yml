@@ -1,0 +1,35 @@
+services:
+  model_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - MODEL_URL=${MODEL_URL}
+    depends_on:
+      - database
+
+  database:
+    image: postgres:15
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  
+  chroma_db:
+    build:
+      context: ./Database
+      dockerfile: Dockerfile  
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/data
+    environment:
+      - POSTGRES_PASSWORD=postgres
+
+volumes:
+  postgres_data:
+  chroma_data:
