@@ -1,6 +1,12 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { RagService } from './rag.service';
-import { IsNotEmpty, IsOptional, IsString, IsBoolean } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsBoolean,
+  IsNumber,
+} from 'class-validator';
 
 class StoreDocumentDto {
   @IsNotEmpty()
@@ -35,6 +41,16 @@ class ChatbotQueryDto {
   userId?: string;
 }
 
+class SearchDto {
+  @IsNotEmpty()
+  @IsString()
+  query: string;
+
+  @IsOptional()
+  @IsNumber()
+  limit?: number;
+}
+
 @Controller('rag')
 export class RagController {
   constructor(private readonly ragService: RagService) {}
@@ -50,7 +66,7 @@ export class RagController {
   }
 
   @Post('search')
-  async search(@Body() dto: { query: string; limit?: number }) {
+  async search(@Body() dto: SearchDto): Promise<any> {
     return this.ragService.retrieveDocuments(dto.query, dto.limit);
   }
 
