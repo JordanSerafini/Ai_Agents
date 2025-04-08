@@ -34,9 +34,15 @@ services:
       - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
       - CHROMA_URL=http://ChromaDB:8000
     depends_on:
-      - postgres
+      ChromaDB:
+        condition: service_started
     volumes:
       - ./Backend/embedding_service/persistence/chroma:/chroma/chroma
+    restart: on-failure
+    command: >
+      sh -c "echo 'Attente de ChromaDB...' &&
+             sleep 15 &&
+             npm run start:dev"
     networks:
       - ai_network
 
@@ -82,7 +88,7 @@ services:
   
   ChromaDB:
     container_name: ChromaDB
-    image: chromadb/chroma:latest
+    image: ghcr.io/chroma-core/chroma:0.4.10
     ports:
       - "8000:8000"
     volumes:
@@ -90,10 +96,10 @@ services:
     networks:
       - ai_network
     environment:
-      - CHROMA_OPEN_TELEMETRY__ENDPOINT=http://otel-collector:4317/
-      - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
+      - CHROMA_DB_IMPL=duckdb+parquet
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
       - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
+      - ALLOW_RESET=TRUE
     depends_on:
       - otel-collector
       - zipkin
@@ -139,9 +145,13 @@ services:
       - CHROMA_URL=http://ChromaDB:8000
       - SIMILARITY_THRESHOLD=0.85
     depends_on:
-      - model_service
-      - embedding_service
-      - ChromaDB
+      embedding_service:
+        condition: service_started
+    restart: on-failure
+    command: >
+      sh -c "echo 'Attente des services...' &&
+             sleep 20 &&
+             npm run start:dev"
     networks:
       - ai_network
 

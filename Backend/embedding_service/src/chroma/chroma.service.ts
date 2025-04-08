@@ -184,6 +184,10 @@ export class ChromaService implements OnModuleInit {
 
   async listCollections(): Promise<ChromaCollection[]> {
     try {
+      this.logger.log(
+        `Tentative de récupération des collections depuis ${this.chromaUrl}/api/v1/collections`,
+      );
+
       const response = await axios.get(`${this.chromaUrl}/api/v1/collections`);
 
       if (response.status !== 200) {
@@ -192,14 +196,38 @@ export class ChromaService implements OnModuleInit {
         );
       }
 
+      this.logger.log(
+        `Collections récupérées: ${JSON.stringify(response.data)}`,
+      );
+
+      // Différentes versions de ChromaDB peuvent retourner des formats différents
+      if (!response.data) {
+        return [];
+      }
+
+      if (!Array.isArray(response.data)) {
+        this.logger.warn(
+          `Format de données inattendu: ${typeof response.data}`,
+        );
+        return [];
+      }
+
       return response.data.map((collection) => ({
-        name: collection.name,
+        name: collection.name || collection.id,
         metadata: collection.metadata,
       }));
     } catch (error) {
       this.logger.error(
         `Erreur lors de la récupération des collections: ${error.message}`,
       );
+
+      // Afficher les détails de l'erreur pour le débogage
+      if (error.response) {
+        this.logger.error(
+          `Statut: ${error.response.status}, Données: ${JSON.stringify(error.response.data)}`,
+        );
+      }
+
       return [];
     }
   }
@@ -212,28 +240,64 @@ export class ChromaService implements OnModuleInit {
         return await this.getCollection(collectionName);
       }
 
-      // Créer la collection
-      const response = await axios.post(
-        `${this.chromaUrl}/api/v1/collections`,
-        {
-          name: collectionName,
-          metadata: {
-            description: `Collection ${collectionName} pour stockage de documents`,
-            created_at: new Date().toISOString(),
-          },
-        },
+      this.logger.log(
+        `Tentative de création de la collection: ${collectionName}`,
       );
 
-      if (response.status !== 200 && response.status !== 201) {
-        throw new Error(
-          `Erreur lors de la création de la collection: ${response.status}`,
+      // Créer la collection avec l'API v1
+      try {
+        const response = await axios.post(
+          `${this.chromaUrl}/api/v1/collections`,
+          {
+            name: collectionName,
+            metadata: {
+              description: `Collection ${collectionName} pour stockage de documents`,
+              created_at: new Date().toISOString(),
+            },
+            get_or_create: true,
+          },
         );
-      }
 
-      return {
-        name: response.data.name,
-        metadata: response.data.metadata,
-      };
+        if (response.status !== 200 && response.status !== 201) {
+          throw new Error(
+            `Erreur lors de la création de la collection: ${response.status}`,
+          );
+        }
+
+        this.logger.log(`Collection créée avec succès: ${collectionName}`);
+        return {
+          name: response.data.name || collectionName,
+          metadata: response.data.metadata,
+        };
+      } catch (error) {
+        // Si l'API post échoue, essayer avec une autre approche
+        if (
+          error.response &&
+          (error.response.status === 405 || error.response.status === 404)
+        ) {
+          this.logger.warn(
+            `API création de collection non disponible, tentative alternative`,
+          );
+
+          // Pour certaines versions, nous pouvons simuler la création en ajoutant un document
+          // C'est une solution de contournement
+          await this.addDocument(
+            "Document d'initialisation",
+            { creation: true, timestamp: new Date().toISOString() },
+            `init_${Date.now()}`,
+            collectionName,
+          );
+
+          return {
+            name: collectionName,
+            metadata: {
+              description: `Collection ${collectionName} pour stockage de documents`,
+              created_at: new Date().toISOString(),
+            },
+          };
+        }
+        throw error;
+      }
     } catch (error) {
       this.logger.error(
         `Erreur lors de la création de la collection: ${error.message}`,

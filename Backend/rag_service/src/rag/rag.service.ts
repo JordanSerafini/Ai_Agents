@@ -45,7 +45,7 @@ export class RagService {
   ): Promise<{ question: string; answer: string; similarity: number } | null> {
     try {
       console.log(`[RAG] Recherche de questions similaires pour: "${query}"`);
-      
+
       // Récupérer les questions déjà posées depuis une collection spécifique de questions-réponses
       const response = await firstValueFrom(
         this.httpService.post(`${this.embeddingServiceUrl}/chroma/query`, {
@@ -56,19 +56,25 @@ export class RagService {
       );
 
       const documents = response.data.documents || [];
-      console.log(`[RAG] ${documents.length} documents trouvés dans la collection 'questions'`);
-      
+      console.log(
+        `[RAG] ${documents.length} documents trouvés dans la collection 'questions'`,
+      );
+
       // Vérifier si l'un des documents a une similarité supérieure au seuil
       for (const doc of documents) {
         // La distance est convertie en similarité (1 - distance)
         const similarity = 1 - doc.metadata.distance;
-        console.log(`[RAG] Question trouvée: "${doc.document}" (similarité: ${similarity.toFixed(2)})`);
-        
+        console.log(
+          `[RAG] Question trouvée: "${doc.document}" (similarité: ${similarity.toFixed(2)})`,
+        );
+
         if (
           similarity >= this.similarityThreshold &&
           doc.metadata.type === 'question'
         ) {
-          console.log(`[RAG] Question similaire trouvée: "${doc.document}" (similarité: ${similarity.toFixed(2)})`);
+          console.log(
+            `[RAG] Question similaire trouvée: "${doc.document}" (similarité: ${similarity.toFixed(2)})`,
+          );
           return {
             question: doc.document,
             answer: doc.metadata.answer || 'Pas de réponse enregistrée',
@@ -76,8 +82,10 @@ export class RagService {
           };
         }
       }
-      
-      console.log(`[RAG] Aucune question similaire trouvée avec un seuil de ${this.similarityThreshold}`);
+
+      console.log(
+        `[RAG] Aucune question similaire trouvée avec un seuil de ${this.similarityThreshold}`,
+      );
       return null;
     } catch (error) {
       console.error(
@@ -207,6 +215,71 @@ export class RagService {
     } catch (error) {
       console.error('Erreur lors de la génération de la réponse:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Trouve plusieurs questions similaires dans la base de connaissances
+   * @param query Question de l'utilisateur
+   * @param limit Nombre maximum de questions à retourner
+   * @param threshold Seuil de similarité minimum (0-1)
+   * @returns Liste de questions similaires avec leurs réponses et scores de similarité
+   */
+  async findMultipleSimilarQuestions(
+    query: string,
+    limit: number = 5,
+    threshold: number = 0.5,
+  ): Promise<{
+    questions: { question: string; answer: string; similarity: number }[];
+  }> {
+    try {
+      console.log(
+        `[RAG] Recherche de ${limit} questions similaires pour: "${query}" (seuil: ${threshold})`,
+      );
+
+      // Récupérer les questions déjà posées depuis la collection spécifique
+      const response = await firstValueFrom(
+        this.httpService.post(`${this.embeddingServiceUrl}/chroma/query`, {
+          text: query,
+          limit: Math.max(limit, 10), // Demander plus de résultats pour filtrer ensuite
+          collection_name: 'questions',
+        }),
+      );
+
+      const documents = response.data.documents || [];
+      console.log(
+        `[RAG] ${documents.length} documents trouvés dans la collection 'questions'`,
+      );
+
+      // Filtrer et formater les résultats
+      const similarQuestions = documents
+        .filter((doc) => doc.metadata && doc.metadata.type === 'question')
+        .map((doc) => {
+          // Convertir la distance en similarité (1 - distance)
+          const similarity = 1 - doc.metadata.distance;
+          return {
+            question: doc.document,
+            answer: doc.metadata.answer || 'Pas de réponse enregistrée',
+            similarity,
+          };
+        })
+        .filter((item) => item.similarity >= threshold)
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, limit);
+
+      console.log(
+        `[RAG] ${similarQuestions.length} questions similaires trouvées avec un seuil de ${threshold}`,
+      );
+
+      return {
+        questions: similarQuestions,
+      };
+    } catch (error) {
+      console.error(
+        'Erreur lors de la recherche de questions similaires:',
+        error,
+      );
+      return { questions: [] };
     }
   }
 }
