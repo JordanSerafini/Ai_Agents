@@ -37,13 +37,13 @@ services:
       - CHROMA_URL=http://chroma:8000
     depends_on:
       chroma:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ./Backend/embedding_service/persistence/chroma:/chroma/chroma
     restart: on-failure
     command: >
       sh -c "echo 'Attente de ChromaDB...' &&
-             sleep 30 &&
+             sleep 10 &&
              npm run start:dev"
     networks:
       - ai_network
@@ -90,7 +90,9 @@ services:
   
   chroma:
     container_name: chroma
-    image: ghcr.io/chroma-core/chroma
+    build:
+      context: ./ChromaDB
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
@@ -102,6 +104,11 @@ services:
       - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
       - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
       - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/collections"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       - otel-collector
       - zipkin
