@@ -1,99 +1,189 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Service d'Embedding
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Ce service est responsable de la génération et du stockage des embeddings vectoriels, servant de pont entre le service de modèle et la base de données vectorielle ChromaDB.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Fonctionnalités
 
-## Description
+- Génération d'embeddings via le Service de Modèle Mistral
+- Gestion des collections dans ChromaDB
+- Stockage et récupération de documents avec leurs embeddings
+- Recherche sémantique par similarité de vecteurs
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Configuration
 
-## Project setup
+Le service écoute par défaut sur le port 3002 et se connecte au service de modèle et à ChromaDB via des URL configurables.
 
 ```bash
-$ npm install
+# Exemple de variables d'environnement
+PORT=3002
+MODEL_SERVICE_URL=http://model_service:3001
+CHROMA_URL=http://ChromaDB:8000
 ```
 
-## Compile and run the project
+## Routes API
 
-```bash
-# development
-$ npm run start
+### Gestion des Embeddings
 
-# watch mode
-$ npm run start:dev
+#### Création d'Embedding
 
-# production mode
-$ npm run start:prod
+**Endpoint:** `POST /embedding`
+
+Génère un embedding vectoriel pour un texte donné sans le stocker.
+
+**Exemple de requête:**
+
+```json
+{
+  "text": "Les vecteurs d'embedding permettent de représenter le sens d'un texte."
+}
 ```
 
-## Run tests
+**Exemple de réponse:**
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```json
+{
+  "embedding": [0.018, -0.032, 0.045, ...] // Vecteur d'embedding
+}
 ```
 
-## Deployment
+### Gestion des Documents
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+#### Ajout de Document
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+**Endpoint:** `POST /embedding/document`
 
-```bash
-$ npm install -g mau
-$ mau deploy
+Ajoute un document avec son embedding à une collection ChromaDB.
+
+**Exemple de requête:**
+
+```json
+{
+  "text": "Les modèles de langage peuvent être utilisés pour générer des embeddings.",
+  "metadata": {
+    "source": "documentation",
+    "category": "IA"
+  },
+  "id": "doc-123", // Optionnel, un UUID sera généré si non fourni
+  "collectionName": "articles" // Optionnel, "default" par défaut
+}
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+**Exemple de réponse:**
 
-## Resources
+```json
+{
+  "id": "doc-123",
+  "embedding": [0.012, -0.036, 0.024, ...], // Vecteur d'embedding
+  "metadata": {
+    "source": "documentation",
+    "category": "IA",
+    "text_length": 71,
+    "embedding_dimension": 4096,
+    "added_at": "2023-04-08T12:34:56.789Z"
+  },
+  "document": "Les modèles de langage peuvent être utilisés pour générer des embeddings."
+}
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+#### Recherche par Similarité
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+**Endpoint:** `POST /embedding/query`
 
-## Support
+Recherche des documents similaires à un texte de requête.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+**Exemple de requête:**
 
-## Stay in touch
+```json
+{
+  "text": "Comment générer des embeddings?",
+  "collectionName": "articles", // Optionnel
+  "limit": 3 // Optionnel, nombre max de résultats
+}
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+**Exemple de réponse:**
 
-## License
+```json
+{
+  "query": "Comment générer des embeddings?",
+  "collection": "articles",
+  "count": 2,
+  "results": [
+    {
+      "document": "Les modèles de langage peuvent être utilisés pour générer des embeddings.",
+      "distance": 0.89, // Plus proche de 1 = plus similaire
+      "id": "doc-123",
+      "metadata": {
+        "source": "documentation",
+        "category": "IA",
+        "text_length": 71,
+        "embedding_dimension": 4096,
+        "added_at": "2023-04-08T12:34:56.789Z"
+      }
+    },
+    {
+      "document": "Un autre document moins similaire...",
+      "distance": 0.65,
+      "id": "doc-456",
+      "metadata": { ... }
+    }
+  ]
+}
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### Gestion des Collections
+
+#### Récupération d'une Collection
+
+**Endpoint:** `GET /embedding/collection/:name`
+
+Récupère les informations d'une collection ChromaDB.
+
+**Exemple de réponse:**
+
+```json
+{
+  "id": "collection-uuid",
+  "name": "articles",
+  "metadata": {
+    "description": "Collection pour articles",
+    "created_at": "2023-04-08T10:30:45.123Z"
+  }
+}
+```
+
+#### Création d'une Collection
+
+**Endpoint:** `POST /embedding/collection/:name`
+
+Crée une nouvelle collection dans ChromaDB.
+
+**Exemple de réponse:**
+
+```json
+{
+  "id": "nouveau-uuid",
+  "name": "nouvelle-collection",
+  "metadata": {
+    "description": "Collection pour nouvelle-collection",
+    "created_at": "2023-04-08T14:25:12.456Z"
+  }
+}
+```
+
+## Détails d'Implémentation
+
+- Le service enrichit automatiquement les métadonnées des documents avec:
+  - La longueur du texte
+  - La dimension de l'embedding
+  - L'horodatage d'ajout
+- Les résultats de recherche sont reformatés pour plus de lisibilité et d'utilisabilité
+- Une journalisation détaillée est implémentée pour faciliter le débogage
+
+## Intégration
+
+Ce service s'intègre avec:
+
+- Le Service de Modèle pour la génération d'embeddings
+- ChromaDB pour le stockage et la recherche vectorielle
+- Le Service RAG qui utilise ce service pour enrichir les requêtes avec du contexte pertinent

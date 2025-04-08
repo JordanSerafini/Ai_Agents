@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
+import { EmbeddingController } from './mistral_model/embedding.controller';
 
 @Module({
   imports: [],
-  controllers: [],
-  providers: [],
+  controllers: [EmbeddingController],
 })
 export class AppModule {}

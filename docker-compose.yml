@@ -14,7 +14,32 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=${POSTGRES_PORT}
     depends_on:
-      - database
+      - postgres
+
+  embedding_service:
+    build:
+      context: ./Backend/embedding_service
+      dockerfile: Dockerfile
+    ports:
+      - "${EMBEDDING_SERVICE_PORT}:${EMBEDDING_SERVICE_PORT}"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - CHROMA_OPEN_TELEMETRY__ENDPOINT=http://otel-collector:4317/
+      - CHROMA_OPEN_TELEMETRY__SERVICE_NAME=chroma
+      - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
+      - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
+    depends_on:
+      - postgres
+    volumes:
+      - ./Backend/embedding_service/persistence/chroma:/chroma/chroma
+    networks:
+      - app-network
+
+
 
   postgres:
     container_name: postgres
@@ -41,7 +66,7 @@ services:
     container_name: ChromaDB
     image: ghcr.io/chroma-core/chroma
     volumes:
-      - ./Backend/analyse_agent/persistence/chroma:/chroma/chroma
+      - ./ChromaDB/persistence/chroma:/chroma/chroma
     ports:
       - "8000:8000"
     networks:
@@ -88,6 +113,6 @@ volumes:
   postgres_data:
   chroma_data:
 
-# networks:
-#   app-network:
-#     driver: bridge
+networks:
+  app-network:
+    driver: bridge

@@ -1,5 +1,5 @@
 {
-  "name": "embedding_service",
+  "name": "rag_service",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -25,7 +25,6 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
-    "chromadb": "^2.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

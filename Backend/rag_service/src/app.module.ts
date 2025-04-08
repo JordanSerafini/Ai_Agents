@@ -2,16 +2,14 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { EmbeddingModule } from './embedding/embedding.module';
-import { ChromaModule } from './chroma/chroma.module';
+import { RagModule } from './rag/rag.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    EmbeddingModule,
-    ChromaModule,
+    RagModule,
   ],
   controllers: [AppController],
   providers: [AppService],
