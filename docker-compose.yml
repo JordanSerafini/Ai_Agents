@@ -128,9 +128,20 @@ services:
       - ai_network
 
   rag_service:
-    # ...
+    build:
+      context: ./Backend/rag_service
+      dockerfile: Dockerfile
+    ports:
+      - "${RAG_SERVICE_PORT:-3003}:3003"
     environment:
+      - MODEL_SERVICE_URL=http://model_service:${MODEL_SERVICE_PORT:-3001}
+      - EMBEDDING_SERVICE_URL=http://embedding_service:${EMBEDDING_SERVICE_PORT:-3002}
       - CHROMA_URL=http://ChromaDB:8000
+      - SIMILARITY_THRESHOLD=0.85
+    depends_on:
+      - model_service
+      - embedding_service
+      - ChromaDB
     networks:
       - ai_network
 
