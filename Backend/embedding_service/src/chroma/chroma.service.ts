@@ -58,10 +58,10 @@ export class ChromaService implements OnModuleInit {
       const docId =
         id || `doc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-      // API ChromaDB
+      // API ChromaDB v2
       this.logger.log(`Ajout de document à la collection ${collectionName}`);
       const response = await axios.post(
-        `${this.chromaUrl}/api/v1/collections/${collectionName}/add`,
+        `${this.chromaUrl}/api/v2/collections/${collectionName}/add`,
         {
           ids: [docId],
           embeddings: [embedding],
@@ -111,10 +111,10 @@ export class ChromaService implements OnModuleInit {
       const queryEmbedding =
         await this.embeddingService.createEmbedding(queryText);
 
-      // API ChromaDB
+      // API ChromaDB v2
       this.logger.log(`Requête à la collection ${collectionName}`);
       const response = await axios.post(
-        `${this.chromaUrl}/api/v1/collections/${collectionName}/query`,
+        `${this.chromaUrl}/api/v2/collections/${collectionName}/query`,
         {
           query_embeddings: [queryEmbedding],
           n_results: limit,
@@ -165,7 +165,7 @@ export class ChromaService implements OnModuleInit {
   ): Promise<ChromaCollection> {
     try {
       const response = await axios.get(
-        `${this.chromaUrl}/api/v1/collections/${collectionName}`,
+        `${this.chromaUrl}/api/v2/collections/${collectionName}`,
       );
 
       if (response.status !== 200) {
@@ -189,10 +189,10 @@ export class ChromaService implements OnModuleInit {
   async listCollections(): Promise<ChromaCollection[]> {
     try {
       this.logger.log(
-        `Tentative de récupération des collections depuis ${this.chromaUrl}/api/v1/collections`,
+        `Tentative de récupération des collections depuis ${this.chromaUrl}/api/v2/collections`,
       );
 
-      const response = await axios.get(`${this.chromaUrl}/api/v1/collections`);
+      const response = await axios.get(`${this.chromaUrl}/api/v2/collections`);
 
       if (response.status !== 200) {
         throw new Error(
@@ -248,10 +248,10 @@ export class ChromaService implements OnModuleInit {
         `Tentative de création de la collection: ${collectionName}`,
       );
 
-      // API ChromaDB
+      // API ChromaDB v2
       try {
         const response = await axios.post(
-          `${this.chromaUrl}/api/v1/collections`,
+          `${this.chromaUrl}/api/v2/collections`,
           {
             name: collectionName,
             metadata: {
